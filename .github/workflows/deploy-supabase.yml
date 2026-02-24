@@ -2,7 +2,7 @@ name: Deploy Supabase
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main, develop]
     paths:
       - 'supabase/**'
       - 'secrets/**'
@@ -22,7 +22,7 @@ jobs:
       - name: Determine environment
         id: env
         run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "project_id=tspalglvgypdktuhgqtf" >> "$GITHUB_OUTPUT"
             echo "env_name=production" >> "$GITHUB_OUTPUT"
             echo "db_password=${{ secrets.SUPABASE_DB_PASSWORD_PROD }}" >> "$GITHUB_OUTPUT"
