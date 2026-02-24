@@ -1,0 +1,14 @@
+mss
+Pillow
+openai
+kokoro-onnx
+keyboard
+python-dotenv
+numpy
+sounddevice
+faster-whisper
+silero-vad
+pywebview
+elevenlabs
+anthropic
+pywin32

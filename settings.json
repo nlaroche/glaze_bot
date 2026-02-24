@@ -1,0 +1,15 @@
+{
+  "min_gap": 120,
+  "interval": 6.0,
+  "mic_mode": "always_on",
+  "interaction_mode": true,
+  "interaction_chance": 0.25,
+  "ai_provider": "dashscope",
+  "vision_model": "qwen3-vl-plus",
+  "capture_scale": 0.6,
+  "capture_quality": 65,
+  "game_hint": "",
+  "capture_source_type": "window",
+  "capture_source_id": 789170,
+  "capture_source_name": "Hearthstone"
+}
