@@ -1,13 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.svelte-kit/
+build/
+.turbo/
+
+# Tauri / Rust
+src-tauri/target/
+*.rs.bk
+
+# Environment
 .env
+.env.local
+.env.staging
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python legacy
 __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
-build/
 .venv/
 venv/
 *.onnx
 *.bin
-ui/node_modules/
-ui/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Wrangler
+.wrangler/
+.dev.vars

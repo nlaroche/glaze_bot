@@ -1,0 +1,6 @@
+name = "glazebot-marketing"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+# Production: glazebot.gg
+# Staging: staging.glazebot.gg (configured in CF Pages dashboard)

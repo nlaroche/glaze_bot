@@ -1,0 +1,24 @@
+{
+  "name": "glazebot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:desktop": "pnpm --filter @glazebot/desktop dev",
+    "dev:marketing": "pnpm --filter @glazebot/marketing dev",
+    "dev:portal": "pnpm --filter @glazebot/portal dev",
+    "dev:bot": "pnpm --filter @glazebot/discord-bot dev",
+    "build": "turbo run build",
+    "build:packages": "turbo run build --filter='./packages/**'",
+    "lint": "turbo run lint",
+    "check": "turbo run check",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
