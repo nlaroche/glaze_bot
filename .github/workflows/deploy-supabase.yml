@@ -12,8 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: webfactory/ssh-agent@v0.9.0
         with:
-          submodules: recursive
+          ssh-private-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
 
       - uses: supabase/setup-cli@v1
         with:
