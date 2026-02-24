@@ -12,11 +12,14 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "GlazeBot",
         "width": 1024,
         "height": 768,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": false
       }
     ],
     "security": {

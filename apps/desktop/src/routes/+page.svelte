@@ -1,32 +1,30 @@
-<script lang="ts">
-  import { onMount } from "svelte";
+<h1>GlazeBot</h1>
+<p class="subtitle">Your AI gaming companion</p>
 
-  let greeting = $state("Loading...");
-
-  onMount(() => {
-    greeting = "Welcome to GlazeBot";
-  });
-</script>
-
-<main>
-  <h1>{greeting}</h1>
-  <p>Your AI gaming companion is ready.</p>
-</main>
+<section>
+  <h2>Characters</h2>
+  <p class="muted">Character selection coming soon...</p>
+</section>
 
 <style>
-  main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    font-family: system-ui, sans-serif;
-    background: #1a1a2e;
-    color: #e0e0e0;
-  }
-
   h1 {
     font-size: 2rem;
-    margin-bottom: 0.5rem;
+    color: var(--color-pink);
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    color: var(--color-text-secondary);
+    margin-bottom: 32px;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+    color: var(--color-text-primary);
+    margin-bottom: 8px;
+  }
+
+  .muted {
+    color: var(--color-text-muted);
   }
 </style>

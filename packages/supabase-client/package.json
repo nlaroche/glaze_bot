@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@glazebot/shared-types": "workspace:*",
+    "@glazebot/shared-utils": "workspace:*",
     "@supabase/supabase-js": "^2.49.0"
   },
   "devDependencies": {

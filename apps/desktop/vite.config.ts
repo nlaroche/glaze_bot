@@ -5,6 +5,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [sveltekit()],
+  envDir: "../../",
   clearScreen: false,
   server: {
     port: 1420,

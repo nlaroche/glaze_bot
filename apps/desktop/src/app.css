@@ -1,0 +1,56 @@
+:root {
+  --color-pink: #FDB5CE;
+  --color-navy: #132440;
+  --color-deep-blue: #132440;
+  --color-teal: #3B9797;
+  --color-text-primary: #E8ECF1;
+  --color-text-secondary: #A0AEC0;
+  --color-text-muted: #6B7A8D;
+  --sidebar-width: 64px;
+  --titlebar-height: 36px;
+  --color-chrome: rgba(16, 31, 55, 0.78);
+  --glass-bg: rgba(19, 36, 64, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 12px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: transparent;
+  font-family: 'Satoshi', sans-serif;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-text-muted);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* Glass panel utility */
+.glass-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}

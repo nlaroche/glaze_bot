@@ -162,6 +162,9 @@ importers:
       '@glazebot/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+      '@glazebot/shared-utils':
+        specifier: workspace:*
+        version: link:../shared-utils
       '@supabase/supabase-js':
         specifier: ^2.49.0
         version: 2.97.0

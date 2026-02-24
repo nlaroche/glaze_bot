@@ -1,38 +1,32 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@glazebot/shared-types";
+import { getEnvironment, type Environment } from "@glazebot/shared-utils";
 
-const SUPABASE_URLS = {
-  staging: "https://zwpwjceczndedcoegerx.supabase.co",
-  production: "https://tspalglvgypdktuhgqtf.supabase.co",
-} as const;
-
-type Env = "staging" | "production";
-
-function getEnv(): Env {
-  const env =
-    (typeof globalThis !== "undefined" &&
-      (globalThis as unknown as Record<string, string>).__VITE_ENV__) ||
-    process.env.VITE_ENV ||
-    "staging";
-  return env === "production" ? "production" : "staging";
-}
-
-export function getSupabaseUrl(env?: Env): string {
-  return SUPABASE_URLS[env ?? getEnv()];
-}
-
-export function getSupabaseAnonKey(): string {
-  return process.env.VITE_SUPABASE_ANON_KEY ?? "";
-}
+const SUPABASE_CONFIG = {
+  staging: {
+    url: "https://zwpwjceczndedcoegerx.supabase.co",
+    anonKey:
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3cHdqY2Vjem5kZWRjb2VnZXJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDExNjQsImV4cCI6MjA4NzUxNzE2NH0.dx2U37oUZkuuFCMK_HVl0RwRAjlyg_rUrMu2gGYJrPs",
+  },
+  production: {
+    url: "https://tspalglvgypdktuhgqtf.supabase.co",
+    anonKey:
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzcGFsZ2x2Z3lwZGt0dWhncXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDEyMDMsImV4cCI6MjA4NzUxNzIwM30.IwC0iRMEhxgxuLFENPqPJ3ANv2rMCBfidMNt345fAHw",
+  },
+} as const satisfies Record<Environment, { url: string; anonKey: string }>;
 
 let client: SupabaseClient<Database> | null = null;
 
 export function createSupabaseClient(
-  opts?: { url?: string; anonKey?: string },
+  opts?: { env?: Environment },
 ): SupabaseClient<Database> {
   if (client) return client;
-  const url = opts?.url ?? getSupabaseUrl();
-  const anonKey = opts?.anonKey ?? getSupabaseAnonKey();
-  client = createClient<Database>(url, anonKey);
+  const env = opts?.env ?? getEnvironment();
+  const config = SUPABASE_CONFIG[env];
+  client = createClient<Database>(config.url, config.anonKey, {
+    auth: {
+      flowType: "pkce",
+    },
+  });
   return client;
 }
