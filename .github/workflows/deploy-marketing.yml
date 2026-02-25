@@ -2,7 +2,7 @@ name: Deploy Marketing Site
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main, develop]
     paths:
       - "apps/marketing/**"
       - "packages/**"
@@ -31,4 +31,4 @@ jobs:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           workingDirectory: apps/marketing
-          command: pages deploy .svelte-kit/cloudflare --project-name=glazebot-marketing --branch=${{ github.ref_name }}
+          command: pages deploy dist --project-name=glazebot-marketing --branch=${{ github.ref_name }}
