@@ -172,15 +172,18 @@
   }
 
   .page-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-    letter-spacing: -0.02em;
+    font-family: 'Michroma', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #c0c8d4;
+    letter-spacing: 1px;
   }
 
   .page-subtitle {
-    font-size: 0.85rem;
+    font-family: 'Michroma', sans-serif;
+    font-size: 0.55rem;
     color: var(--color-text-muted);
+    letter-spacing: 1.5px;
   }
 
   /* Stats row */
@@ -195,10 +198,11 @@
     align-items: center;
     gap: 14px;
     padding: 16px 18px;
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
-    /* Skeuomorphic: subtle inset shadow + top highlight */
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.03),
       0 1px 3px rgba(0, 0, 0, 0.4),
@@ -277,8 +281,10 @@
   }
 
   .char-card {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     overflow: hidden;
     transition: all 0.2s ease;
@@ -457,8 +463,10 @@
   .activity-list {
     display: flex;
     flex-direction: column;
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     overflow: hidden;
     box-shadow:

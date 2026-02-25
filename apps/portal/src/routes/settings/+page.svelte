@@ -935,8 +935,8 @@
 
 <style>
   .admin-page {
-    padding: 16px 24px 48px;
-    height: calc(100vh - 60px);
+    padding: 20px 28px 48px;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -945,7 +945,7 @@
   .admin-page.scrollable {
     overflow-y: auto;
     height: auto;
-    min-height: calc(100vh - 60px);
+    min-height: 100vh;
   }
 
   .page-header {
@@ -957,8 +957,11 @@
   }
 
   .page-header h1 {
-    font-size: 1.4rem;
-    color: var(--color-pink);
+    font-family: 'Michroma', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #c0c8d4;
+    letter-spacing: 1px;
     margin: 0;
   }
 
@@ -985,12 +988,15 @@
   .top-tabs {
     display: flex;
     gap: 2px;
-    margin-bottom: 14px;
+    margin-bottom: 16px;
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(10, 22, 42, 0.4);
+    border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 3px;
-    max-width: 380px;
+    max-width: 420px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .top-tab {
@@ -1001,7 +1007,7 @@
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s;
@@ -1011,8 +1017,8 @@
   .top-tab:hover { color: var(--color-text-secondary); }
 
   .top-tab.active {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--color-text-primary);
+    background: rgba(59, 151, 151, 0.2);
+    color: var(--color-teal);
   }
 
   /* ─── Toolbar ─── */
@@ -1031,14 +1037,14 @@
   .search-input {
     width: 100%;
     padding: 10px 14px;
-    border: 1px solid var(--glass-border);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.04);
     color: var(--color-text-primary);
     font-family: inherit;
     font-size: 0.9375rem;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
   }
 
   .search-input::placeholder {
@@ -1047,6 +1053,7 @@
 
   .search-input:focus {
     border-color: var(--color-teal);
+    background: rgba(59, 151, 151, 0.05);
   }
 
   /* ─── Content Area ─── */
@@ -1073,8 +1080,10 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     animation: slideIn 0.2s ease;
     overflow: hidden;
@@ -1218,8 +1227,10 @@
   }
 
   .cfg-card {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     overflow: hidden;
     box-shadow:
@@ -1303,19 +1314,19 @@
   .json-editor {
     width: 100%;
     padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
     color: var(--color-text-primary);
     font-family: 'Courier New', monospace;
     font-size: 0.8125rem;
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
     line-height: 1.5;
   }
 
-  .json-editor:focus { border-color: var(--color-teal); }
+  .json-editor:focus { border-color: var(--color-teal); background: rgba(59, 151, 151, 0.05); }
 
   .cfg-save {
     display: flex;
@@ -1468,8 +1479,10 @@
 
   /* ─── Step 4: Preview ─── */
   .preview-step {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     overflow: hidden;
     box-shadow:

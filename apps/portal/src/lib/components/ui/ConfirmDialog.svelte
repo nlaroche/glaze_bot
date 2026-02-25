@@ -54,13 +54,18 @@
   }
 
   .dialog {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--glass-border);
+    background: rgba(8, 14, 28, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border-radius: 14px;
     padding: 24px;
     min-width: 340px;
     max-width: 440px;
     animation: slideUp 0.15s ease;
+    box-shadow:
+      0 0 60px rgba(59, 151, 151, 0.06),
+      0 8px 32px rgba(0, 0, 0, 0.4);
   }
 
   @keyframes slideUp {

@@ -69,8 +69,10 @@
 
 <style>
   .pipeline-step {
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 10px;
     overflow: hidden;
     transition: border-color 0.15s;

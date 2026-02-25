@@ -33,8 +33,8 @@
   .field-textarea {
     width: 100%;
     padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
     color: var(--color-text-primary);
     font-family: inherit;
@@ -42,9 +42,9 @@
     line-height: 1.5;
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
   }
-  .field-textarea:focus { border-color: var(--color-teal); }
+  .field-textarea:focus { border-color: var(--color-teal); background: rgba(59, 151, 151, 0.05); }
   .field-textarea:disabled { opacity: 0.5; cursor: not-allowed; }
   .field-textarea.monospace { font-family: 'Courier New', monospace; font-size: 0.875rem; }
   .field-desc { font-size: 0.8125rem; color: var(--color-text-muted); margin: 0; }

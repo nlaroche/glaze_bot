@@ -84,8 +84,10 @@
   .data-table-wrap {
     overflow-x: auto;
     border-radius: 10px;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface-raised);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 22, 42, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.03),
       0 1px 3px rgba(0, 0, 0, 0.4),
@@ -112,7 +114,7 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);
-    background: var(--color-surface-overlay, rgba(10, 14, 24, 0.95));
+    background: rgba(10, 14, 24, 0.8);
     border-bottom: 1px solid var(--color-border);
     white-space: nowrap;
     user-select: none;

@@ -4,6 +4,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
+  import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
+  import SidebarIcon from '$lib/components/SidebarIcon.svelte';
 
   let { children } = $props();
   const auth = getAuthState();
@@ -19,35 +21,64 @@
     }
   });
 
-  const navItems = [
-    { href: '/', label: 'Home', icon: '🏠' },
-    { href: '/pack', label: 'Packs', icon: '📦' },
-    { href: '/collection', label: 'Collection', icon: '🃏' },
-    { href: '/settings', label: 'Admin', icon: '⚙' },
+  const navItems: { href: string; label: string; icon: 'home' | 'pack' | 'collection' | 'admin' }[] = [
+    { href: '/', label: 'Home', icon: 'home' },
+    { href: '/pack', label: 'Packs', icon: 'pack' },
+    { href: '/collection', label: 'Collection', icon: 'collection' },
+    { href: '/settings', label: 'Admin', icon: 'admin' },
   ];
+
+  function isActive(href: string): boolean {
+    if (href === '/') return $page.url.pathname === '/';
+    return $page.url.pathname.startsWith(href);
+  }
 </script>
+
+<NightSkyBackground />
 
 {#if auth.loading}
   <div class="loading-screen">
     <p>Loading...</p>
   </div>
 {:else if !auth.isAuthenticated}
-  {@render children()}
+  <div class="app-shell">
+    {@render children()}
+  </div>
 {:else}
   <div class="app-shell">
     <nav class="sidebar" data-testid="portal-sidebar">
-      <div class="sidebar-brand">GB</div>
-      {#each navItems as item}
-        <a
-          href={item.href}
-          class="sidebar-link"
-          class:active={$page.url.pathname === item.href}
-          data-testid="nav-{item.label.toLowerCase()}"
+      <div class="sidebar-brand">
+        <span class="brand-title">GlazeBot</span>
+        <span class="brand-tagline">Admin Portal</span>
+      </div>
+      <div class="nav-items">
+        {#each navItems as item}
+          <a
+            href={item.href}
+            class="nav-link"
+            class:active={isActive(item.href)}
+            data-testid="nav-{item.label.toLowerCase()}"
+            title={item.label}
+          >
+            <span class="nav-icon">
+              <SidebarIcon name={item.icon} size={20} />
+            </span>
+            <span class="nav-label">{item.label}</span>
+          </a>
+        {/each}
+      </div>
+      <div class="nav-bottom">
+        <button
+          class="nav-link logout-link"
+          onclick={() => import('@glazebot/supabase-client').then(m => m.signOut())}
+          title="Sign out"
         >
-          <span class="sidebar-icon">{item.icon}</span>
-          <span class="sidebar-label">{item.label}</span>
-        </a>
-      {/each}
+          <span class="nav-icon">
+            <SidebarIcon name="logout" size={20} />
+          </span>
+          <span class="nav-label">Sign Out</span>
+        </button>
+      </div>
     </nav>
     <main class="content">
       {@render children()}
@@ -57,67 +88,125 @@
 
 <style>
   .loading-screen {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100vh;
     color: var(--color-text-secondary);
+    font-family: 'Satoshi', system-ui, sans-serif;
   }
 
   .app-shell {
+    position: relative;
+    z-index: 1;
     display: flex;
     height: 100vh;
     overflow: hidden;
   }
 
+  /* ─── Sidebar ─── */
   .sidebar {
-    width: 200px;
+    width: 180px;
     flex-shrink: 0;
-    background: var(--color-sidebar);
-    border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    padding: 16px 0;
-    gap: 4px;
+    padding: 0;
+    background: rgba(10, 22, 42, 0.35);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid var(--color-border);
   }
 
   .sidebar-brand {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--color-pink);
-    padding: 0 16px 16px;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 16px 14px;
     border-bottom: 1px solid var(--color-border);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
 
-  .sidebar-link {
+  .brand-title {
+    font-family: 'Michroma', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: #c0c8d4;
+    letter-spacing: 1px;
+  }
+
+  .brand-tagline {
+    font-family: 'Michroma', sans-serif;
+    font-size: 0.5rem;
+    font-weight: 400;
+    color: var(--color-text-muted);
+    letter-spacing: 1.5px;
+    margin-top: 2px;
+  }
+
+  .nav-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 8px;
+  }
+
+  .nav-bottom {
+    margin-top: auto;
+    padding: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .nav-link {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 16px;
-    color: var(--color-text-secondary);
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--color-text-muted);
     text-decoration: none;
-    font-size: 0.9rem;
-    transition: all 0.2s;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    font-family: inherit;
+    width: 100%;
   }
 
-  .sidebar-link:hover {
+  .nav-link:hover {
+    background: rgba(59, 151, 151, 0.12);
     color: var(--color-text-primary);
-    background: rgba(255, 255, 255, 0.04);
   }
 
-  .sidebar-link.active {
-    color: var(--color-pink);
-    background: rgba(253, 181, 206, 0.08);
+  .nav-link.active {
+    background: rgba(59, 151, 151, 0.2);
+    color: var(--color-teal);
   }
 
-  .sidebar-icon {
-    font-size: 1.1rem;
+  .nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
   }
 
+  .nav-label {
+    white-space: nowrap;
+  }
+
+  .logout-link:hover {
+    background: rgba(248, 113, 113, 0.12);
+    color: #f87171;
+  }
+
+  /* ─── Content ─── */
   .content {
     flex: 1;
     overflow-y: auto;
-    background: var(--color-navy);
+    background: transparent;
   }
 </style>

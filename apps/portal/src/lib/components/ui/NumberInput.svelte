@@ -33,17 +33,17 @@
   .field-label { font-size: 0.875rem; font-weight: 500; color: var(--color-text-secondary); }
   .field-input {
     padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
     color: var(--color-text-primary);
     font-family: inherit;
     font-size: 0.9375rem;
     width: 140px;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s, background 0.15s;
   }
-  .field-input:focus { border-color: var(--color-teal); }
+  .field-input:focus { border-color: var(--color-teal); background: rgba(59, 151, 151, 0.05); }
   .field-input:disabled { opacity: 0.5; cursor: not-allowed; }
   .field-desc { font-size: 0.8125rem; color: var(--color-text-muted); margin: 0; }
 </style>
