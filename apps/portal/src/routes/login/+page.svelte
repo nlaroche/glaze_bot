@@ -50,14 +50,14 @@
 
   // Collage cards — same as desktop for visual consistency
   const collageCards = [
-    { src: '/avatars/hype.png',             x: -4,  y: 6,   size: 140, rot: -8,   opacity: 0.45, blur: 1,   glow: 'epic' },
-    { src: '/avatars/sage.png',             x: 78,  y: 3,   size: 130, rot: 6,    opacity: 0.4,  blur: 1.5, glow: 'rare' },
-    { src: '/avatars/jinx.png',             x: -2,  y: 52,  size: 120, rot: -12,  opacity: 0.35, blur: 2,   glow: 'legendary' },
-    { src: '/avatars/dj_blaze.png',         x: 80,  y: 48,  size: 125, rot: 10,   opacity: 0.4,  blur: 1,   glow: 'epic' },
-    { src: '/avatars/vex.png',              x: 82,  y: 78,  size: 110, rot: 8,    opacity: 0.35, blur: 2,   glow: 'rare' },
-    { src: '/avatars/captain_obvious.png',  x: 2,   y: 80,  size: 105, rot: -5,   opacity: 0.3,  blur: 2.5, glow: 'common' },
-    { src: '/avatars/sir_reginald.png',     x: 22,  y: -3,  size: 95,  rot: 4,    opacity: 0.25, blur: 3,   glow: 'rare' },
-    { src: '/avatars/conspiracy_carl.png',  x: 58,  y: 82,  size: 100, rot: -7,   opacity: 0.28, blur: 2.5, glow: 'common' },
+    { src: '/avatars/hype.webp',             x: -4,  y: 6,   size: 140, rot: -8,   opacity: 0.45, blur: 1,   glow: 'epic' },
+    { src: '/avatars/sage.webp',             x: 78,  y: 3,   size: 130, rot: 6,    opacity: 0.4,  blur: 1.5, glow: 'rare' },
+    { src: '/avatars/jinx.webp',             x: -2,  y: 52,  size: 120, rot: -12,  opacity: 0.35, blur: 2,   glow: 'legendary' },
+    { src: '/avatars/dj_blaze.webp',         x: 80,  y: 48,  size: 125, rot: 10,   opacity: 0.4,  blur: 1,   glow: 'epic' },
+    { src: '/avatars/vex.webp',              x: 82,  y: 78,  size: 110, rot: 8,    opacity: 0.35, blur: 2,   glow: 'rare' },
+    { src: '/avatars/captain_obvious.webp',  x: 2,   y: 80,  size: 105, rot: -5,   opacity: 0.3,  blur: 2.5, glow: 'common' },
+    { src: '/avatars/sir_reginald.webp',     x: 22,  y: -3,  size: 95,  rot: 4,    opacity: 0.25, blur: 3,   glow: 'rare' },
+    { src: '/avatars/conspiracy_carl.webp',  x: 58,  y: 82,  size: 100, rot: -7,   opacity: 0.28, blur: 2.5, glow: 'common' },
   ];
 
   const glowColors: Record<string, string> = {
