@@ -78,7 +78,7 @@ jobs:
             fn_name=$(basename "$fn_dir")
             if [ "$fn_name" = "_shared" ]; then continue; fi
             echo "Deploying function: $fn_name"
-            supabase functions deploy "$fn_name" --project-ref ${{ steps.env.outputs.project_id }}
+            supabase functions deploy "$fn_name" --no-verify-jwt --project-ref ${{ steps.env.outputs.project_id }}
           done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ steps.env.outputs.access_token }}

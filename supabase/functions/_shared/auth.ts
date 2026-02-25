@@ -6,7 +6,8 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 /**
  * Extract and verify the user from the request's Authorization header.
- * Returns either a valid User or an error Response to send back.
+ * Uses supabase.auth.getUser() which validates the JWT via the Auth server
+ * (works with both ES256 and HS256 tokens).
  */
 export async function getRequestUser(
   req: Request,
@@ -17,11 +18,21 @@ export async function getRequestUser(
   }
 
   const token = authHeader.replace("Bearer ", "");
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Reject if the token is just the anon key (not a user token)
+  if (token === SUPABASE_ANON_KEY) {
+    return { error: errorResponse("User authentication required", 401) };
+  }
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser(token);
+  } = await supabase.auth.getUser();
 
   if (error || !user) {
     return { error: errorResponse("Invalid or expired token", 401) };
