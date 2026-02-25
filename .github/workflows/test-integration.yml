@@ -1,22 +1,16 @@
 name: Integration Tests
 
 on:
-  workflow_run:
-    workflows: ['Deploy Supabase']
-    types: [completed]
-    branches: [develop]
+  workflow_dispatch:
 
 env:
   SUPABASE_URL: https://zwpwjceczndedcoegerx.supabase.co
-  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY_STAGING }}
-  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_STAGING }}
+  SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3cHdqY2Vjem5kZWRjb2VnZXJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDExNjQsImV4cCI6MjA4NzUxNzE2NH0.dx2U37oUZkuuFCMK_HVl0RwRAjlyg_rUrMu2gGYJrPs
   E2E_TEST_EMAIL: e2e-test@glazebot.gg
-  E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
 
 jobs:
   schema-validation:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
