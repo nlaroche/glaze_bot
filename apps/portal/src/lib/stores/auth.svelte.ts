@@ -15,9 +15,7 @@ export function getAuthState() {
 
 export async function initializeAuth() {
   try {
-    // Client self-configures from VITE_ENV (staging/production).
-    // URLs and anon keys are hardcoded in supabase-client.
-    createSupabaseClient({ flowType: "pkce" });
+    createSupabaseClient({ flowType: "implicit" });
     session = await getSession();
   } catch (e) {
     console.error("Auth init failed:", e);

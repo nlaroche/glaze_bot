@@ -10,6 +10,7 @@ build/
 
 # Tauri / Rust
 src-tauri/target/
+src-tauri/gen/
 *.rs.bk
 
 # Environment
@@ -41,6 +42,13 @@ venv/
 # Logs
 *.log
 npm-debug.log*
+
+# Test results
+playwright-report/
+test-results/
+
+# Supabase
+supabase/.temp/
 
 # Wrangler
 .wrangler/

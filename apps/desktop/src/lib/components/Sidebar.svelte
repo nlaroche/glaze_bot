@@ -4,8 +4,10 @@
   import { signOut } from '@glazebot/supabase-client';
   import SidebarIcon from './SidebarIcon.svelte';
 
-  const navItems: { name: 'home' | 'user' | 'settings'; path: string; label: string }[] = [
+  const navItems: { name: 'home' | 'user' | 'settings' | 'pack' | 'collection'; path: string; label: string }[] = [
     { name: 'home', path: '/', label: 'Home' },
+    { name: 'pack', path: '/pack', label: 'Open Packs' },
+    { name: 'collection', path: '/collection', label: 'Collection' },
     { name: 'user', path: '/account', label: 'Account' },
   ];
 
@@ -62,7 +64,7 @@
     width: var(--sidebar-width);
     min-width: var(--sidebar-width);
     padding: 8px 0;
-    background: var(--color-chrome);
+    background: rgba(10, 22, 42, 0.35);
   }
 
   .nav-items {

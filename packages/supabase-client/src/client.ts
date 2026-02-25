@@ -16,17 +16,25 @@ const SUPABASE_CONFIG = {
 } as const satisfies Record<Environment, { url: string; anonKey: string }>;
 
 let client: SupabaseClient<Database> | null = null;
+let currentEnv: Environment | null = null;
 
 export function createSupabaseClient(
-  opts?: { env?: Environment },
+  opts?: { env?: Environment; flowType?: "pkce" | "implicit" },
 ): SupabaseClient<Database> {
   if (client) return client;
   const env = opts?.env ?? getEnvironment();
+  currentEnv = env;
   const config = SUPABASE_CONFIG[env];
   client = createClient<Database>(config.url, config.anonKey, {
     auth: {
-      flowType: "pkce",
+      flowType: opts?.flowType ?? "implicit",
     },
   });
   return client;
+}
+
+/** Get the Supabase project URL (needed for edge function calls) */
+export function getSupabaseUrl(): string {
+  const env = currentEnv ?? getEnvironment();
+  return SUPABASE_CONFIG[env].url;
 }

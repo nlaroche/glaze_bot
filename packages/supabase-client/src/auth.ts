@@ -2,11 +2,14 @@ import type { Session, AuthChangeEvent } from "@supabase/supabase-js";
 import { createSupabaseClient } from "./client.js";
 
 /** Standard browser redirect OAuth — for portal/web apps. */
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectTo?: string) {
   const supabase = createSupabaseClient();
   return supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { queryParams: { prompt: "select_account" } },
+    options: {
+      redirectTo,
+      queryParams: { prompt: "select_account" },
+    },
   });
 }
 
@@ -43,12 +46,24 @@ export async function signInWithDiscord() {
 
 export async function signInWithEmailOtp(email: string) {
   const supabase = createSupabaseClient();
-  return supabase.auth.signInWithOtp({ email });
+  const { error } = await supabase.auth.signInWithOtp({ email });
+  if (error) throw error;
+}
+
+/** Send a magic link email. The link redirects to `redirectTo` with a code param. */
+export async function sendMagicLink(email: string, redirectTo: string) {
+  const supabase = createSupabaseClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: redirectTo },
+  });
+  if (error) throw error;
 }
 
 export async function verifyEmailOtp(email: string, token: string) {
   const supabase = createSupabaseClient();
-  return supabase.auth.verifyOtp({ email, token, type: "email" });
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
+  if (error) throw error;
 }
 
 export async function signOut() {

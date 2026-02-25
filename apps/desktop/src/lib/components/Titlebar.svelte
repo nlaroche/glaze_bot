@@ -45,7 +45,7 @@
     justify-content: space-between;
     height: var(--titlebar-height);
     padding: 0 12px;
-    background: var(--color-chrome);
+    background: rgba(10, 22, 42, 0.35);
     -webkit-app-region: drag;
   }
 

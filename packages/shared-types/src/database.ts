@@ -15,6 +15,144 @@ export type Database = {
   };
   public: {
     Tables: {
+      booster_packs: {
+        Row: {
+          id: string;
+          user_id: string;
+          opened_at: string;
+          character_ids: string[];
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          opened_at?: string;
+          character_ids?: string[];
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          opened_at?: string;
+          character_ids?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "booster_packs_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      characters: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string;
+          backstory: string;
+          system_prompt: string;
+          personality: Json;
+          rarity: Database["public"]["Enums"]["character_rarity"];
+          voice_id: string | null;
+          voice_name: string | null;
+          avatar_seed: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description: string;
+          backstory?: string;
+          system_prompt: string;
+          personality?: Json;
+          rarity?: Database["public"]["Enums"]["character_rarity"];
+          voice_id?: string | null;
+          voice_name?: string | null;
+          avatar_seed?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string;
+          backstory?: string;
+          system_prompt?: string;
+          personality?: Json;
+          rarity?: Database["public"]["Enums"]["character_rarity"];
+          voice_id?: string | null;
+          voice_name?: string | null;
+          avatar_seed?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "characters_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      gacha_config: {
+        Row: {
+          id: string;
+          config: Json;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          config?: Json;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          config?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      parties: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          member_ids: string[];
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name?: string;
+          member_ids?: string[];
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          member_ids?: string[];
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "parties_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       users: {
         Row: {
           avatar_url: string | null;
@@ -47,10 +185,15 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      daily_pack_count: {
+        Args: {
+          p_user_id: string;
+        };
+        Returns: number;
+      };
     };
     Enums: {
-      [_ in never]: never;
+      character_rarity: "common" | "rare" | "epic" | "legendary";
     };
     CompositeTypes: {
       [_ in never]: never;

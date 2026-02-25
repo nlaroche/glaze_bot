@@ -11,7 +11,9 @@
     "build:packages": "turbo run build --filter='./packages/**'",
     "lint": "turbo run lint",
     "check": "turbo run check",
-    "clean": "turbo run clean"
+    "clean": "turbo run clean",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
@@ -22,6 +24,25 @@
     "node": ">=20"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
+    "onlyBuiltDependencies": [
+      " ",
+      "a",
+      "b",
+      "d",
+      "e",
+      "esbuild",
+      "h",
+      "i",
+      "k",
+      "l",
+      "o",
+      "p",
+      "r",
+      "s",
+      "sharp",
+      "u",
+      "w",
+      "workerd"
+    ]
   }
 }

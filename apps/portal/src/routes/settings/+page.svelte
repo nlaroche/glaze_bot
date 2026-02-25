@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { getGachaConfig, updateGachaConfig } from '@glazebot/supabase-client';
+  import { getGachaConfig, updateGachaConfig, generateTestCharacter } from '@glazebot/supabase-client';
   import { CharacterCard } from '@glazebot/shared-ui';
   import type { GachaCharacter, CharacterRarity } from '@glazebot/shared-types';
-  import { getSupabaseUrl, getSession } from '@glazebot/supabase-client';
 
   let config: Record<string, unknown> = $state({});
   let rawJson: string = $state('');
@@ -124,24 +123,9 @@
     testResult = '';
     testCharacter = null;
     try {
-      const session = await getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${getSupabaseUrl()}/functions/v1/generate-character`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ rarity: testRarity }),
-      });
-
-      const data = await res.json();
-      testResult = JSON.stringify(data, null, 2);
-
-      if (res.ok) {
-        testCharacter = data as GachaCharacter;
-      }
+      const character = await generateTestCharacter(testRarity);
+      testResult = JSON.stringify(character, null, 2);
+      testCharacter = character;
     } catch (e) {
       testResult = e instanceof Error ? e.message : 'Failed';
     } finally {
@@ -154,32 +138,31 @@
   );
 </script>
 
-<div class="settings-page">
+<div class="settings-page" data-testid="settings-page">
   <h1>Gacha Admin</h1>
 
   {#if loading}
     <p class="muted">Loading config...</p>
   {:else}
-    <!-- Quick Settings -->
     <section class="section">
       <h2>Quick Settings</h2>
       <div class="form-grid">
         <label>
           <span>Packs/Day</span>
-          <input type="number" bind:value={packsPerDay} min="1" max="99" oninput={syncToConfig} />
+          <input type="number" bind:value={packsPerDay} min="1" max="99" oninput={syncToConfig} data-testid="config-packs-per-day" />
         </label>
         <label>
           <span>Cards/Pack</span>
-          <input type="number" bind:value={cardsPerPack} min="1" max="10" oninput={syncToConfig} />
+          <input type="number" bind:value={cardsPerPack} min="1" max="10" oninput={syncToConfig} data-testid="config-cards-per-pack" />
         </label>
         <label>
           <span>Temperature</span>
-          <input type="range" bind:value={baseTemperature} min="0" max="2" step="0.05" oninput={syncToConfig} />
+          <input type="range" bind:value={baseTemperature} min="0" max="2" step="0.05" oninput={syncToConfig} data-testid="config-temperature" />
           <span class="range-val">{baseTemperature.toFixed(2)}</span>
         </label>
         <label>
           <span>Model</span>
-          <select bind:value={model} onchange={syncToConfig}>
+          <select bind:value={model} onchange={syncToConfig} data-testid="config-model">
             <option value="qwen-plus">qwen-plus</option>
             <option value="qwen-turbo">qwen-turbo</option>
             <option value="qwen-max">qwen-max</option>
@@ -189,7 +172,6 @@
       </div>
     </section>
 
-    <!-- Drop Rates -->
     <section class="section">
       <h2>Drop Rates <span class="badge" class:warn={dropRateSum !== 1}>Sum: {dropRateSum}</span></h2>
       <div class="form-grid">
@@ -201,6 +183,7 @@
               value={dropRates[tier as keyof typeof dropRates]}
               min="0" max="1" step="0.01"
               oninput={(e) => { dropRates[tier as keyof typeof dropRates] = parseFloat((e.target as HTMLInputElement).value); syncToConfig(); }}
+              data-testid="config-drop-rate-{tier}"
             />
             <span class="range-val">{(dropRates[tier as keyof typeof dropRates] * 100).toFixed(0)}%</span>
           </label>
@@ -208,7 +191,6 @@
       </div>
     </section>
 
-    <!-- Generation Prompt -->
     <section class="section">
       <button class="section-toggle" onclick={() => showPrompt = !showPrompt}>
         <h2>Generation Prompt {showPrompt ? '▾' : '▸'}</h2>
@@ -219,11 +201,11 @@
           value={(config.generationPrompt as string) ?? ''}
           oninput={(e) => { config = { ...config, generationPrompt: (e.target as HTMLTextAreaElement).value }; rawJson = JSON.stringify(config, null, 2); }}
           rows="8"
+          data-testid="config-generation-prompt"
         ></textarea>
       {/if}
     </section>
 
-    <!-- Rarity Guidance -->
     <section class="section">
       <button class="section-toggle" onclick={() => showGuidance = !showGuidance}>
         <h2>Rarity Guidance {showGuidance ? '▾' : '▸'}</h2>
@@ -241,13 +223,13 @@
                 rawJson = JSON.stringify(config, null, 2);
               }}
               rows="3"
+              data-testid="config-rarity-guidance-{tier}"
             ></textarea>
           </div>
         {/each}
       {/if}
     </section>
 
-    <!-- Raw JSON -->
     <section class="section">
       <h2>Raw Config JSON</h2>
       <textarea
@@ -256,46 +238,45 @@
         oninput={onJsonEdit}
         rows="16"
         spellcheck="false"
+        data-testid="config-raw-json"
       ></textarea>
       {#if jsonError}
-        <p class="error">{jsonError}</p>
+        <p class="error" data-testid="config-json-error">{jsonError}</p>
       {/if}
     </section>
 
-    <!-- Actions -->
     <div class="actions">
-      <button class="btn-primary" onclick={saveConfig} disabled={saving || !!jsonError}>
+      <button class="btn-primary" onclick={saveConfig} disabled={saving || !!jsonError} data-testid="save-config-btn">
         {saving ? 'Saving...' : 'Save Config'}
       </button>
-      <button class="btn-secondary" onclick={resetDefaults}>Reset to Defaults</button>
+      <button class="btn-secondary" onclick={resetDefaults} data-testid="reset-config-btn">Reset to Defaults</button>
       {#if saveMsg}
-        <span class="save-msg" class:error={saveMsg !== 'Saved!'}>{saveMsg}</span>
+        <span class="save-msg" class:error={saveMsg !== 'Saved!'} data-testid="save-msg">{saveMsg}</span>
       {/if}
     </div>
 
     <hr />
 
-    <!-- Test Generation -->
     <section class="section">
       <h2>Test Generation</h2>
       <div class="test-controls">
-        <select bind:value={testRarity}>
+        <select bind:value={testRarity} data-testid="test-rarity-select">
           <option value="common">Common</option>
           <option value="rare">Rare</option>
           <option value="epic">Epic</option>
           <option value="legendary">Legendary</option>
         </select>
-        <button class="btn-primary" onclick={testGenerate} disabled={testLoading}>
+        <button class="btn-primary" onclick={testGenerate} disabled={testLoading} data-testid="test-generate-btn">
           {testLoading ? 'Generating...' : 'Generate Test Character'}
         </button>
       </div>
 
       {#if testResult}
-        <pre class="test-output">{testResult}</pre>
+        <pre class="test-output" data-testid="test-output">{testResult}</pre>
       {/if}
 
       {#if testCharacter}
-        <div class="test-preview">
+        <div class="test-preview" data-testid="test-preview">
           <CharacterCard character={testCharacter} flipped={true} />
         </div>
       {/if}
@@ -305,10 +286,9 @@
 
 <style>
   .settings-page {
-    padding: 24px;
+    padding: 24px 24px 48px;
     max-width: 720px;
-    overflow-y: auto;
-    height: 100%;
+    margin: 0 auto;
   }
 
   h1 {

@@ -1,13 +1,25 @@
-export { createSupabaseClient } from "./client.js";
+export { createSupabaseClient, getSupabaseUrl } from "./client.js";
 export {
   signInWithGoogle,
   getGoogleOAuthUrl,
   exchangeCodeForSession,
   signInWithDiscord,
   signInWithEmailOtp,
+  sendMagicLink,
   verifyEmailOtp,
   signOut,
   getSession,
   onAuthStateChange,
 } from "./auth.js";
 export type { Session, User, AuthChangeEvent } from "@supabase/supabase-js";
+export {
+  openBoosterPack,
+  getCollection,
+  getCharacter,
+  getActiveParty,
+  setActiveParty,
+  getDailyPacksRemaining,
+  getGachaConfig,
+  updateGachaConfig,
+  generateTestCharacter,
+} from "./gacha.js";

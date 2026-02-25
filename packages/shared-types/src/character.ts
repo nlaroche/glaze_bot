@@ -28,3 +28,25 @@ export interface PartyConfig {
   parties: Record<string, string[]>;
   last_party: string;
 }
+
+/** Character rarity tiers */
+export type CharacterRarity = "common" | "rare" | "epic" | "legendary";
+
+/** A gacha-generated character stored in the database */
+export interface GachaCharacter extends Character {
+  id: string;
+  user_id: string;
+  backstory: string;
+  rarity: CharacterRarity;
+  voice_id?: string;
+  voice_name?: string;
+  avatar_seed: string;
+  created_at: string;
+}
+
+/** Result from opening a booster pack */
+export interface BoosterPackResult {
+  characters: GachaCharacter[];
+  packs_remaining: number;
+  resets_at: string;
+}
