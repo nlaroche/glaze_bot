@@ -76,6 +76,7 @@
         character={char}
         flipped={flippedStates[char.id]}
         onflip={() => toggleFlip(char.id)}
+        image={{ 'demo-common': '/testCharacter1.png', 'demo-rare': '/testCharacter2.png', 'demo-epic': '/testCharacter3.png', 'demo-legendary': '/testCharacter4.png' }[char.id]}
       />
     {/each}
   </div>

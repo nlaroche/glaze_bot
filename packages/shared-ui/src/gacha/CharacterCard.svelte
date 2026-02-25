@@ -7,9 +7,10 @@
     flipped?: boolean;
     onflip?: () => void;
     onclick?: () => void;
+    image?: string;
   }
 
-  let { character, flipped = false, onflip, onclick }: Props = $props();
+  let { character, flipped = false, onflip, onclick, image }: Props = $props();
 
   import type { Personality } from '@glazebot/shared-types';
 
@@ -125,7 +126,12 @@
 
       <div class="card-front-inner">
         <div class="art-fill">
-          <ProceduralAvatar seed={character.avatar_seed} rarity={character.rarity} size={400} />
+          {#if image}
+            <img src={image} alt="" class="art-bg-blur" aria-hidden="true" />
+            <img src={image} alt={character.name} class="art-foreground" />
+          {:else}
+            <ProceduralAvatar seed={character.avatar_seed} rarity={character.rarity} size={400} />
+          {/if}
         </div>
 
         <div class="specular"></div>
@@ -433,6 +439,30 @@
     border-radius: 0 !important;
     box-shadow: none !important;
     flex-shrink: 0;
+  }
+
+  /* ── Image art mode ── */
+  .art-bg-blur {
+    position: absolute;
+    inset: -20px;
+    width: calc(100% + 40px);
+    height: calc(100% + 40px);
+    object-fit: cover;
+    filter: blur(16px) brightness(0.6);
+    z-index: 0;
+  }
+
+  .art-foreground {
+    position: relative;
+    max-width: 30%;
+    max-height: 30%;
+    object-fit: contain;
+    z-index: 1;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+    transform: scale(2.75);
+    /* Center in the visible area above the info overlay */
+    margin-bottom: 100px;
   }
 
   /* ── Specular highlight ── */
