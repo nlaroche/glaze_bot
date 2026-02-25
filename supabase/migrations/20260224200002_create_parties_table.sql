@@ -1,4 +1,4 @@
-CREATE TABLE parties (
+CREATE TABLE IF NOT EXISTS parties (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name text NOT NULL DEFAULT 'My Party',
@@ -10,23 +10,35 @@ CREATE TABLE parties (
 );
 
 -- Only one active party per user
-CREATE UNIQUE INDEX idx_parties_user_active ON parties(user_id) WHERE is_active = true;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parties_user_active ON parties(user_id) WHERE is_active = true;
 
 -- RLS
 ALTER TABLE parties ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own parties"
-  ON parties FOR SELECT
-  USING ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own parties"
+    ON parties FOR SELECT
+    USING ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own parties"
-  ON parties FOR INSERT
-  WITH CHECK ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own parties"
+    ON parties FOR INSERT
+    WITH CHECK ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can update own parties"
-  ON parties FOR UPDATE
-  USING ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can update own parties"
+    ON parties FOR UPDATE
+    USING ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can delete own parties"
-  ON parties FOR DELETE
-  USING ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own parties"
+    ON parties FOR DELETE
+    USING ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;

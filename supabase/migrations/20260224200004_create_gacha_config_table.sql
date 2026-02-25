@@ -1,4 +1,4 @@
-CREATE TABLE gacha_config (
+CREATE TABLE IF NOT EXISTS gacha_config (
   id text PRIMARY KEY DEFAULT 'default',
   config jsonb NOT NULL DEFAULT '{}',
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -7,11 +7,14 @@ CREATE TABLE gacha_config (
 -- RLS: anyone can read (edge functions need it), only service role can write
 ALTER TABLE gacha_config ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Public read access"
-  ON gacha_config FOR SELECT
-  USING (true);
+DO $$ BEGIN
+  CREATE POLICY "Public read access"
+    ON gacha_config FOR SELECT
+    USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- Seed default config
+-- Seed default config (only if not already present)
 INSERT INTO gacha_config (id, config) VALUES ('default', '{
   "packsPerDay": 3,
   "cardsPerPack": 3,
@@ -37,4 +40,5 @@ INSERT INTO gacha_config (id, config) VALUES ('default', '{
   },
   "baseTemperature": 0.9,
   "model": "qwen-plus"
-}');
+}')
+ON CONFLICT (id) DO NOTHING;

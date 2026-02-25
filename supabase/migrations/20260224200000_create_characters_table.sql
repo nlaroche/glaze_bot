@@ -1,8 +1,11 @@
 -- Character rarity enum
-CREATE TYPE character_rarity AS ENUM ('common', 'rare', 'epic', 'legendary');
+DO $$ BEGIN
+  CREATE TYPE character_rarity AS ENUM ('common', 'rare', 'epic', 'legendary');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Characters table
-CREATE TABLE characters (
+CREATE TABLE IF NOT EXISTS characters (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -18,16 +21,22 @@ CREATE TABLE characters (
 );
 
 -- Indexes
-CREATE INDEX idx_characters_user_id ON characters(user_id);
-CREATE INDEX idx_characters_rarity ON characters(rarity);
+CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id);
+CREATE INDEX IF NOT EXISTS idx_characters_rarity ON characters(rarity);
 
 -- RLS
 ALTER TABLE characters ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own characters"
-  ON characters FOR SELECT
-  USING ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can view own characters"
+    ON characters FOR SELECT
+    USING ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE POLICY "Users can insert own characters"
-  ON characters FOR INSERT
-  WITH CHECK ((select auth.uid()) = user_id);
+DO $$ BEGIN
+  CREATE POLICY "Users can insert own characters"
+    ON characters FOR INSERT
+    WITH CHECK ((select auth.uid()) = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
