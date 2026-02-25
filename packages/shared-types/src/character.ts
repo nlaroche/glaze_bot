@@ -56,8 +56,11 @@ export interface GachaCharacter extends Character {
   voice_name?: string;
   avatar_seed: string;
   avatar_url?: string;
+  tagline?: string;
+  tagline_url?: string;
   is_active: boolean;
   is_default: boolean;
+  deleted_at?: string | null;
   generation_metadata?: GenerationMetadata | null;
   created_at: string;
 }

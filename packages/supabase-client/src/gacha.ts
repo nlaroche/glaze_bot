@@ -269,10 +269,32 @@ export async function getAllCharacters(): Promise<GachaCharacter[]> {
   return data as unknown as GachaCharacter[];
 }
 
-/** Hard delete a character by ID */
+/** Soft-delete a character (sets deleted_at, hides from user queries) */
 export async function deleteCharacter(id: string): Promise<void> {
-  const { error } = await db().from("characters").delete().eq("id", id);
+  const { error } = await db()
+    .from("characters")
+    .update({ is_active: false, deleted_at: new Date().toISOString() })
+    .eq("id", id);
   if (error) throw error;
+}
+
+/** Purge a single soft-deleted character (R2 media + hard-delete DB row) */
+export async function purgeCharacterMedia(id: string): Promise<void> {
+  await callEdgeFunction("purge-character-media", { character_id: id });
+}
+
+/** Purge all soft-deleted characters */
+export async function purgeAllDeletedCharacters(): Promise<{ purged: number }> {
+  return callEdgeFunction<{ purged: number }>("purge-character-media", {
+    purge_all_deleted: true,
+  });
+}
+
+/** Get all soft-deleted characters (admin RPC) */
+export async function getDeletedCharacters(): Promise<GachaCharacter[]> {
+  const { data, error } = await db().rpc("get_deleted_characters");
+  if (error) throw error;
+  return (data ?? []) as unknown as GachaCharacter[];
 }
 
 /** Toggle a character's is_active status */

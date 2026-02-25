@@ -5,6 +5,9 @@ import {
   errorResponse,
   getRequestUser,
   getServiceClient,
+  uploadToPublicBucket,
+  characterPortraitKey,
+  characterTaglineKey,
 } from "../_shared/mod.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
@@ -88,7 +91,6 @@ async function generateSprite(
   characterId: string,
   description: string,
   rarity: string,
-  serviceClient: ReturnType<typeof getServiceClient>,
 ): Promise<string | null> {
   if (!PIXELLAB_API_KEY) return null;
 
@@ -105,23 +107,9 @@ async function generateSprite(
 
     if (!pixelRes.ok) return null;
 
-    const imageData = await pixelRes.arrayBuffer();
-    const storagePath = `${characterId}.png`;
-
-    const { error: uploadError } = await serviceClient.storage
-      .from("character-sprites")
-      .upload(storagePath, new Uint8Array(imageData), {
-        contentType: "image/png",
-        upsert: true,
-      });
-
-    if (uploadError) return null;
-
-    const { data: urlData } = serviceClient.storage
-      .from("character-sprites")
-      .getPublicUrl(storagePath);
-
-    return urlData.publicUrl;
+    const imageData = new Uint8Array(await pixelRes.arrayBuffer());
+    const r2Key = characterPortraitKey(characterId);
+    return await uploadToPublicBucket(r2Key, imageData, "image/png");
   } catch {
     return null;
   }
@@ -148,7 +136,7 @@ async function generateCharacter(
   const guidance = rarityGuidance[rarity] ?? "";
   const range = traitRanges[rarity] ?? { min: 25, max: 75 };
 
-  const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.`;
+  const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.`;
   const temperature = baseTemp + quality.tempBoost;
 
   let lastError: Error | null = null;
@@ -194,6 +182,7 @@ async function generateCharacter(
         description: parsed.description ?? "",
         backstory: parsed.backstory ?? "",
         system_prompt: parsed.system_prompt ?? "",
+        tagline: parsed.tagline ?? "",
         personality,
         rarity,
       };
@@ -248,6 +237,8 @@ Deno.serve(async (req: Request) => {
       voiceName = pick.name;
     }
 
+    const tagline = (character.tagline as string) || "";
+
     // Insert character via service role
     const { data: inserted, error: insertError } = await serviceClient
       .from("characters")
@@ -257,6 +248,7 @@ Deno.serve(async (req: Request) => {
         description: character.description as string,
         backstory: character.backstory as string,
         system_prompt: character.system_prompt as string,
+        tagline,
         personality: character.personality,
         rarity,
         voice_id: voiceId,
@@ -272,15 +264,49 @@ Deno.serve(async (req: Request) => {
       inserted.id,
       (character.description as string) ?? "",
       rarity,
-      serviceClient,
     );
 
+    const updateFields: Record<string, unknown> = {};
     if (avatarUrl) {
+      updateFields.avatar_url = avatarUrl;
+      inserted.avatar_url = avatarUrl;
+    }
+
+    // Generate tagline voice line via Fish Audio TTS
+    if (tagline && voiceId && FISH_AUDIO_API_KEY) {
+      try {
+        const ttsRes = await fetch("https://api.fish.audio/v1/tts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${FISH_AUDIO_API_KEY}`,
+          },
+          body: JSON.stringify({
+            reference_id: voiceId,
+            text: tagline,
+            format: "mp3",
+          }),
+        });
+        if (ttsRes.ok) {
+          const audioData = new Uint8Array(await ttsRes.arrayBuffer());
+          const taglineUrl = await uploadToPublicBucket(
+            characterTaglineKey(inserted.id),
+            audioData,
+            "audio/mpeg",
+          );
+          updateFields.tagline_url = taglineUrl;
+          inserted.tagline_url = taglineUrl;
+        }
+      } catch {
+        // TTS failure is non-fatal
+      }
+    }
+
+    if (Object.keys(updateFields).length > 0) {
       await serviceClient
         .from("characters")
-        .update({ avatar_url: avatarUrl })
+        .update(updateFields)
         .eq("id", inserted.id);
-      inserted.avatar_url = avatarUrl;
     }
 
     return jsonResponse(inserted);

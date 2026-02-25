@@ -5,6 +5,8 @@ import {
   errorResponse,
   getRequestUser,
   getServiceClient,
+  uploadToPublicBucket,
+  characterPortraitKey,
 } from "../_shared/mod.ts";
 
 const PIXELLAB_API_KEY = Deno.env.get("PIXELLAB_API_KEY") ?? "";
@@ -64,30 +66,15 @@ Deno.serve(async (req: Request) => {
 
     const serviceClient = getServiceClient();
 
-    // Upload to Supabase Storage
-    const storagePath = `${character_id}.png`;
-    const { error: uploadError } = await serviceClient.storage
-      .from("character-sprites")
-      .upload(storagePath, imageBytes, {
-        contentType: "image/png",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return errorResponse(`Storage upload failed: ${uploadError.message}`);
-    }
-
-    // Get public URL
-    const { data: urlData } = serviceClient.storage
-      .from("character-sprites")
-      .getPublicUrl(storagePath);
-
-    const avatarUrl = urlData.publicUrl;
+    // Upload to R2
+    const r2Key = characterPortraitKey(character_id);
+    const avatarUrl = await uploadToPublicBucket(r2Key, imageBytes, "image/png");
 
     // Build step 2 metadata
     const step2Metadata = {
       request: pixelLabRequest,
       response: { status: pixelRes.status, size: imageData.byteLength },
+      storage: { provider: "r2", key: r2Key },
       timestamp: new Date().toISOString(),
     };
 

@@ -29,6 +29,9 @@ export {
   updateCharacter,
   getAllCharacters,
   deleteCharacter,
+  purgeCharacterMedia,
+  purgeAllDeletedCharacters,
+  getDeletedCharacters,
   toggleCharacterActive,
   setDefaultCharacter,
 } from "./gacha.js";

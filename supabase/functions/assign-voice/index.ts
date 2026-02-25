@@ -5,6 +5,8 @@ import {
   errorResponse,
   getRequestUser,
   getServiceClient,
+  uploadToPublicBucket,
+  characterTaglineKey,
 } from "../_shared/mod.ts";
 
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY") ?? "";
@@ -69,30 +71,65 @@ Deno.serve(async (req: Request) => {
 
     const serviceClient = getServiceClient();
 
-    // Build step 3 metadata
-    const step3Metadata = {
-      request: { character_id, voice_id: requestedVoiceId ?? "random" },
-      response: { selected_voice: selectedVoice, available_count: voices.length },
-      timestamp: new Date().toISOString(),
-    };
-
-    // Fetch existing metadata to merge
+    // Fetch character to get tagline and existing metadata
     const { data: existing } = await serviceClient
       .from("characters")
-      .select("generation_metadata")
+      .select("tagline, generation_metadata")
       .eq("id", character_id)
       .single();
 
     const existingMetadata = (existing?.generation_metadata as Record<string, unknown>) ?? {};
+    const tagline = (existing?.tagline as string) ?? "";
+
+    // Generate tagline voice line if tagline exists
+    let taglineUrl: string | null = null;
+    let ttsInfo: Record<string, unknown> = {};
+    if (tagline) {
+      try {
+        const ttsRes = await fetch("https://api.fish.audio/v1/tts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${FISH_AUDIO_API_KEY}`,
+          },
+          body: JSON.stringify({
+            reference_id: selectedVoice.id,
+            text: tagline,
+            format: "mp3",
+          }),
+        });
+
+        if (ttsRes.ok) {
+          const audioData = new Uint8Array(await ttsRes.arrayBuffer());
+          const r2Key = characterTaglineKey(character_id);
+          taglineUrl = await uploadToPublicBucket(r2Key, audioData, "audio/mpeg");
+          ttsInfo = { tagline_tts: { size: audioData.byteLength, key: r2Key } };
+        }
+      } catch {
+        // TTS failure is non-fatal — voice is still assigned
+      }
+    }
+
+    // Build step 3 metadata
+    const step3Metadata = {
+      request: { character_id, voice_id: requestedVoiceId ?? "random" },
+      response: { selected_voice: selectedVoice, available_count: voices.length, ...ttsInfo },
+      timestamp: new Date().toISOString(),
+    };
 
     // Update character
+    const updateFields: Record<string, unknown> = {
+      voice_id: selectedVoice.id,
+      voice_name: selectedVoice.name,
+      generation_metadata: { ...existingMetadata, step3_voice: step3Metadata },
+    };
+    if (taglineUrl) {
+      updateFields.tagline_url = taglineUrl;
+    }
+
     const { error: updateError } = await serviceClient
       .from("characters")
-      .update({
-        voice_id: selectedVoice.id,
-        voice_name: selectedVoice.name,
-        generation_metadata: { ...existingMetadata, step3_voice: step3Metadata },
-      })
+      .update(updateFields)
       .eq("id", character_id);
 
     if (updateError) {
@@ -102,6 +139,7 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({
       voice_id: selectedVoice.id,
       voice_name: selectedVoice.name,
+      tagline_url: taglineUrl,
       voices,
     });
   } catch (err) {

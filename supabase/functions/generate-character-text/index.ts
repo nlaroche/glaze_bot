@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
     const guidance = rarityGuidance[rarity] ?? "";
     const range = traitRanges[rarity] ?? { min: 25, max: 75 };
 
-    const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.`;
+    const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.`;
     const temperature = baseTemp + quality.tempBoost;
 
     // Build the Dashscope request
@@ -146,6 +146,7 @@ Deno.serve(async (req: Request) => {
           description: parsed.description ?? "",
           backstory: parsed.backstory ?? "",
           system_prompt: parsed.system_prompt ?? "",
+          tagline: parsed.tagline ?? "",
           personality,
           rarity,
         };
@@ -175,6 +176,7 @@ Deno.serve(async (req: Request) => {
         description: character.description as string,
         backstory: character.backstory as string,
         system_prompt: character.system_prompt as string,
+        tagline: (character.tagline as string) || "",
         personality: character.personality,
         rarity,
         generation_metadata: { step1_text: step1Metadata },

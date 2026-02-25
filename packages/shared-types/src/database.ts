@@ -57,8 +57,12 @@ export type Database = {
           voice_id: string | null;
           voice_name: string | null;
           avatar_seed: string;
+          tagline: string;
+          tagline_url: string | null;
           is_active: boolean;
           is_default: boolean;
+          deleted_at: string | null;
+          generation_metadata: Json | null;
           created_at: string;
         };
         Insert: {
@@ -68,6 +72,8 @@ export type Database = {
           description: string;
           backstory?: string;
           system_prompt: string;
+          tagline?: string;
+          tagline_url?: string | null;
           personality?: Json;
           rarity?: Database["public"]["Enums"]["character_rarity"];
           voice_id?: string | null;
@@ -75,6 +81,8 @@ export type Database = {
           avatar_seed?: string;
           is_active?: boolean;
           is_default?: boolean;
+          deleted_at?: string | null;
+          generation_metadata?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -84,6 +92,8 @@ export type Database = {
           description?: string;
           backstory?: string;
           system_prompt?: string;
+          tagline?: string;
+          tagline_url?: string | null;
           personality?: Json;
           rarity?: Database["public"]["Enums"]["character_rarity"];
           voice_id?: string | null;
@@ -91,6 +101,8 @@ export type Database = {
           avatar_seed?: string;
           is_active?: boolean;
           is_default?: boolean;
+          deleted_at?: string | null;
+          generation_metadata?: Json | null;
           created_at?: string;
         };
         Relationships: [
@@ -196,6 +208,10 @@ export type Database = {
           p_user_id: string;
         };
         Returns: number;
+      };
+      get_deleted_characters: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["characters"]["Row"][];
       };
     };
     Enums: {

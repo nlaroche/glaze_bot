@@ -42,9 +42,11 @@ jobs:
 
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "project_id=tspalglvgypdktuhgqtf" >> "$GITHUB_OUTPUT"
+            echo "env_name=production" >> "$GITHUB_OUTPUT"
             SECRETS_FILE="secrets/secrets.production.yaml"
           else
             echo "project_id=zwpwjceczndedcoegerx" >> "$GITHUB_OUTPUT"
+            echo "env_name=staging" >> "$GITHUB_OUTPUT"
             SECRETS_FILE="secrets/secrets.staging.yaml"
           fi
 
@@ -54,11 +56,28 @@ jobs:
           # Extract infrastructure values (grep -m1 || true to handle missing keys)
           DB_PASSWORD=$(grep -m1 'SUPABASE_DB_PASSWORD' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
           ACCESS_TOKEN=$(grep -m1 'SUPABASE_ACCESS_TOKEN' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
+          CF_API_TOKEN=$(grep -m1 'CF_API_TOKEN' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
+          CF_ACCOUNT_ID=$(grep -m1 'CF_ACCOUNT_ID' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
 
           echo "::add-mask::$DB_PASSWORD"
           echo "::add-mask::$ACCESS_TOKEN"
+          echo "::add-mask::$CF_API_TOKEN"
+          echo "::add-mask::$CF_ACCOUNT_ID"
           echo "db_password=$DB_PASSWORD" >> "$GITHUB_OUTPUT"
           echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "cf_api_token=$CF_API_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "cf_account_id=$CF_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure R2 buckets exist
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ steps.env.outputs.cf_api_token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.env.outputs.cf_account_id }}
+        run: |
+          ENV_NAME="${{ steps.env.outputs.env_name }}"
+          for BUCKET in "glazebot-${ENV_NAME}-public" "glazebot-${ENV_NAME}-private"; do
+            echo "Ensuring R2 bucket exists: $BUCKET"
+            npx wrangler r2 bucket create "$BUCKET" 2>/dev/null || true
+          done
 
       - name: Link Supabase project
         run: supabase link --project-ref ${{ steps.env.outputs.project_id }}

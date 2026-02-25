@@ -9,6 +9,9 @@
     updateCharacter,
     getAllCharacters,
     deleteCharacter,
+    purgeCharacterMedia,
+    purgeAllDeletedCharacters,
+    getDeletedCharacters,
     toggleCharacterActive,
     setDefaultCharacter,
   } from '@glazebot/supabase-client';
@@ -46,6 +49,10 @@
   let sortKey = $state('created_at');
   let sortDirection: 'asc' | 'desc' = $state('desc');
   let searchQuery = $state('');
+  let showDeleted = $state(false);
+  let deletedCharacters: GachaCharacter[] = $state([]);
+  let loadingDeleted = $state(false);
+  let purgingAll = $state(false);
   let activeTags: string[] = $state([]);
 
   // ─── State: Panels ────────────────────────────────────────────────
@@ -80,6 +87,7 @@
   let editSystemPrompt = $state('');
   let editPersonality = $state({ energy: 50, positivity: 50, formality: 50, talkativeness: 50, attitude: 50, humor: 50 });
 
+  let editTagline = $state('');
   let imagePrompt = $state('');
   let voiceTestText = $state('Hey there! Ready to watch some games?');
   let voicePlaying = $state(false);
@@ -236,6 +244,55 @@
     }
   }
 
+  async function loadDeletedCharacters() {
+    loadingDeleted = true;
+    try {
+      deletedCharacters = await getDeletedCharacters();
+    } catch {
+      deletedCharacters = [];
+    } finally {
+      loadingDeleted = false;
+    }
+  }
+
+  async function handlePurge(character: GachaCharacter, e: Event) {
+    e.stopPropagation();
+    confirmTitle = 'Purge Character';
+    confirmMessage = `Permanently purge "${character.name}" and all media? This cannot be undone.`;
+    confirmLabel = 'Purge';
+    confirmVariant = 'destructive';
+    confirmAction = async () => {
+      try {
+        await purgeCharacterMedia(character.id);
+        deletedCharacters = deletedCharacters.filter(c => c.id !== character.id);
+      } catch {
+        // silently fail
+      }
+      confirmOpen = false;
+    };
+    confirmOpen = true;
+  }
+
+  async function handlePurgeAll() {
+    confirmTitle = 'Purge All Deleted';
+    confirmMessage = `Permanently purge all ${deletedCharacters.length} deleted characters and their media? This cannot be undone.`;
+    confirmLabel = 'Purge All';
+    confirmVariant = 'destructive';
+    confirmAction = async () => {
+      purgingAll = true;
+      try {
+        await purgeAllDeletedCharacters();
+        deletedCharacters = [];
+      } catch {
+        // silently fail
+      } finally {
+        purgingAll = false;
+      }
+      confirmOpen = false;
+    };
+    confirmOpen = true;
+  }
+
   // ─── Config Sync ──────────────────────────────────────────────────
   function syncFromConfig() {
     const dr = config.dropRates as Record<string, number> | undefined;
@@ -339,8 +396,8 @@
 
   function handleDeleteClick(character: GachaCharacter, e: Event) {
     e.stopPropagation();
-    confirmTitle = 'Delete Character';
-    confirmMessage = `Permanently delete "${character.name}"? This cannot be undone.`;
+    confirmTitle = 'Soft-Delete Character';
+    confirmMessage = `Soft-delete "${character.name}"? It will be hidden from users but can be purged later from the deleted list.`;
     confirmLabel = 'Delete';
     confirmVariant = 'destructive';
     confirmAction = async () => {
@@ -351,7 +408,7 @@
           workingCharacter = null;
           detailPanelOpen = false;
         }
-      } catch (err) {
+      } catch {
         // silently fail
       }
       confirmOpen = false;
@@ -365,6 +422,7 @@
     editName = character.name;
     editDescription = character.description ?? '';
     editBackstory = character.backstory ?? '';
+    editTagline = character.tagline ?? '';
     editSystemPrompt = character.system_prompt ?? '';
     editPersonality = {
       energy: (character.personality as Record<string, number>)?.energy ?? 50,
@@ -424,6 +482,7 @@
         name: editName,
         description: editDescription,
         backstory: editBackstory,
+        tagline: editTagline,
         system_prompt: editSystemPrompt,
         personality: { ...editPersonality },
       } as Partial<GachaCharacter>);
@@ -564,6 +623,10 @@
           active={activeTags}
           onchange={(tags) => activeTags = tags}
         />
+        <label class="toggle-deleted" data-testid="toggle-deleted">
+          <input type="checkbox" bind:checked={showDeleted} onchange={() => { if (showDeleted) loadDeletedCharacters(); }} />
+          Show Deleted
+        </label>
       </div>
 
       <!-- ═══ MAIN CONTENT ═══ -->
@@ -630,6 +693,46 @@
             onpagechange={(p) => page = p}
             onpagesizechange={(s) => { pageSize = s; page = 1; }}
           />
+
+          {#if showDeleted}
+            <div class="deleted-section" data-testid="deleted-section">
+              <div class="deleted-header">
+                <h3>Deleted Characters ({deletedCharacters.length})</h3>
+                {#if deletedCharacters.length > 0}
+                  <Button
+                    variant="destructive"
+                    loading={purgingAll}
+                    onclick={handlePurgeAll}
+                    testid="purge-all-btn"
+                  >
+                    Purge All
+                  </Button>
+                {/if}
+              </div>
+              {#if loadingDeleted}
+                <p class="muted">Loading deleted characters...</p>
+              {:else if deletedCharacters.length === 0}
+                <p class="muted">No deleted characters.</p>
+              {:else}
+                <div class="deleted-list">
+                  {#each deletedCharacters as dc (dc.id)}
+                    <div class="deleted-row">
+                      <span class="deleted-name">{dc.name}</span>
+                      <Badge variant={dc.rarity} text={dc.rarity} />
+                      <span class="cell-muted">{dc.deleted_at ? formatDate(dc.deleted_at) : ''}</span>
+                      <Button
+                        variant="destructive"
+                        onclick={(e) => handlePurge(dc, e)}
+                        testid="purge-{dc.id}"
+                      >
+                        Purge
+                      </Button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         <!-- ═══ DETAIL PANEL ═══ -->
@@ -655,6 +758,7 @@
                     <TextInput label="Name" bind:value={editName} testid="edit-name" />
                     <TextArea label="Description" bind:value={editDescription} rows={3} testid="edit-description" />
                     <TextArea label="Backstory" bind:value={editBackstory} rows={3} testid="edit-backstory" />
+                    <TextInput label="Tagline" bind:value={editTagline} testid="edit-tagline" />
                     <TextArea label="System Prompt" bind:value={editSystemPrompt} rows={5} monospace testid="edit-system-prompt" />
 
                     <div class="traits-section">
@@ -1523,6 +1627,66 @@
     padding: 20px;
     display: flex;
     justify-content: center;
+  }
+
+  /* ─── Show Deleted Toggle ─── */
+  .toggle-deleted {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .toggle-deleted input {
+    accent-color: var(--color-teal);
+  }
+
+  /* ─── Deleted Characters Section ─── */
+  .deleted-section {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(10, 22, 42, 0.5);
+    border: 1px solid rgba(255, 80, 80, 0.15);
+    border-radius: 10px;
+  }
+
+  .deleted-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .deleted-header h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+
+  .deleted-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .deleted-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+  }
+
+  .deleted-name {
+    flex: 1;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
   }
 
   /* ─── Responsive ─── */
