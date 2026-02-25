@@ -121,12 +121,12 @@ jobs:
             supabase secrets set "${set_args[@]}" --project-ref "$PROJECT_REF"
           fi
 
-          # Remove stale secrets (skip Supabase built-ins)
-          existing=$(supabase secrets list --project-ref "$PROJECT_REF" 2>/dev/null | tail -n +3 | awk '{print $1}')
+          # Remove stale secrets (skip Supabase built-ins and header lines)
+          existing=$(supabase secrets list --project-ref "$PROJECT_REF" 2>/dev/null | awk '{print $1}' | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' || true)
           unset_args=()
           for existing_key in $existing; do
             [[ -z "$existing_key" ]] && continue
-            [[ "$existing_key" == SUPABASE_* ]] && continue
+            [[ "$existing_key" == SUPABASE_* || "$existing_key" == "NAME" ]] && continue
             if [[ -z "${sops_keys[$existing_key]+x}" ]]; then
               echo "Removing stale secret: $existing_key"
               unset_args+=("$existing_key")
