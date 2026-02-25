@@ -5,7 +5,9 @@ on:
     branches: [main, develop]
     paths:
       - 'supabase/**'
+      - 'secrets'
       - 'secrets/**'
+      - '.github/workflows/deploy-supabase.yml'
 
 jobs:
   deploy:
