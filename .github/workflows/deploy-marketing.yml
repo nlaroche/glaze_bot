@@ -65,10 +65,17 @@ jobs:
       - name: Build
         run: pnpm --filter @glazebot/marketing build
 
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ steps.secrets.outputs.cf_api_token }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.secrets.outputs.cf_account_id }}
+        run: |
+          npx wrangler pages project create glazebot-marketing --production-branch=main 2>/dev/null || true
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ steps.secrets.outputs.cf_api_token }}
           accountId: ${{ steps.secrets.outputs.cf_account_id }}
           workingDirectory: apps/marketing
-          command: pages deploy dist --project-name=glazebot-marketing --branch=${{ github.ref_name }}
+          command: pages deploy dist --project-name=glazebot-marketing --branch=${{ github.ref_name }} --commit-dirty=true
