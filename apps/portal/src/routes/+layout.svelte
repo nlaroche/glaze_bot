@@ -41,7 +41,7 @@
     <p>Loading...</p>
   </div>
 {:else if !auth.isAuthenticated}
-  <div class="app-shell">
+  <div class="auth-shell">
     {@render children()}
   </div>
 {:else}
@@ -96,6 +96,14 @@
     height: 100vh;
     color: var(--color-text-secondary);
     font-family: 'Satoshi', system-ui, sans-serif;
+  }
+
+  .auth-shell {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
   }
 
   .app-shell {
