@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 
-  // Generate deterministic stars — tiny pinpoints
+  let { sceneIndex = 0 }: { sceneIndex?: number } = $props();
+
+  // Generate deterministic stars — wider range for parallax headroom
   function makeStars(count: number, seed: number): { x: number; y: number; r: number; opacity: number; delay: number; duration: number }[] {
     let s = seed;
     function rand() {
@@ -11,7 +13,7 @@
     const stars = [];
     for (let i = 0; i < count; i++) {
       stars.push({
-        x: rand() * 100,
+        x: -15 + rand() * 130,  // extended range for parallax
         y: rand() * 60,
         r: 0.08 + rand() * 0.18,
         opacity: 0.25 + rand() * 0.55,
@@ -25,11 +27,17 @@
   const stars = makeStars(160, 42);
   const faintStars = makeStars(100, 99);
 
+  // Parallax offsets per layer (SVG user units per scene step)
+  const FAINT_RATE = -1.2;
+  const STAR_RATE = -2.2;
+  const WAVE_RATE = -4.5;
+  const SPARKLE_RATE = -3.5;
+
   let mounted = $state(false);
   onMount(() => { mounted = true; });
 </script>
 
-<div class="night-bg" class:mounted>
+<div class="night-bg" class:mounted style="--scene-offset: {sceneIndex}">
   <!-- Stretched sky/waves background -->
   <svg
     class="sky-svg"
@@ -48,44 +56,54 @@
 
     <rect width="100" height="100" fill="url(#sky-grad)" />
 
-    {#each faintStars as star}
-      <rect
-        x={star.x} y={star.y}
-        width={star.r * 0.6} height={star.r * 0.6}
-        fill="rgba(180, 200, 230, {star.opacity * 0.35})"
-        class="twinkle-faint"
-        style="--delay: {star.delay}s; --duration: {star.duration}s"
-      />
-    {/each}
+    <!-- Faint stars layer (furthest — moves least) -->
+    <g class="parallax-layer" style="transform: translateX({sceneIndex * FAINT_RATE}px)">
+      {#each faintStars as star}
+        <rect
+          x={star.x} y={star.y}
+          width={star.r * 0.6} height={star.r * 0.6}
+          fill="rgba(180, 200, 230, {star.opacity * 0.35})"
+          class="twinkle-faint"
+          style="--delay: {star.delay}s; --duration: {star.duration}s"
+        />
+      {/each}
+    </g>
 
-    {#each stars as star}
-      <rect
-        x={star.x} y={star.y}
-        width={star.r} height={star.r}
-        fill="rgba(210, 225, 250, {star.opacity})"
-        class="twinkle"
-        style="--delay: {star.delay}s; --duration: {star.duration}s"
-      />
-    {/each}
+    <!-- Bright stars layer (mid-distance) -->
+    <g class="parallax-layer" style="transform: translateX({sceneIndex * STAR_RATE}px)">
+      {#each stars as star}
+        <rect
+          x={star.x} y={star.y}
+          width={star.r} height={star.r}
+          fill="rgba(210, 225, 250, {star.opacity})"
+          class="twinkle"
+          style="--delay: {star.delay}s; --duration: {star.duration}s"
+        />
+      {/each}
+    </g>
 
-    <!-- Wave layers -->
-    <path class="wave wave-4" d="M0,72 Q8,69 16,72 T32,72 T48,72 T64,72 T80,72 T96,72 L100,72 L100,100 L0,100 Z" fill="rgba(6, 12, 24, 0.6)" />
-    <path class="wave wave-3" d="M0,76 Q10,73 20,76 T40,76 T60,76 T80,76 T100,76 L100,100 L0,100 Z" fill="rgba(7, 14, 28, 0.7)" />
-    <path class="wave wave-2" d="M0,80 Q12,77 24,80 T48,80 T72,80 T96,80 L100,80 L100,100 L0,100 Z" fill="rgba(8, 15, 30, 0.8)" />
-    <path class="wave wave-1" d="M0,85 Q15,82 30,85 T60,85 T90,85 L100,85 L100,100 L0,100 Z" fill="rgba(7, 12, 24, 0.9)" />
-    <path class="wave wave-0" d="M0,90 Q12,88 25,90 T50,90 T75,90 T100,90 L100,100 L0,100 Z" fill="rgba(6, 10, 20, 0.95)" />
+    <!-- Wave layers (closest — moves most) -->
+    <g class="parallax-layer" style="transform: translateX({sceneIndex * WAVE_RATE}px)">
+      <path class="wave wave-4" d="M-20,72 Q-12,69 -4,72 T12,72 T28,72 T44,72 T60,72 T76,72 T92,72 T108,72 T120,72 L120,100 L-20,100 Z" fill="rgba(6, 12, 24, 0.6)" />
+      <path class="wave wave-3" d="M-20,76 Q-10,73 0,76 T20,76 T40,76 T60,76 T80,76 T100,76 T120,76 L120,100 L-20,100 Z" fill="rgba(7, 14, 28, 0.7)" />
+      <path class="wave wave-2" d="M-20,80 Q-8,77 4,80 T28,80 T52,80 T76,80 T100,80 T120,80 L120,100 L-20,100 Z" fill="rgba(8, 15, 30, 0.8)" />
+      <path class="wave wave-1" d="M-20,85 Q-5,82 10,85 T40,85 T70,85 T100,85 T120,85 L120,100 L-20,100 Z" fill="rgba(7, 12, 24, 0.9)" />
+      <path class="wave wave-0" d="M-20,90 Q-8,88 5,90 T30,90 T55,90 T80,90 T105,90 T120,90 L120,100 L-20,100 Z" fill="rgba(6, 10, 20, 0.95)" />
+    </g>
 
     <!-- Water sparkles -->
-    <rect x="30" y="75" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.15)" class="sparkle" style="--sp-delay: 0s" />
-    <rect x="55" y="78" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.12)" class="sparkle" style="--sp-delay: 2s" />
-    <rect x="72" y="73" width="0.18" height="0.18" fill="rgba(200, 210, 230, 0.18)" class="sparkle" style="--sp-delay: 4s" />
-    <rect x="15" y="80" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.1)" class="sparkle" style="--sp-delay: 1.5s" />
-    <rect x="88" y="76" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.14)" class="sparkle" style="--sp-delay: 3.5s" />
-    <rect x="45" y="82" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.08)" class="sparkle" style="--sp-delay: 5s" />
+    <g class="parallax-layer" style="transform: translateX({sceneIndex * SPARKLE_RATE}px)">
+      <rect x="30" y="75" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.15)" class="sparkle" style="--sp-delay: 0s" />
+      <rect x="55" y="78" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.12)" class="sparkle" style="--sp-delay: 2s" />
+      <rect x="72" y="73" width="0.18" height="0.18" fill="rgba(200, 210, 230, 0.18)" class="sparkle" style="--sp-delay: 4s" />
+      <rect x="15" y="80" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.1)" class="sparkle" style="--sp-delay: 1.5s" />
+      <rect x="88" y="76" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.14)" class="sparkle" style="--sp-delay: 3.5s" />
+      <rect x="45" y="82" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.08)" class="sparkle" style="--sp-delay: 5s" />
+    </g>
   </svg>
 
   <!-- Satellite — orbits slowly across upper sky (CSS-positioned, not stretched) -->
-  <div class="satellite-track">
+  <div class="satellite-track parallax-html" style="transform: translateX(calc(var(--scene-offset) * -2.2vw))">
     <svg class="satellite" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- Body -->
       <rect x="16" y="15" width="8" height="10" rx="1" fill="rgba(140, 160, 190, 0.12)" />
@@ -108,7 +126,7 @@
   </div>
 
   <!-- Rover 1 — small, trundles right to left along the wave horizon -->
-  <div class="rover-track rover-track-1">
+  <div class="rover-track rover-track-1 parallax-html" style="transform: translateX(calc(var(--scene-offset) * -4.5vw))">
     <svg class="rover" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- Chassis -->
       <rect x="6" y="8" width="20" height="6" rx="2" fill="rgba(120, 140, 165, 0.10)" />
@@ -132,7 +150,7 @@
   </div>
 
   <!-- Rover 2 — even smaller, goes left to right, slightly lower, offset timing -->
-  <div class="rover-track rover-track-2">
+  <div class="rover-track rover-track-2 parallax-html" style="transform: translateX(calc(var(--scene-offset) * -3.5vw))">
     <svg class="rover rover-sm" viewBox="0 0 24 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- Simple mini rover -->
       <rect x="4" y="5" width="16" height="5" rx="1.5" fill="rgba(120, 140, 165, 0.07)" />
@@ -166,6 +184,17 @@
     width: 100%;
     height: 100%;
     display: block;
+    overflow: visible;
+  }
+
+  /* Parallax transition for SVG layers */
+  .parallax-layer {
+    transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  /* Parallax transition for HTML-positioned elements */
+  .parallax-html {
+    transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 
   /* Star twinkle — very subtle */

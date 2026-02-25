@@ -188,3 +188,125 @@ export async function generateTestCharacter(
 ): Promise<GachaCharacter> {
   return callEdgeFunction<GachaCharacter>("generate-character", { rarity });
 }
+
+// ─── Admin Pipeline Operations ─────────────────────────────────────
+
+/** Step 1: Generate character text only (admin pipeline) */
+export async function generateCharacterText(
+  rarity: string,
+): Promise<GachaCharacter> {
+  return callEdgeFunction<GachaCharacter>("generate-character-text", { rarity });
+}
+
+/** Step 2: Generate character sprite image (admin pipeline) */
+export async function generateCharacterImage(
+  characterId: string,
+  prompt: string,
+): Promise<{ avatar_url: string }> {
+  return callEdgeFunction<{ avatar_url: string }>("generate-character-image", {
+    character_id: characterId,
+    prompt,
+  });
+}
+
+/** Step 3: Assign voice to character (admin pipeline) */
+export async function assignCharacterVoice(
+  characterId: string,
+  voiceId?: string,
+): Promise<{ voice_id: string; voice_name: string; voices: { id: string; name: string }[] }> {
+  return callEdgeFunction<{
+    voice_id: string;
+    voice_name: string;
+    voices: { id: string; name: string }[];
+  }>("assign-voice", {
+    character_id: characterId,
+    voice_id: voiceId,
+  });
+}
+
+/** Preview a voice via Fish Audio TTS (returns audio data) */
+export async function previewVoice(
+  voiceId: string,
+  text: string,
+): Promise<ArrayBuffer> {
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("preview-voice", {
+    body: { voice_id: voiceId, text },
+  });
+
+  if (error) {
+    throw new Error(error.message ?? "Voice preview failed");
+  }
+
+  // The response is audio data as an ArrayBuffer
+  if (data instanceof ArrayBuffer) return data;
+  if (data instanceof Blob) return await data.arrayBuffer();
+  throw new Error("Unexpected response format from preview-voice");
+}
+
+/** Update character fields (admin — direct DB update) */
+export async function updateCharacter(
+  id: string,
+  fields: Partial<GachaCharacter>,
+): Promise<GachaCharacter> {
+  const { data, error } = await db()
+    .from("characters")
+    .update(fields as Record<string, unknown>)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as unknown as GachaCharacter;
+}
+
+/** Get all characters for admin (no user filter — uses service role via RLS bypass or admin) */
+export async function getAllCharacters(): Promise<GachaCharacter[]> {
+  const { data, error } = await db()
+    .from("characters")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as unknown as GachaCharacter[];
+}
+
+/** Hard delete a character by ID */
+export async function deleteCharacter(id: string): Promise<void> {
+  const { error } = await db().from("characters").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Toggle a character's is_active status */
+export async function toggleCharacterActive(
+  id: string,
+  isActive: boolean,
+): Promise<GachaCharacter> {
+  const { data, error } = await db()
+    .from("characters")
+    .update({ is_active: isActive })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as unknown as GachaCharacter;
+}
+
+/** Set a character as the default (clears previous default first) */
+export async function setDefaultCharacter(
+  id: string,
+): Promise<GachaCharacter> {
+  // Clear any existing default
+  await db()
+    .from("characters")
+    .update({ is_default: false })
+    .eq("is_default", true);
+
+  // Set the new default
+  const { data, error } = await db()
+    .from("characters")
+    .update({ is_default: true })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as unknown as GachaCharacter;
+}

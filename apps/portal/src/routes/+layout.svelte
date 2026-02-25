@@ -23,7 +23,7 @@
     { href: '/', label: 'Home', icon: '🏠' },
     { href: '/pack', label: 'Packs', icon: '📦' },
     { href: '/collection', label: 'Collection', icon: '🃏' },
-    { href: '/settings', label: 'Settings', icon: '⚙' },
+    { href: '/settings', label: 'Admin', icon: '⚙' },
   ];
 </script>
 

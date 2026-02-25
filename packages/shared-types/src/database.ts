@@ -57,6 +57,8 @@ export type Database = {
           voice_id: string | null;
           voice_name: string | null;
           avatar_seed: string;
+          is_active: boolean;
+          is_default: boolean;
           created_at: string;
         };
         Insert: {
@@ -71,6 +73,8 @@ export type Database = {
           voice_id?: string | null;
           voice_name?: string | null;
           avatar_seed?: string;
+          is_active?: boolean;
+          is_default?: boolean;
           created_at?: string;
         };
         Update: {
@@ -85,6 +89,8 @@ export type Database = {
           voice_id?: string | null;
           voice_name?: string | null;
           avatar_seed?: string;
+          is_active?: boolean;
+          is_default?: boolean;
           created_at?: string;
         };
         Relationships: [

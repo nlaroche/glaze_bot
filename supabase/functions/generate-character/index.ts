@@ -12,6 +12,7 @@ const DASHSCOPE_BASE_URL =
   Deno.env.get("DASHSCOPE_BASE_URL") ??
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY") ?? "";
+const PIXELLAB_API_KEY = Deno.env.get("PIXELLAB_API_KEY") ?? "";
 
 interface GenerateRequest {
   rarity: string;
@@ -62,6 +63,68 @@ function clampTraits(
     clamped[t] = Math.max(min, Math.min(max, Math.round(val)));
   }
   return clamped;
+}
+
+const RACES = ["robot", "human", "elf", "goblin", "catfolk", "dragon-kin", "skeleton", "slime"];
+const ACCESSORIES = [
+  "wearing headphones", "with a gaming controller", "holding a microphone",
+  "with glowing eyes", "wearing a crown", "with a tiny pet",
+  "wearing sunglasses", "with a cape", "holding a trophy", "with floating sparkles",
+];
+
+function buildSpritePrompt(description: string, rarity: string): string {
+  const race = RACES[Math.floor(Math.random() * RACES.length)];
+  const accessory = ACCESSORIES[Math.floor(Math.random() * ACCESSORIES.length)];
+  const rarityStyle: Record<string, string> = {
+    common: "simple pixel art style, clean colors",
+    rare: "detailed pixel art, slightly glowing outline",
+    epic: "elaborate pixel art, magical aura, vibrant colors",
+    legendary: "premium pixel art, golden accents, radiant glow, legendary aura",
+  };
+  return `A ${race} character, ${description}, ${accessory}, sitting at a gaming desk, ${rarityStyle[rarity] ?? "pixel art style"}, front-facing portrait, 128x128 sprite`;
+}
+
+async function generateSprite(
+  characterId: string,
+  description: string,
+  rarity: string,
+  serviceClient: ReturnType<typeof getServiceClient>,
+): Promise<string | null> {
+  if (!PIXELLAB_API_KEY) return null;
+
+  try {
+    const prompt = buildSpritePrompt(description, rarity);
+    const pixelRes = await fetch("https://api.pixellab.ai/v1/create-image-pixflux", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${PIXELLAB_API_KEY}`,
+      },
+      body: JSON.stringify({ prompt, width: 128, height: 128, noBackground: true }),
+    });
+
+    if (!pixelRes.ok) return null;
+
+    const imageData = await pixelRes.arrayBuffer();
+    const storagePath = `${characterId}.png`;
+
+    const { error: uploadError } = await serviceClient.storage
+      .from("character-sprites")
+      .upload(storagePath, new Uint8Array(imageData), {
+        contentType: "image/png",
+        upsert: true,
+      });
+
+    if (uploadError) return null;
+
+    const { data: urlData } = serviceClient.storage
+      .from("character-sprites")
+      .getPublicUrl(storagePath);
+
+    return urlData.publicUrl;
+  } catch {
+    return null;
+  }
 }
 
 async function generateCharacter(
@@ -203,6 +266,22 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (insertError) return errorResponse(insertError.message);
+
+    // Generate sprite image via PixelLab (non-blocking — character is valid without it)
+    const avatarUrl = await generateSprite(
+      inserted.id,
+      (character.description as string) ?? "",
+      rarity,
+      serviceClient,
+    );
+
+    if (avatarUrl) {
+      await serviceClient
+        .from("characters")
+        .update({ avatar_url: avatarUrl })
+        .eq("id", inserted.id);
+      inserted.avatar_url = avatarUrl;
+    }
 
     return jsonResponse(inserted);
   } catch (err) {

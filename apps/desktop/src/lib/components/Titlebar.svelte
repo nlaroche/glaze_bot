@@ -17,7 +17,7 @@
 </script>
 
 <header data-tauri-drag-region>
-  <span class="title" data-tauri-drag-region>GLAZEBOT</span>
+  <span class="title" data-tauri-drag-region>GlazeBot <span class="tagline">// AI-Powered Commentary Engine</span></span>
   <div class="controls">
     <button onclick={minimize} aria-label="Minimize">
       <svg width="12" height="12" viewBox="0 0 12 12">
@@ -50,10 +50,19 @@
   }
 
   .title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--color-pink);
-    letter-spacing: 2px;
+    font-family: 'Michroma', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: #c0c8d4;
+    letter-spacing: 1px;
+  }
+
+  .tagline {
+    font-family: 'Michroma', sans-serif;
+    font-size: 9px;
+    font-weight: 400;
+    color: #6B7788;
+    letter-spacing: 1.5px;
   }
 
   .controls {

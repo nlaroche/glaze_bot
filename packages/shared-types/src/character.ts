@@ -32,6 +32,20 @@ export interface PartyConfig {
 /** Character rarity tiers */
 export type CharacterRarity = "common" | "rare" | "epic" | "legendary";
 
+/** A single generation pipeline step's API call data */
+export interface GenerationStep {
+  request: Record<string, unknown>;
+  response: Record<string, unknown>;
+  timestamp: string;
+}
+
+/** Metadata from each step of the admin generation pipeline */
+export interface GenerationMetadata {
+  step1_text?: GenerationStep;
+  step2_image?: GenerationStep;
+  step3_voice?: GenerationStep;
+}
+
 /** A gacha-generated character stored in the database */
 export interface GachaCharacter extends Character {
   id: string;
@@ -41,6 +55,10 @@ export interface GachaCharacter extends Character {
   voice_id?: string;
   voice_name?: string;
   avatar_seed: string;
+  avatar_url?: string;
+  is_active: boolean;
+  is_default: boolean;
+  generation_metadata?: GenerationMetadata | null;
   created_at: string;
 }
 

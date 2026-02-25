@@ -274,23 +274,13 @@
   };
 </script>
 
-<svelte:head>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Michroma&display=swap"
-    rel="stylesheet"
-  />
-</svelte:head>
-
 <div class="home">
   <!-- Left / Center area -->
   <div class="main-area">
-    <header class="title-bar">
-      <h1>GlazeBot <span class="tagline">// AI-Powered Commentary Engine</span></h1>
-    </header>
-
     <!-- Commentary Log -->
+    <div class="chat-section-header">
+      <h2>Chat History</h2>
+    </div>
     <div class="chat-log">
       {#each chatLog as msg (msg.id)}
         <div class="chat-msg">
@@ -507,26 +497,18 @@
     overflow: hidden;
   }
 
-  .title-bar {
-    padding: 16px 20px 12px;
+  .chat-section-header {
+    padding: 14px 20px 8px;
     flex-shrink: 0;
   }
 
-  h1 {
-    font-family: 'Michroma', sans-serif;
-    font-size: 1.6rem;
-    margin: 0;
-    color: #c0c8d4;
-    letter-spacing: 1px;
-    line-height: 1.3;
-  }
-
-  .tagline {
-    font-size: 0.7rem;
-    font-family: 'Michroma', sans-serif;
-    color: #5a6474;
-    letter-spacing: 2px;
+  .chat-section-header h2 {
+    font-size: 0.72rem;
     text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted, #6B7788);
+    margin: 0;
+    font-weight: 600;
   }
 
   /* ── Chat log ── */
@@ -552,8 +534,8 @@
   }
 
   .msg-avatar {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     flex-shrink: 0;
     border-radius: 50%;
     border: 2px solid rgba(255,255,255,0.1);
@@ -573,8 +555,8 @@
   }
 
   .msg-avatar-fallback {
-    font-size: 0.7rem;
-    color: var(--color-text-muted, #5a6474);
+    font-size: 0.85rem;
+    color: var(--color-text-muted, #6B7788);
     font-weight: 600;
   }
 
@@ -590,20 +572,20 @@
   }
 
   .msg-name {
-    font-size: 0.82rem;
+    font-size: 0.92rem;
     font-weight: 600;
   }
 
   .msg-time {
-    font-size: 0.65rem;
-    color: var(--color-text-muted, #5a6474);
+    font-size: 0.72rem;
+    color: var(--color-text-muted, #6b7688);
   }
 
   .msg-text {
-    margin: 2px 0 0;
-    font-size: 0.85rem;
-    color: var(--color-text-secondary, #8a94a6);
-    line-height: 1.4;
+    margin: 3px 0 0;
+    font-size: 0.92rem;
+    color: var(--color-text-primary, #d0d6e0);
+    line-height: 1.45;
   }
 
   /* ── Inline share indicator (replaces capture buttons) ── */
@@ -685,7 +667,7 @@
     font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 1.2px;
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
     font-weight: 600;
   }
 
@@ -777,7 +759,7 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: var(--color-text-muted, #5a6474);
+    background: var(--color-text-muted, #6B7788);
     transition: transform 0.2s, background 0.2s;
   }
 
@@ -817,7 +799,7 @@
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
     margin: 0;
     font-weight: 600;
   }
@@ -832,7 +814,7 @@
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
     font-size: 0.65rem;
     cursor: pointer;
     transition: background 0.15s;
@@ -870,7 +852,7 @@
     background: transparent;
     transition: background 0.15s, border-color 0.15s;
     min-height: 56px;
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
   }
 
   .drop-zone.drop-active .empty-slot {
@@ -922,7 +904,7 @@
   }
 
   .search-input::placeholder {
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
   }
 
   .search-input:focus {
@@ -960,7 +942,7 @@
 
   .empty-msg {
     font-size: 0.78rem;
-    color: var(--color-text-muted, #5a6474);
+    color: var(--color-text-muted, #6B7788);
     text-align: center;
     padding: 16px 0;
     margin: 0;

@@ -22,4 +22,13 @@ export {
   getGachaConfig,
   updateGachaConfig,
   generateTestCharacter,
+  generateCharacterText,
+  generateCharacterImage,
+  assignCharacterVoice,
+  previewVoice,
+  updateCharacter,
+  getAllCharacters,
+  deleteCharacter,
+  toggleCharacterActive,
+  setDefaultCharacter,
 } from "./gacha.js";

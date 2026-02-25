@@ -13,6 +13,17 @@
 
   const isOverlay = $derived(page.url.pathname.startsWith('/overlay'));
 
+  // Map routes to scene indices for parallax camera shift
+  const sceneIndex = $derived((() => {
+    const path = page.url.pathname;
+    if (path === '/') return 0;
+    if (path.startsWith('/pack')) return 1;
+    if (path.startsWith('/collection')) return 2;
+    if (path.startsWith('/account')) return 3;
+    if (path.startsWith('/settings')) return 4;
+    return 0;
+  })());
+
   onMount(() => {
     if (!isOverlay) {
       initializeAuth();
@@ -20,10 +31,16 @@
   });
 </script>
 
+<svelte:head>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet" />
+</svelte:head>
+
 {#if isOverlay}
   {@render children()}
 {:else}
-  <NightSkyBackground />
+  <NightSkyBackground {sceneIndex} />
   <div class="app-shell">
     <Titlebar />
     {#if auth.loading}
