@@ -1,0 +1,38 @@
+---
+import SectionHeading from './SectionHeading.astro';
+import CharacterCard from './CharacterCard.astro';
+import { rarityShowcase } from '../data/characters';
+---
+
+<section id="characters" class="relative z-10 py-24 md:py-32 section-alt">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="fade-in-section">
+      <SectionHeading
+        title="Four Rarity Tiers"
+        subtitle="From common companions to legendary characters with unique visual effects"
+      />
+    </div>
+
+    <div class="fade-in-section">
+      <div class="showcase-scroll flex gap-6 lg:gap-8 justify-center flex-wrap lg:flex-nowrap">
+        {rarityShowcase.map((char) => (
+          <CharacterCard {...char} />
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Horizontal scroll on small screens */
+  @media (max-width: 1023px) {
+    .showcase-scroll {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      justify-content: flex-start;
+      padding-bottom: 16px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+  }
+</style>

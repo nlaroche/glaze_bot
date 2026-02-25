@@ -1,0 +1,88 @@
+---
+import SectionHeading from './SectionHeading.astro';
+import RarityBadge from './RarityBadge.astro';
+import { characterGrid } from '../data/characters';
+---
+
+<section class="relative z-10 py-24 md:py-32 section-alt">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="fade-in-section">
+      <SectionHeading
+        title="Meet the Cast"
+        subtitle="A growing roster of AI personalities, each with their own take on your gameplay"
+      />
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+      {characterGrid.map((char, i) => (
+        <div
+          class="fade-in-section char-tile glass-panel rounded-xl overflow-hidden group"
+          style={`transition-delay: ${i * 0.05}s`}
+        >
+          <!-- Avatar -->
+          <div class="relative h-36 sm:h-44 overflow-hidden bg-[var(--color-surface)]">
+            <img
+              src={char.avatar}
+              alt={char.name}
+              class="absolute inset-0 w-full h-full object-cover opacity-60 blur-sm scale-110"
+              aria-hidden="true"
+            />
+            <img
+              src={char.avatar}
+              alt={char.name}
+              class="char-sprite relative z-10 w-full h-full object-contain"
+              style="image-rendering: pixelated; transform: scale(1.8);"
+            />
+            <!-- Hover quote bubble -->
+            <div class="quote-bubble">
+              <p class="text-xs italic text-[var(--color-text-primary)] leading-snug">
+                "{char.quote}"
+              </p>
+            </div>
+          </div>
+
+          <!-- Info -->
+          <div class="p-3">
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="text-sm font-semibold text-[var(--color-text-primary)] truncate">
+                {char.name}
+              </h3>
+              <RarityBadge rarity={char.rarity} />
+            </div>
+            <p class="text-xs text-[var(--color-text-muted)] truncate">
+              {char.description}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .char-tile {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .char-tile:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .quote-bubble {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 10px;
+    background: rgba(8, 12, 22, 0.9);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transform: translateY(100%);
+    transition: transform 0.25s ease;
+    z-index: 20;
+  }
+
+  .char-tile:hover .quote-bubble {
+    transform: translateY(0);
+  }
+</style>

@@ -1,0 +1,26 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import NightSky from '../components/NightSky.astro';
+import Nav from '../components/Nav.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import CardShowcase from '../components/CardShowcase.astro';
+import PartySection from '../components/PartySection.astro';
+import CharacterGrid from '../components/CharacterGrid.astro';
+import Pricing from '../components/Pricing.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<BaseLayout title="GlazeBot — AI Characters That Watch You Game">
+  <NightSky />
+  <Nav />
+  <main>
+    <Hero />
+    <Features />
+    <CardShowcase />
+    <PartySection />
+    <CharacterGrid />
+    <Pricing />
+  </main>
+  <Footer />
+</BaseLayout>

@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<BaseLayout title="Privacy Policy — GlazeBot">
+  <Nav />
+  <main class="relative z-10 pt-24 pb-16 min-h-screen">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="font-display text-4xl tracking-wide text-[var(--color-text-primary)] mb-8">
+        Privacy Policy
+      </h1>
+      <div class="prose-container space-y-6 text-[var(--color-text-secondary)] leading-relaxed">
+        <p>
+          This privacy policy will be updated before GlazeBot's public launch. We are committed to protecting your privacy and being transparent about how we handle your data.
+        </p>
+        <h2 class="text-xl font-semibold text-[var(--color-text-primary)] pt-4">What We Collect</h2>
+        <p>
+          GlazeBot processes screen captures and audio locally on your device to generate AI commentary. Screen captures are sent to our AI providers for real-time analysis but are not stored permanently.
+        </p>
+        <h2 class="text-xl font-semibold text-[var(--color-text-primary)] pt-4">Contact</h2>
+        <p>
+          If you have questions about your privacy, please reach out to us at privacy@glazebot.gg.
+        </p>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>

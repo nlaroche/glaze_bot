@@ -1,0 +1,49 @@
+---
+import SectionHeading from './SectionHeading.astro';
+
+const features = [
+  {
+    icon: '🧠',
+    title: 'AI Personalities',
+    description: 'Each character has a unique voice, attitude, and commentary style. From hype men to gothic narrators, no two are alike.',
+  },
+  {
+    icon: '🎙️',
+    title: 'Live Commentary',
+    description: 'Characters watch your screen in real time using vision AI and commentate with synthesized voices. They see what you see.',
+  },
+  {
+    icon: '🃏',
+    title: 'Collect & Build',
+    description: 'Open booster packs to discover characters across 4 rarity tiers. Build a party of 3 and take them into any game.',
+  },
+];
+---
+
+<section id="features" class="relative z-10 py-24 md:py-32 bg-[var(--color-navy)]">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="fade-in-section">
+      <SectionHeading
+        title="How It Works"
+        subtitle="Three steps to AI-powered gaming commentary"
+      />
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+      {features.map((feature, i) => (
+        <div
+          class="fade-in-section glass-panel rounded-2xl p-8 hover:bg-[rgba(255,255,255,0.03)] transition-colors"
+          style={`transition-delay: ${i * 0.1}s`}
+        >
+          <div class="text-4xl mb-4">{feature.icon}</div>
+          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-3">
+            {feature.title}
+          </h3>
+          <p class="text-[var(--color-text-secondary)] leading-relaxed">
+            {feature.description}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

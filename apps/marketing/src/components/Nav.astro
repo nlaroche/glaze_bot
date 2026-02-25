@@ -1,0 +1,104 @@
+---
+const links = [
+  { label: 'Features', href: '#features' },
+  { label: 'Characters', href: '#characters' },
+  { label: 'Pricing', href: '#pricing' },
+];
+---
+
+<nav id="main-nav" class="fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b border-transparent">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="flex items-center justify-between h-16">
+      <!-- Logo -->
+      <a href="/" class="flex items-center gap-3 no-underline">
+        <img src="/icon.png" alt="GlazeBot" class="w-8 h-8 rounded-lg" />
+        <span class="font-display text-lg tracking-wider text-[var(--color-pink)]">GLAZEBOT</span>
+      </a>
+
+      <!-- Desktop links -->
+      <div class="hidden md:flex items-center gap-8">
+        {links.map((link) => (
+          <a
+            href={link.href}
+            class="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors no-underline"
+          >
+            {link.label}
+          </a>
+        ))}
+        <a
+          href="https://app.glazebot.gg"
+          class="px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--color-teal)] text-white hover:brightness-110 transition-all no-underline"
+        >
+          Launch App
+        </a>
+      </div>
+
+      <!-- Mobile hamburger -->
+      <button
+        id="mobile-menu-btn"
+        class="md:hidden flex flex-col gap-1.5 p-2"
+        aria-label="Toggle menu"
+      >
+        <span class="hamburger-line w-6 h-0.5 bg-[var(--color-text-secondary)] transition-all"></span>
+        <span class="hamburger-line w-6 h-0.5 bg-[var(--color-text-secondary)] transition-all"></span>
+        <span class="hamburger-line w-6 h-0.5 bg-[var(--color-text-secondary)] transition-all"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile menu -->
+  <div id="mobile-menu" class="md:hidden hidden">
+    <div class="glass-panel mx-4 mb-4 rounded-xl p-4 flex flex-col gap-3">
+      {links.map((link) => (
+        <a
+          href={link.href}
+          class="mobile-link text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors py-2 no-underline"
+        >
+          {link.label}
+        </a>
+      ))}
+      <a
+        href="https://app.glazebot.gg"
+        class="px-4 py-2.5 rounded-lg text-sm font-semibold bg-[var(--color-teal)] text-white text-center no-underline"
+      >
+        Launch App
+      </a>
+    </div>
+  </div>
+</nav>
+
+<script>
+  // Nav scroll effect
+  const nav = document.getElementById('main-nav')!;
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('nav-scrolled', window.scrollY > 50);
+  }, { passive: true });
+
+  // Mobile menu toggle
+  const btn = document.getElementById('mobile-menu-btn')!;
+  const menu = document.getElementById('mobile-menu')!;
+  btn.addEventListener('click', () => {
+    menu.classList.toggle('hidden');
+    btn.classList.toggle('open');
+  });
+
+  // Close mobile menu on link click
+  menu.querySelectorAll('.mobile-link').forEach((link) => {
+    link.addEventListener('click', () => {
+      menu.classList.add('hidden');
+      btn.classList.remove('open');
+    });
+  });
+</script>
+
+<style>
+  #mobile-menu-btn.open .hamburger-line:nth-child(1) {
+    transform: rotate(45deg) translate(3px, 5px);
+  }
+  #mobile-menu-btn.open .hamburger-line:nth-child(2) {
+    opacity: 0;
+  }
+  #mobile-menu-btn.open .hamburger-line:nth-child(3) {
+    transform: rotate(-45deg) translate(3px, -5px);
+  }
+</style>

@@ -1,0 +1,35 @@
+---
+import SectionHeading from './SectionHeading.astro';
+import CharacterCard from './CharacterCard.astro';
+import { partyDemo } from '../data/characters';
+---
+
+<section class="relative z-10 py-24 md:py-32 bg-[var(--color-navy)]">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="fade-in-section">
+      <SectionHeading
+        title="Build Your Party"
+        subtitle="Pick up to 3 characters to commentate together. Mix a hype caster, a tactician, and a chaos gremlin for maximum entertainment."
+      />
+    </div>
+
+    <div class="fade-in-section flex justify-center gap-6 lg:gap-10 flex-wrap">
+      {partyDemo.map((char, i) => (
+        <div class="party-slot" style={`animation-delay: ${i * 0.15}s`}>
+          <div class="slot-label glass-panel rounded-full px-3 py-1 text-xs text-[var(--color-text-muted)] mb-3 text-center">
+            Slot {i + 1}
+          </div>
+          <CharacterCard {...char} />
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .party-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+</style>

@@ -1,0 +1,64 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'AI characters that watch you game and commentate in real time. Collect unique personalities, build your party, and let them roast your gameplay.' } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0a0e18" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <title>{title}</title>
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icon.png" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+  </head>
+  <body>
+    <slot />
+
+    <!-- Scroll fade-in observer (progressive enhancement) -->
+    <script is:inline>
+      (function() {
+        if (!('IntersectionObserver' in window)) return;
+
+        // Enable animation mode — without this class, all content stays visible
+        document.documentElement.classList.add('scroll-animate');
+
+        var observer = new IntersectionObserver(
+          function(entries) {
+            entries.forEach(function(entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.05, rootMargin: '0px 0px -30px 0px' }
+        );
+
+        document.querySelectorAll('.fade-in-section').forEach(function(el) {
+          observer.observe(el);
+        });
+      })();
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  @import '../styles/global.css';
+</style>

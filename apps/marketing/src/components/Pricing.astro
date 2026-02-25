@@ -1,0 +1,113 @@
+---
+import SectionHeading from './SectionHeading.astro';
+
+const tiers = [
+  {
+    name: 'Free',
+    price: '$0',
+    period: '/month',
+    description: 'Get started with the basics',
+    features: [
+      '1 booster pack per day',
+      'Party of up to 3',
+      'Live commentary',
+      'Basic voice selection',
+    ],
+    cta: 'Get Started',
+    highlighted: false,
+  },
+  {
+    name: 'Pro',
+    price: '$9.99',
+    period: '/month',
+    description: 'For the dedicated gamer',
+    features: [
+      '5 booster packs per day',
+      'Party of up to 3',
+      'Priority voice synthesis',
+      'Exclusive character pool',
+      'Custom voice options',
+    ],
+    cta: 'Coming Soon',
+    highlighted: true,
+  },
+  {
+    name: 'Ultimate',
+    price: '$19.99',
+    period: '/month',
+    description: 'Maximum chaos',
+    features: [
+      'Unlimited booster packs',
+      'Party of up to 3',
+      'Fastest voice synthesis',
+      'All character pools',
+      'Custom character creation',
+      'Discord bot integration',
+    ],
+    cta: 'Coming Soon',
+    highlighted: false,
+  },
+];
+---
+
+<section id="pricing" class="relative z-10 py-24 md:py-32 bg-[var(--color-navy)]">
+  <div class="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16">
+    <div class="fade-in-section">
+      <SectionHeading
+        title="Pricing"
+        subtitle="Start free. Upgrade when you're hooked."
+      />
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8 max-w-5xl mx-auto">
+      {tiers.map((tier, i) => (
+        <div
+          class:list={[
+            'fade-in-section rounded-2xl p-8 flex flex-col',
+            tier.highlighted
+              ? 'bg-[rgba(59,151,151,0.08)] border-2 border-[rgba(59,151,151,0.3)] relative'
+              : 'glass-panel',
+          ]}
+          style={`transition-delay: ${i * 0.1}s`}
+        >
+          {tier.highlighted && (
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-[var(--color-teal)] text-xs font-semibold text-white">
+              Popular
+            </div>
+          )}
+
+          <h3 class="text-xl font-semibold text-[var(--color-text-primary)] mb-2">
+            {tier.name}
+          </h3>
+          <div class="flex items-baseline gap-1 mb-2">
+            <span class="text-4xl font-bold text-[var(--color-text-primary)]">{tier.price}</span>
+            <span class="text-[var(--color-text-muted)]">{tier.period}</span>
+          </div>
+          <p class="text-sm text-[var(--color-text-secondary)] mb-6">{tier.description}</p>
+
+          <ul class="flex-1 space-y-3 mb-8">
+            {tier.features.map((feature) => (
+              <li class="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
+                <span class="text-[var(--color-teal)] mt-0.5 flex-shrink-0">✓</span>
+                {feature}
+              </li>
+            ))}
+          </ul>
+
+          <button
+            class:list={[
+              'w-full py-3 rounded-xl text-sm font-semibold transition-all',
+              tier.highlighted
+                ? 'bg-[var(--color-teal)] text-white hover:brightness-110'
+                : 'glass-panel text-[var(--color-text-primary)] hover:bg-[rgba(255,255,255,0.08)]',
+              tier.cta === 'Coming Soon' ? 'opacity-60 cursor-not-allowed' : '',
+            ]}
+            disabled={tier.cta === 'Coming Soon'}
+          >
+            {tier.cta}
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

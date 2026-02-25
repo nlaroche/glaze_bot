@@ -1,0 +1,34 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<BaseLayout title="Terms of Service — GlazeBot">
+  <Nav />
+  <main class="relative z-10 pt-24 pb-16 min-h-screen">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="font-display text-4xl tracking-wide text-[var(--color-text-primary)] mb-8">
+        Terms of Service
+      </h1>
+      <div class="prose-container space-y-6 text-[var(--color-text-secondary)] leading-relaxed">
+        <p>
+          These terms of service will be updated before GlazeBot's public launch. By using GlazeBot, you agree to these terms.
+        </p>
+        <h2 class="text-xl font-semibold text-[var(--color-text-primary)] pt-4">Service Description</h2>
+        <p>
+          GlazeBot provides AI-powered gaming commentary through desktop and Discord applications. Characters are generated using artificial intelligence and assigned randomized voices.
+        </p>
+        <h2 class="text-xl font-semibold text-[var(--color-text-primary)] pt-4">User Conduct</h2>
+        <p>
+          Users are responsible for their use of the service. GlazeBot is intended for personal entertainment during gaming sessions.
+        </p>
+        <h2 class="text-xl font-semibold text-[var(--color-text-primary)] pt-4">Contact</h2>
+        <p>
+          For questions about these terms, please contact us at legal@glazebot.gg.
+        </p>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</BaseLayout>

@@ -1,0 +1,159 @@
+---
+// Port of NightSkyBackground.svelte — deterministic star generation + CSS animations
+// No parallax (no sceneIndex), just static night sky with twinkling stars and drifting waves
+
+function makeStars(count: number, seed: number) {
+  let s = seed;
+  function rand() {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  }
+  const stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: rand() * 100,
+      y: rand() * 60,
+      r: 0.08 + rand() * 0.18,
+      opacity: 0.25 + rand() * 0.55,
+      delay: rand() * 12,
+      duration: 6 + rand() * 10,
+    });
+  }
+  return stars;
+}
+
+const stars = makeStars(160, 42);
+const faintStars = makeStars(100, 99);
+---
+
+<div class="night-sky">
+  <svg
+    class="sky-svg"
+    viewBox="0 0 100 100"
+    preserveAspectRatio="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <defs>
+      <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#040610" />
+        <stop offset="35%" stop-color="#070c1a" />
+        <stop offset="65%" stop-color="#0a1025" />
+        <stop offset="100%" stop-color="#0c1530" />
+      </linearGradient>
+    </defs>
+
+    <rect width="100" height="100" fill="url(#sky-grad)" />
+
+    <!-- Faint stars (background) -->
+    {faintStars.map((star) => (
+      <rect
+        x={star.x}
+        y={star.y}
+        width={star.r * 0.6}
+        height={star.r * 0.6}
+        fill={`rgba(180, 200, 230, ${star.opacity * 0.35})`}
+        class="twinkle-faint"
+        style={`--delay: ${star.delay}s; --duration: ${star.duration}s`}
+      />
+    ))}
+
+    <!-- Bright stars -->
+    {stars.map((star) => (
+      <rect
+        x={star.x}
+        y={star.y}
+        width={star.r}
+        height={star.r}
+        fill={`rgba(210, 225, 250, ${star.opacity})`}
+        class="twinkle-star"
+        style={`--delay: ${star.delay}s; --duration: ${star.duration}s`}
+      />
+    ))}
+
+    <!-- Wave layers -->
+    <path class="wave wave-4" d="M-20,72 Q-12,69 -4,72 T12,72 T28,72 T44,72 T60,72 T76,72 T92,72 T108,72 T120,72 L120,100 L-20,100 Z" fill="rgba(6, 12, 24, 0.6)" />
+    <path class="wave wave-3" d="M-20,76 Q-10,73 0,76 T20,76 T40,76 T60,76 T80,76 T100,76 T120,76 L120,100 L-20,100 Z" fill="rgba(7, 14, 28, 0.7)" />
+    <path class="wave wave-2" d="M-20,80 Q-8,77 4,80 T28,80 T52,80 T76,80 T100,80 T120,80 L120,100 L-20,100 Z" fill="rgba(8, 15, 30, 0.8)" />
+    <path class="wave wave-1" d="M-20,85 Q-5,82 10,85 T40,85 T70,85 T100,85 T120,85 L120,100 L-20,100 Z" fill="rgba(7, 12, 24, 0.9)" />
+    <path class="wave wave-0" d="M-20,90 Q-8,88 5,90 T30,90 T55,90 T80,90 T105,90 T120,90 L120,100 L-20,100 Z" fill="rgba(6, 10, 20, 0.95)" />
+
+    <!-- Water sparkles -->
+    <rect x="30" y="75" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.15)" class="sparkle-dot" style="--sp-delay: 0s" />
+    <rect x="55" y="78" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.12)" class="sparkle-dot" style="--sp-delay: 2s" />
+    <rect x="72" y="73" width="0.18" height="0.18" fill="rgba(200, 210, 230, 0.18)" class="sparkle-dot" style="--sp-delay: 4s" />
+    <rect x="15" y="80" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.1)" class="sparkle-dot" style="--sp-delay: 1.5s" />
+    <rect x="88" y="76" width="0.15" height="0.15" fill="rgba(200, 210, 230, 0.14)" class="sparkle-dot" style="--sp-delay: 3.5s" />
+    <rect x="45" y="82" width="0.1" height="0.1" fill="rgba(200, 210, 230, 0.08)" class="sparkle-dot" style="--sp-delay: 5s" />
+  </svg>
+
+  <!-- Satellite -->
+  <div class="satellite-track">
+    <svg class="satellite" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="16" y="15" width="8" height="10" rx="1" fill="rgba(140, 160, 190, 0.12)" />
+      <rect x="2" y="17" width="12" height="6" rx="0.5" fill="rgba(100, 130, 170, 0.10)" />
+      <line x1="4" y1="17" x2="4" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <line x1="7" y1="17" x2="7" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <line x1="10" y1="17" x2="10" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <rect x="26" y="17" width="12" height="6" rx="0.5" fill="rgba(100, 130, 170, 0.10)" />
+      <line x1="29" y1="17" x2="29" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <line x1="32" y1="17" x2="32" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <line x1="35" y1="17" x2="35" y2="23" stroke="rgba(140, 165, 200, 0.06)" stroke-width="0.5" />
+      <line x1="20" y1="15" x2="20" y2="11" stroke="rgba(140, 160, 190, 0.10)" stroke-width="0.5" />
+      <circle cx="20" cy="10" r="1" fill="rgba(180, 200, 220, 0.10)" />
+      <circle cx="20" cy="25" r="0.6" fill="rgba(59, 151, 151, 0.25)" class="sat-blink" />
+    </svg>
+  </div>
+</div>
+
+<style>
+  .night-sky {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .sky-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+  }
+
+  .twinkle-star {
+    animation: twinkle var(--duration) var(--delay) ease-in-out infinite;
+  }
+  .twinkle-faint {
+    animation: twinkle-faint var(--duration) var(--delay) ease-in-out infinite;
+  }
+
+  .wave-0 { animation: wave-drift-0 8s ease-in-out infinite alternate; }
+  .wave-1 { animation: wave-drift-1 10s ease-in-out infinite alternate; }
+  .wave-2 { animation: wave-drift-2 12s ease-in-out infinite alternate; }
+  .wave-3 { animation: wave-drift-3 14s ease-in-out infinite alternate; }
+  .wave-4 { animation: wave-drift-4 16s ease-in-out infinite alternate; }
+
+  .sparkle-dot {
+    animation: sparkle 6s var(--sp-delay) ease-in-out infinite;
+  }
+
+  .satellite-track {
+    position: absolute;
+    top: 8%;
+    left: 0;
+    width: 100%;
+    height: 0;
+    overflow: visible;
+  }
+
+  .satellite {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    animation: sat-orbit 60s linear infinite;
+  }
+
+  .sat-blink {
+    animation: sat-blink-anim 3s ease-in-out infinite;
+  }
+</style>

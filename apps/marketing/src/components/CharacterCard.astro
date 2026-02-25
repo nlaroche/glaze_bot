@@ -1,0 +1,302 @@
+---
+import type { Rarity } from '../data/characters';
+import RarityBadge from './RarityBadge.astro';
+
+interface Props {
+  name: string;
+  description: string;
+  rarity: Rarity;
+  avatar: string;
+  class?: string;
+}
+
+const { name, description, rarity, avatar, class: className } = Astro.props;
+
+const isHolo = rarity === 'epic' || rarity === 'legendary';
+const isLegendary = rarity === 'legendary';
+---
+
+<div class:list={['character-card', `rarity-${rarity}`, className]}>
+  <div class="card-border-shimmer"></div>
+  <div class="card-inner-content">
+    <!-- Art -->
+    <div class="art-fill">
+      <img src={avatar} alt="" class="art-bg-blur" aria-hidden="true" />
+      <img src={avatar} alt={name} class="art-foreground" />
+    </div>
+
+    {isHolo && (
+      <div class:list={['holo-overlay', { legendary: isLegendary }]} />
+    )}
+
+    <!-- Info overlay -->
+    <div class="info-overlay">
+      <div class="flex items-center gap-2 mb-1">
+        <h3 class="card-name">{name}</h3>
+        <RarityBadge rarity={rarity} />
+      </div>
+      <p class="card-description">{description}</p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .character-card {
+    width: 240px;
+    height: 340px;
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 3px solid;
+    border-color:
+      rgba(255, 255, 255, 0.18)
+      rgba(255, 255, 255, 0.08)
+      rgba(0, 0, 0, 0.25)
+      rgba(255, 255, 255, 0.08);
+    background: var(--color-navy);
+    flex-shrink: 0;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .character-card:hover {
+    transform: translateY(-6px) scale(1.02);
+  }
+
+  /* Rarity borders */
+  .rarity-common {
+    border-color:
+      rgba(180, 195, 210, 0.3)
+      rgba(140, 155, 170, 0.2)
+      rgba(60, 70, 80, 0.4)
+      rgba(140, 155, 170, 0.2);
+    box-shadow: 0 0 4px rgba(160, 174, 192, 0.1);
+  }
+  .rarity-common:hover {
+    box-shadow: var(--glow-common);
+  }
+
+  .rarity-rare {
+    border-color:
+      rgba(80, 200, 200, 0.4)
+      rgba(50, 160, 160, 0.25)
+      rgba(15, 60, 60, 0.5)
+      rgba(50, 160, 160, 0.25);
+    box-shadow: 0 0 6px rgba(59, 151, 151, 0.15);
+  }
+  .rarity-rare:hover {
+    box-shadow: var(--glow-rare);
+  }
+
+  .rarity-epic {
+    border-color:
+      rgba(210, 160, 255, 0.45)
+      rgba(160, 100, 230, 0.3)
+      rgba(60, 20, 110, 0.55)
+      rgba(160, 100, 230, 0.3);
+    box-shadow: 0 0 8px rgba(176, 106, 255, 0.2);
+  }
+  .rarity-epic:hover {
+    box-shadow: var(--glow-epic);
+  }
+
+  .rarity-legendary {
+    border-color:
+      rgba(255, 235, 100, 0.5)
+      rgba(220, 190, 40, 0.35)
+      rgba(120, 90, 0, 0.55)
+      rgba(220, 190, 40, 0.35);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  }
+  .rarity-legendary:hover {
+    box-shadow: var(--glow-legendary);
+  }
+
+  /* Shimmer border for epic/legendary */
+  .card-border-shimmer {
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+  }
+
+  .rarity-epic .card-border-shimmer,
+  .rarity-legendary .card-border-shimmer {
+    opacity: 1;
+  }
+
+  .rarity-epic .card-border-shimmer {
+    background:
+      conic-gradient(
+        from var(--shimmer-angle, 0deg) at 30% 20%,
+        transparent 0deg, rgba(210, 160, 255, 0.18) 8deg, transparent 16deg,
+        transparent 80deg, rgba(140, 200, 255, 0.12) 88deg, transparent 96deg,
+        transparent 180deg, rgba(255, 160, 255, 0.14) 188deg, transparent 196deg,
+        transparent 280deg, rgba(180, 130, 255, 0.1) 288deg, transparent 296deg
+      ),
+      conic-gradient(
+        from calc(var(--shimmer-angle, 0deg) + 137deg) at 70% 75%,
+        transparent 0deg, rgba(200, 170, 255, 0.15) 6deg, transparent 12deg,
+        transparent 120deg, rgba(160, 220, 255, 0.1) 126deg, transparent 132deg,
+        transparent 240deg, rgba(220, 180, 255, 0.12) 246deg, transparent 252deg
+      );
+    mask:
+      linear-gradient(#fff, #fff) content-box,
+      linear-gradient(#fff, #fff);
+    mask-composite: exclude;
+    padding: 3px;
+    animation: shimmer-rotate 12s linear infinite;
+  }
+
+  .rarity-legendary .card-border-shimmer {
+    background:
+      conic-gradient(
+        from var(--shimmer-angle, 0deg) at 25% 15%,
+        transparent 0deg, rgba(255, 245, 140, 0.22) 6deg, transparent 12deg,
+        transparent 60deg, rgba(255, 220, 100, 0.16) 66deg, transparent 72deg,
+        transparent 140deg, rgba(255, 255, 200, 0.2) 146deg, transparent 152deg,
+        transparent 220deg, rgba(255, 235, 120, 0.14) 226deg, transparent 232deg,
+        transparent 300deg, rgba(255, 250, 180, 0.18) 306deg, transparent 312deg
+      ),
+      conic-gradient(
+        from calc(var(--shimmer-angle, 0deg) + 97deg) at 75% 80%,
+        transparent 0deg, rgba(255, 240, 130, 0.2) 5deg, transparent 10deg,
+        transparent 90deg, rgba(255, 210, 80, 0.14) 95deg, transparent 100deg,
+        transparent 190deg, rgba(255, 255, 170, 0.18) 195deg, transparent 200deg,
+        transparent 270deg, rgba(255, 230, 100, 0.12) 275deg, transparent 280deg
+      ),
+      conic-gradient(
+        from calc(var(--shimmer-angle, 0deg) + 223deg) at 50% 45%,
+        transparent 0deg, rgba(255, 250, 200, 0.16) 4deg, transparent 8deg,
+        transparent 120deg, rgba(255, 225, 90, 0.12) 124deg, transparent 128deg,
+        transparent 240deg, rgba(255, 245, 160, 0.14) 244deg, transparent 248deg
+      );
+    mask:
+      linear-gradient(#fff, #fff) content-box,
+      linear-gradient(#fff, #fff);
+    mask-composite: exclude;
+    padding: 3px;
+    animation: shimmer-rotate 16s linear infinite;
+  }
+
+  .card-inner-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 11px;
+  }
+
+  /* Art */
+  .art-fill {
+    position: absolute;
+    inset: -3px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-navy);
+  }
+
+  .art-bg-blur {
+    position: absolute;
+    inset: -20px;
+    width: calc(100% + 40px);
+    height: calc(100% + 40px);
+    object-fit: cover;
+    filter: blur(16px) brightness(0.6);
+    z-index: 0;
+  }
+
+  .art-foreground {
+    position: relative;
+    max-width: 30%;
+    max-height: 30%;
+    object-fit: contain;
+    z-index: 1;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+    transform: scale(2.75);
+    margin-bottom: 80px;
+  }
+
+  /* Holo overlay */
+  .holo-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: linear-gradient(
+      115deg,
+      transparent 20%,
+      rgba(255, 0, 0, 0.06) 25%,
+      rgba(255, 154, 0, 0.06) 30%,
+      rgba(255, 255, 0, 0.06) 35%,
+      rgba(0, 255, 0, 0.06) 40%,
+      rgba(0, 200, 255, 0.06) 45%,
+      rgba(100, 0, 255, 0.06) 50%,
+      rgba(255, 0, 200, 0.06) 55%,
+      transparent 60%
+    );
+    background-size: 250% 250%;
+    background-position: 50% 50%;
+    mix-blend-mode: screen;
+    animation: holo-drift 6s ease-in-out infinite alternate;
+  }
+
+  .holo-overlay.legendary {
+    background: linear-gradient(
+      115deg,
+      transparent 15%,
+      rgba(255, 0, 0, 0.12) 22%,
+      rgba(255, 154, 0, 0.12) 28%,
+      rgba(255, 255, 0, 0.12) 34%,
+      rgba(0, 255, 0, 0.12) 40%,
+      rgba(0, 200, 255, 0.12) 46%,
+      rgba(100, 0, 255, 0.12) 52%,
+      rgba(255, 0, 200, 0.12) 58%,
+      transparent 65%
+    );
+    background-size: 250% 250%;
+    animation: holo-drift 4s ease-in-out infinite alternate;
+  }
+
+  @keyframes holo-drift {
+    0% { background-position: 30% 30%; }
+    100% { background-position: 70% 70%; }
+  }
+
+  /* Info overlay */
+  .info-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px;
+    background: rgba(8, 12, 22, 0.85);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 10;
+  }
+
+  .card-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    line-height: 1.2;
+  }
+
+  .card-description {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    margin: 0;
+    font-style: italic;
+  }
+</style>

@@ -1,0 +1,22 @@
+---
+import type { Rarity } from '../data/characters';
+
+interface Props {
+  rarity: Rarity;
+}
+const { rarity } = Astro.props;
+
+const colors: Record<Rarity, string> = {
+  common: 'bg-[rgba(160,174,192,0.15)] text-[#A0AEC0] border-[rgba(160,174,192,0.3)]',
+  rare: 'bg-[rgba(59,151,151,0.15)] text-[#3B9797] border-[rgba(59,151,151,0.3)]',
+  epic: 'bg-[rgba(176,106,255,0.15)] text-[#B06AFF] border-[rgba(176,106,255,0.3)]',
+  legendary: 'bg-[rgba(255,215,0,0.15)] text-[#FFD700] border-[rgba(255,215,0,0.3)]',
+};
+---
+
+<span class:list={[
+  'inline-block px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider rounded-full border',
+  colors[rarity],
+]}>
+  {rarity}
+</span>

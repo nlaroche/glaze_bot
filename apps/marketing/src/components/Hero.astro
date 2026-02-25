@@ -1,0 +1,61 @@
+---
+import CharacterCard from './CharacterCard.astro';
+import { heroCharacters } from '../data/characters';
+---
+
+<section class="relative z-10 min-h-screen flex items-center justify-center pt-16">
+  <div class="relative z-10 w-full max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 py-20 flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+    <!-- Text -->
+    <div class="flex-1 min-w-0 text-center lg:text-left">
+      <h1 class="font-display text-3xl sm:text-4xl lg:text-5xl xl:text-6xl tracking-wide leading-tight mb-6">
+        <span class="text-[var(--color-text-primary)]">AI Characters</span><br />
+        <span class="text-[var(--color-pink)]">That Watch You Game</span>
+      </h1>
+      <p class="text-lg sm:text-xl text-[var(--color-text-secondary)] max-w-xl mx-auto lg:mx-0 mb-8">
+        Collect unique AI personalities, build your party, and let them commentate your gameplay in real time. Every character sees your screen and reacts with their own voice.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+        <a
+          href="https://app.glazebot.gg"
+          class="px-8 py-3.5 rounded-xl text-base font-semibold bg-[var(--color-teal)] text-white hover:brightness-110 transition-all no-underline text-center"
+        >
+          Get Started Free
+        </a>
+        <a
+          href="#features"
+          class="px-8 py-3.5 rounded-xl text-base font-semibold glass-panel text-[var(--color-text-primary)] hover:bg-[rgba(255,255,255,0.08)] transition-all no-underline text-center"
+        >
+          Learn More
+        </a>
+      </div>
+    </div>
+
+    <!-- Floating cards (hidden on mobile, 1 at md, 2 at lg, 3 at xl) -->
+    <div class="hidden md:flex items-center gap-5">
+      <div class="floating-card" style="animation: float-1 6s ease-in-out infinite;">
+        <CharacterCard {...heroCharacters[0]} class="hero-card" />
+      </div>
+      <div class="floating-card hidden lg:block" style="animation: float-2 7s ease-in-out infinite 0.5s;">
+        <CharacterCard {...heroCharacters[1]} class="hero-card" />
+      </div>
+      <div class="floating-card hidden 2xl:block" style="animation: float-3 8s ease-in-out infinite 1s;">
+        <CharacterCard {...heroCharacters[2]} class="hero-card" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Gradient fade to content below -->
+  <div class="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--color-navy)] to-transparent z-10 pointer-events-none"></div>
+</section>
+
+<style>
+  .floating-card {
+    filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.5));
+  }
+
+  /* Slightly smaller cards in hero to prevent overflow */
+  .floating-card :global(.hero-card) {
+    width: 210px;
+    height: 300px;
+  }
+</style>
