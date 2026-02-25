@@ -50,14 +50,14 @@
 
   // Collage cards — same as desktop for visual consistency
   const collageCards = [
-    { x: -4,  y: 6,   size: 140, rot: -8,   opacity: 0.45, blur: 1,   glow: 'epic' },
-    { x: 78,  y: 3,   size: 130, rot: 6,    opacity: 0.4,  blur: 1.5, glow: 'rare' },
-    { x: -2,  y: 52,  size: 120, rot: -12,  opacity: 0.35, blur: 2,   glow: 'legendary' },
-    { x: 80,  y: 48,  size: 125, rot: 10,   opacity: 0.4,  blur: 1,   glow: 'epic' },
-    { x: 82,  y: 78,  size: 110, rot: 8,    opacity: 0.35, blur: 2,   glow: 'rare' },
-    { x: 2,   y: 80,  size: 105, rot: -5,   opacity: 0.3,  blur: 2.5, glow: 'common' },
-    { x: 22,  y: -3,  size: 95,  rot: 4,    opacity: 0.25, blur: 3,   glow: 'rare' },
-    { x: 58,  y: 82,  size: 100, rot: -7,   opacity: 0.28, blur: 2.5, glow: 'common' },
+    { src: '/avatars/hype.png',             x: -4,  y: 6,   size: 140, rot: -8,   opacity: 0.45, blur: 1,   glow: 'epic' },
+    { src: '/avatars/sage.png',             x: 78,  y: 3,   size: 130, rot: 6,    opacity: 0.4,  blur: 1.5, glow: 'rare' },
+    { src: '/avatars/jinx.png',             x: -2,  y: 52,  size: 120, rot: -12,  opacity: 0.35, blur: 2,   glow: 'legendary' },
+    { src: '/avatars/dj_blaze.png',         x: 80,  y: 48,  size: 125, rot: 10,   opacity: 0.4,  blur: 1,   glow: 'epic' },
+    { src: '/avatars/vex.png',              x: 82,  y: 78,  size: 110, rot: 8,    opacity: 0.35, blur: 2,   glow: 'rare' },
+    { src: '/avatars/captain_obvious.png',  x: 2,   y: 80,  size: 105, rot: -5,   opacity: 0.3,  blur: 2.5, glow: 'common' },
+    { src: '/avatars/sir_reginald.png',     x: 22,  y: -3,  size: 95,  rot: 4,    opacity: 0.25, blur: 3,   glow: 'rare' },
+    { src: '/avatars/conspiracy_carl.png',  x: 58,  y: 82,  size: 100, rot: -7,   opacity: 0.28, blur: 2.5, glow: 'common' },
   ];
 
   const glowColors: Record<string, string> = {
@@ -66,18 +66,6 @@
     epic:      'rgba(176, 106, 255, 0.5)',
     legendary: 'rgba(255, 215, 0, 0.5)',
   };
-
-  // Procedural avatar colors for the collage (since we don't have image files in the portal)
-  const cardColors = [
-    { bg: 'rgba(176, 106, 255, 0.25)', accent: 'rgba(176, 106, 255, 0.6)' },
-    { bg: 'rgba(59, 151, 151, 0.25)',  accent: 'rgba(59, 151, 151, 0.6)' },
-    { bg: 'rgba(255, 215, 0, 0.2)',    accent: 'rgba(255, 215, 0, 0.5)' },
-    { bg: 'rgba(176, 106, 255, 0.25)', accent: 'rgba(176, 106, 255, 0.6)' },
-    { bg: 'rgba(59, 151, 151, 0.25)',  accent: 'rgba(59, 151, 151, 0.6)' },
-    { bg: 'rgba(160, 174, 192, 0.2)',  accent: 'rgba(160, 174, 192, 0.5)' },
-    { bg: 'rgba(59, 151, 151, 0.2)',   accent: 'rgba(59, 151, 151, 0.5)' },
-    { bg: 'rgba(160, 174, 192, 0.2)',  accent: 'rgba(160, 174, 192, 0.5)' },
-  ];
 </script>
 
 <div class="auth-screen">
@@ -96,11 +84,9 @@
           filter: blur({card.blur}px);
           box-shadow: 0 0 20px {glowColors[card.glow]}, 0 0 40px {glowColors[card.glow]};
           animation-delay: {i * 0.8}s;
-          background: {cardColors[i].bg};
-          border-color: {cardColors[i].accent};
         "
       >
-        <div class="card-inner" style="background: radial-gradient(circle at 30% 30%, {cardColors[i].accent}, transparent 70%);"></div>
+        <img src={card.src} alt="" draggable="false" />
       </div>
     {/each}
 
@@ -186,14 +172,16 @@
   .collage-card {
     position: absolute;
     border-radius: 12px;
-    border: 1px solid;
     overflow: hidden;
     animation: collage-float 8s ease-in-out infinite alternate;
   }
 
-  .card-inner {
+  .collage-card img {
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 12px;
   }
 
   @keyframes collage-float {
