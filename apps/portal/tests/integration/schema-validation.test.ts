@@ -1,28 +1,14 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { describe, it, expect } from 'vitest';
+import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://zwpwjceczndedcoegerx.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? '';
-const TEST_EMAIL = process.env.E2E_TEST_EMAIL ?? 'e2e-test@glazebot.gg';
-const TEST_PASSWORD = process.env.E2E_TEST_PASSWORD ?? 'e2e-test-password-gl4z3!';
+const STAGING_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3cHdqY2Vjem5kZWRjb2VnZXJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5NDExNjQsImV4cCI6MjA4NzUxNzE2NH0.dx2U37oUZkuuFCMK_HVl0RwRAjlyg_rUrMu2gGYJrPs';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? STAGING_ANON_KEY;
 
-let client: SupabaseClient;
-
-beforeAll(async () => {
-  if (!SUPABASE_ANON_KEY) {
-    throw new Error('SUPABASE_ANON_KEY is required for schema validation tests');
-  }
-
-  client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  // Authenticate so RLS lets us query tables
-  const { error } = await client.auth.signInWithPassword({
-    email: TEST_EMAIL,
-    password: TEST_PASSWORD,
-  });
-  if (error) throw new Error(`Auth failed: ${error.message}`);
+// Schema validation doesn't need auth — PostgREST returns column errors
+// even on unauthenticated requests (RLS filters rows, not column metadata).
+const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
 });
 
 describe('Schema validation against staging', () => {
@@ -54,6 +40,7 @@ describe('Schema validation against staging', () => {
   });
 
   it('gacha_config table has default row with packsPerDay', async () => {
+    // gacha_config has public read RLS — no auth needed
     const { data, error } = await client
       .from('gacha_config')
       .select('id, config')
@@ -76,11 +63,7 @@ describe('Schema validation against staging', () => {
   });
 
   it('RLS blocks unauthenticated access to characters', async () => {
-    const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const { data, error } = await anonClient
+    const { data, error } = await client
       .from('characters')
       .select('id')
       .limit(1);
