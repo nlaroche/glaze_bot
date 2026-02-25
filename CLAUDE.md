@@ -51,12 +51,12 @@ All secrets live in the `nlaroche/glazebot-secrets` repo, encrypted with SOPS + 
 1. SOPS files: `secrets/secrets.staging.yaml`, `secrets/secrets.production.yaml`
 2. Local dev: `secrets/scripts/sync-env.sh` decrypts to `.env.staging` / `.env.production`
 3. CI: `deploy-supabase.yml` decrypts SOPS, iterates ALL keys, pushes to Supabase via `supabase secrets set`, removes stale ones
-4. GitHub Actions secrets (`SOPS_AGE_KEY`, `SUPABASE_ACCESS_TOKEN`, `SECRETS_REPO_SSH_KEY`, `SUPABASE_DB_PASSWORD_*`) are infrastructure-only — they let CI run, they don't contain app secrets
+4. Only 2 GitHub Actions secrets: `SOPS_AGE_KEY` (bootstrap decryption) and `SECRETS_REPO_SSH_KEY` (clone private submodule). Everything else comes from SOPS.
 
 ### Rules — NO EXCEPTIONS
 - **NEVER set secrets manually** — not via dashboard, CLI, MCP, or any other method. Fix the CI pipeline instead.
 - **NEVER hardcode secret names in CI workflows** — the deploy workflow iterates the SOPS yaml dynamically. Adding a secret to SOPS is enough.
-- **NEVER read or log individual secret values** — treat them as opaque.
+- **NEVER decrypt SOPS files or read secret values** — do not run `sops --decrypt`, do not grep for secret values, do not log them. Trust the CI pipeline to handle decryption. Treat all secrets as opaque.
 - **NEVER apply migrations via MCP `apply_migration` or `execute_sql`** — create files in `supabase/migrations/` and deploy through CI.
 - **NEVER deploy edge functions via MCP** — push to the branch and CI handles it.
 
