@@ -4,6 +4,7 @@
   import Titlebar from '$lib/components/Titlebar.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import AuthScreen from '$lib/components/AuthScreen.svelte';
+  import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
 
   let { children } = $props();
@@ -14,6 +15,7 @@
   });
 </script>
 
+<NightSkyBackground />
 <div class="app-shell">
   <Titlebar />
   {#if auth.loading}
@@ -42,11 +44,13 @@
   }
 
   .app-shell {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     height: 100vh;
     overflow: hidden;
-    background: var(--glass-bg);
+    background: transparent;
   }
 
   .body {

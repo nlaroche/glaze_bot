@@ -40,19 +40,19 @@
     error = '';
     loading = true;
 
-    // Shake phase
+    // Start shake loop and API call concurrently
     phase = 'shake';
-    await wait(800);
-
-    // Burst phase
-    phase = 'burst';
-    await wait(400);
+    const apiPromise = openBoosterPack();
 
     try {
-      const result = await openBoosterPack();
+      const result = await apiPromise;
       characters = result.characters;
       packsRemaining = result.packs_remaining;
       resetsAt = result.resets_at;
+
+      // Burst phase
+      phase = 'burst';
+      await wait(400);
 
       // Reveal phase — staggered card entry
       phase = 'reveal';
@@ -210,11 +210,14 @@
       {/each}
     </div>
 
-    {#if phase === 'done' && flippedCards.every(Boolean)}
-      <button class="open-btn continue-btn" onclick={resetToIdle} data-testid="continue-btn">
-        {packsRemaining > 0 ? 'Open Another' : 'Done'}
-      </button>
-    {/if}
+    <button
+      class="open-btn continue-btn"
+      class:continue-visible={phase === 'done' && flippedCards.every(Boolean)}
+      onclick={resetToIdle}
+      data-testid="continue-btn"
+    >
+      {packsRemaining > 0 ? 'Open Another' : 'Done'}
+    </button>
   {/if}
 </div>
 
@@ -338,6 +341,14 @@
 
   .continue-btn {
     margin-top: 16px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .continue-btn.continue-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .pack-count {
@@ -365,24 +376,23 @@
     font-size: 0.85rem;
   }
 
-  /* Shake animation */
+  /* Shake animation — loops while waiting for API */
   .shaking {
-    animation: shake 0.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) forwards;
+    animation: shake 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
     color: var(--color-pink);
   }
 
   @keyframes shake {
-    0% { transform: rotate(0deg); }
-    10% { transform: rotate(-3deg); }
-    20% { transform: rotate(3deg); }
-    30% { transform: rotate(-5deg); }
-    40% { transform: rotate(5deg); }
-    50% { transform: rotate(-8deg); }
-    60% { transform: rotate(8deg); }
-    70% { transform: rotate(-10deg); }
-    80% { transform: rotate(10deg); }
-    90% { transform: rotate(-5deg); }
-    100% { transform: rotate(0deg) scale(1.1); }
+    0%, 100% { transform: rotate(0deg); }
+    10% { transform: rotate(-5deg); }
+    20% { transform: rotate(5deg); }
+    30% { transform: rotate(-8deg); }
+    40% { transform: rotate(8deg); }
+    50% { transform: rotate(-10deg); }
+    60% { transform: rotate(10deg); }
+    70% { transform: rotate(-8deg); }
+    80% { transform: rotate(8deg); }
+    90% { transform: rotate(-3deg); }
   }
 
   /* Burst overlay */

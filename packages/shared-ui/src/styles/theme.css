@@ -3,18 +3,26 @@
 :root {
   /* Brand colors */
   --color-pink: #FDB5CE;
-  --color-navy: #132440;
-  --color-deep-blue: #132440;
+  --color-navy: #0a0e18;
+  --color-deep-blue: #0a0e18;
   --color-teal: #3B9797;
+
+  /* Surfaces */
+  --color-surface: #0f1420;
+  --color-surface-raised: #141a28;
+  --color-surface-overlay: #181f30;
+  --color-sidebar: #070a12;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-subtle: rgba(255, 255, 255, 0.03);
 
   /* Text */
   --color-text-primary: #E8ECF1;
-  --color-text-secondary: #A0AEC0;
-  --color-text-muted: #6B7A8D;
+  --color-text-secondary: #8793A6;
+  --color-text-muted: #4A5568;
 
   /* Glass / Frost UI */
-  --glass-bg: rgba(19, 36, 64, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(10, 14, 24, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.06);
   --glass-blur: 12px;
 
   /* Rarity colors */

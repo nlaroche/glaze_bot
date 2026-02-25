@@ -20,6 +20,7 @@
   });
 
   const navItems = [
+    { href: '/', label: 'Home', icon: '🏠' },
     { href: '/pack', label: 'Packs', icon: '📦' },
     { href: '/collection', label: 'Collection', icon: '🃏' },
     { href: '/settings', label: 'Settings', icon: '⚙' },
@@ -72,8 +73,8 @@
   .sidebar {
     width: 200px;
     flex-shrink: 0;
-    background: var(--glass-bg);
-    border-right: 1px solid var(--glass-border);
+    background: var(--color-sidebar);
+    border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     padding: 16px 0;
@@ -85,7 +86,7 @@
     font-weight: 700;
     color: var(--color-pink);
     padding: 0 16px 16px;
-    border-bottom: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--color-border);
     margin-bottom: 8px;
   }
 
@@ -117,5 +118,6 @@
   .content {
     flex: 1;
     overflow-y: auto;
+    background: var(--color-navy);
   }
 </style>

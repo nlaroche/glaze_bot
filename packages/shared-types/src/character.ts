@@ -11,7 +11,7 @@ export interface Personality {
 /** Character definition as stored in JSON files */
 export interface Character {
   name: string;
-  voice: string;
+  voice?: string;
   description: string;
   system_prompt: string;
   personality?: Personality;
