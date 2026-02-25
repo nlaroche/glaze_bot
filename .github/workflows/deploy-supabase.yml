@@ -24,11 +24,14 @@ jobs:
         with:
           version: latest
 
-      - name: Install SOPS
+      - name: Install SOPS and setup age key
         run: |
           curl -LO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
           chmod +x sops-v3.9.4.linux.amd64
           sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
 
       - name: Determine environment and decrypt secrets
         id: env
@@ -37,28 +40,23 @@ jobs:
 
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "project_id=tspalglvgypdktuhgqtf" >> "$GITHUB_OUTPUT"
-            echo "env_name=production" >> "$GITHUB_OUTPUT"
             SECRETS_FILE="secrets/secrets.production.yaml"
           else
             echo "project_id=zwpwjceczndedcoegerx" >> "$GITHUB_OUTPUT"
-            echo "env_name=staging" >> "$GITHUB_OUTPUT"
             SECRETS_FILE="secrets/secrets.staging.yaml"
           fi
 
-          # Decrypt SOPS — all values come from here
+          # Decrypt SOPS
           sops --decrypt "$SECRETS_FILE" > /tmp/decrypted.yaml
 
-          # Extract infrastructure values CI needs
-          DB_PASSWORD=$(grep 'SUPABASE_DB_PASSWORD' /tmp/decrypted.yaml | head -1 | sed 's/[^:]*: *//')
-          ACCESS_TOKEN=$(grep 'SUPABASE_ACCESS_TOKEN' /tmp/decrypted.yaml | head -1 | sed 's/[^:]*: *//')
+          # Extract infrastructure values (grep -m1 || true to handle missing keys)
+          DB_PASSWORD=$(grep -m1 'SUPABASE_DB_PASSWORD' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
+          ACCESS_TOKEN=$(grep -m1 'SUPABASE_ACCESS_TOKEN' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
 
-          # Mask and export
           echo "::add-mask::$DB_PASSWORD"
           echo "::add-mask::$ACCESS_TOKEN"
           echo "db_password=$DB_PASSWORD" >> "$GITHUB_OUTPUT"
           echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Link Supabase project
         run: supabase link --project-ref ${{ steps.env.outputs.project_id }}
@@ -90,13 +88,18 @@ jobs:
           PROJECT_REF="${{ steps.env.outputs.project_id }}"
 
           # Parse all key-value pairs from decrypted YAML
-          # Skip VITE_ (client-side), SUPABASE_DB_PASSWORD and SUPABASE_ACCESS_TOKEN (infrastructure only)
+          # Skip comments, VITE_ (client-side), and infrastructure-only keys
           declare -A sops_keys
           set_args=()
-          while IFS=': ' read -r key value; do
-            [[ -z "$key" || "$key" == \#* || "$key" == VITE_* ]] && continue
-            [[ "$key" == SUPABASE_DB_PASSWORD || "$key" == SUPABASE_ACCESS_TOKEN ]] && continue
-            value="$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          while IFS= read -r line; do
+            # Skip comments and empty lines
+            [[ -z "$line" || "$line" == \#* ]] && continue
+            key="${line%%:*}"
+            value="${line#*: }"
+            # Skip VITE_ and infrastructure keys
+            [[ "$key" == VITE_* || "$key" == SUPABASE_DB_PASSWORD || "$key" == SUPABASE_ACCESS_TOKEN ]] && continue
+            # Trim whitespace
+            value="$(echo "$value" | xargs)"
             [[ -z "$value" ]] && continue
             sops_keys["$key"]=1
             set_args+=("${key}=${value}")
@@ -124,7 +127,6 @@ jobs:
             supabase secrets unset "${unset_args[@]}" --project-ref "$PROJECT_REF"
           fi
 
-          # Clean up
           rm -f /tmp/decrypted.yaml
           echo "Secrets sync complete."
         env:
