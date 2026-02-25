@@ -140,23 +140,10 @@
           <div class="holo-overlay" class:legendary={isLegendary}></div>
         {/if}
 
-        <!-- Bottom info overlay — cleaner layout -->
+        <!-- Bottom info overlay -->
         <div class="info-overlay">
           <h3 class="name" data-testid="character-name">{character.name}</h3>
           <p class="description">{character.description}</p>
-          <div class="trait-row">
-            {#each displayTraits as trait, i}
-              <div class="trait-group" title={traitTitles[trait]}>
-                {#each Array(5) as _, d}
-                  <span
-                    class="dot"
-                    class:filled={d < traitDots(character.personality, trait)}
-                    class:revealed={revealedDelayed}
-                  ></span>
-                {/each}
-              </div>
-            {/each}
-          </div>
         </div>
       </div>
     </div>
@@ -534,7 +521,8 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 14px 14px 14px;
+    height: 110px;
+    padding: 14px;
     background: rgba(8, 12, 22, 0.8);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -546,7 +534,7 @@
   }
 
   .name {
-    font-size: 1.1rem;
+    font-size: 1.25rem;
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
@@ -557,15 +545,16 @@
   }
 
   .description {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     color: var(--color-text-secondary);
-    line-height: 1.35;
+    line-height: 1.4;
     overflow: hidden;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     margin: 0;
+    font-style: italic;
   }
 
   /* ── Stats: single compact row of dot groups ── */

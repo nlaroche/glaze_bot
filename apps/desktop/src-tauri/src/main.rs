@@ -4,6 +4,7 @@
 mod audio;
 mod capture;
 mod oauth;
+mod overlay;
 mod tts;
 
 use tauri::{
@@ -13,24 +14,21 @@ use tauri::{
 };
 
 fn main() {
+    // Must be set BEFORE WebView2 initializes — disables timer throttling in background/hidden windows
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
+    );
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(oauth::OAuthState {
             receiver: std::sync::Mutex::new(None),
         })
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
-
-            // Apply window vibrancy
-            #[cfg(target_os = "windows")]
-            {
-                use window_vibrancy::apply_acrylic;
-                let _ = apply_acrylic(&window, Some((19, 36, 64, 200)));
-            }
-            #[cfg(target_os = "macos")]
-            {
-                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-                let _ = apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None);
+            // Set overlay webview background to fully transparent at startup
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
             }
 
             // Build tray menu
@@ -68,8 +66,11 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                // Only hide-on-close for the main window, not the overlay
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -80,6 +81,8 @@ fn main() {
             tts::speak,
             oauth::start_oauth_server,
             oauth::wait_for_oauth_callback,
+            overlay::show_overlay,
+            overlay::hide_overlay,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

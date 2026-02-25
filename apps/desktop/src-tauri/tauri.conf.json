@@ -18,8 +18,20 @@
         "height": 768,
         "resizable": true,
         "fullscreen": false,
-        "transparent": true,
         "decorations": false
+      },
+      {
+        "label": "overlay",
+        "title": "GlazeBot Overlay",
+        "url": "/overlay",
+        "transparent": true,
+        "shadow": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "maximized": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": {

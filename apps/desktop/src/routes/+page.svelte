@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { CharacterCard } from '@glazebot/shared-ui';
+  import { CharacterCardRow, ContextMenu, CardViewer, ScreenPicker } from '@glazebot/shared-ui';
+  import type { CaptureSource } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
 
+  // Demo characters
   const demoCharacters: GachaCharacter[] = [
     {
       id: 'demo-common',
       user_id: 'demo',
-      name: 'Rookie Rex',
-      description: 'A laid-back commentator who keeps things chill. Gives simple callouts and relaxed vibes.',
+      name: 'Snapjaw',
+      description: '"The mic was already on when I sat down. I haven\'t left since."',
       backstory: '',
       system_prompt: '',
       personality: { energy: 35, positivity: 60, formality: 30, talkativeness: 45, attitude: 40, humor: 55 },
@@ -18,8 +20,8 @@
     {
       id: 'demo-rare',
       user_id: 'demo',
-      name: 'Sage Whisper',
-      description: 'Analytical mind with a calm voice. Breaks down plays and spots patterns others miss.',
+      name: 'Chad Worthington III',
+      description: '"I didn\'t choose the analyst desk. The analyst desk chose me, and then I sued it."',
       backstory: '',
       system_prompt: '',
       personality: { energy: 45, positivity: 70, formality: 65, talkativeness: 55, attitude: 30, humor: 40 },
@@ -30,8 +32,8 @@
     {
       id: 'demo-epic',
       user_id: 'demo',
-      name: 'Neon Blitz',
-      description: 'High-octane hype machine who turns every play into a highlight reel moment.',
+      name: 'Blobsworth',
+      description: '"They gave me a desk. I gave them content. We are not the same."',
       backstory: '',
       system_prompt: '',
       personality: { energy: 90, positivity: 80, formality: 20, talkativeness: 85, attitude: 60, humor: 75 },
@@ -42,8 +44,8 @@
     {
       id: 'demo-legendary',
       user_id: 'demo',
-      name: 'Oracle Vex',
-      description: 'Legendary strategist with a sarcastic edge. Predicts plays before they happen and roasts bad ones.',
+      name: 'Grug the Famished',
+      description: '"First I finish the pasta. Then I finish the game. Then I finish you."',
       backstory: '',
       system_prompt: '',
       personality: { energy: 70, positivity: 40, formality: 50, talkativeness: 75, attitude: 85, humor: 90 },
@@ -53,56 +55,914 @@
     },
   ];
 
-  let flippedStates = $state<Record<string, boolean>>({
-    'demo-common': true,
-    'demo-rare': true,
-    'demo-epic': true,
-    'demo-legendary': true,
-  });
+  const demoImages: Record<string, string> = {
+    'demo-common': '/testCharacter1.png',
+    'demo-rare': '/testCharacter2.png',
+    'demo-epic': '/testCharacter3.png',
+    'demo-legendary': '/testCharacter4.png',
+  };
 
-  function toggleFlip(id: string) {
-    flippedStates[id] = !flippedStates[id];
+  // Party state (3 slots)
+  let partySlots = $state<(GachaCharacter | null)[]>([
+    demoCharacters[0],
+    demoCharacters[2],
+    null,
+  ]);
+
+  // Collection = all demo characters not in party
+  let collection = $derived(
+    demoCharacters.filter((c) => !partySlots.some((s) => s?.id === c.id))
+  );
+
+  let searchQuery = $state('');
+  let filteredCollection = $derived(
+    searchQuery
+      ? collection.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : collection
+  );
+
+  function removeFromParty(index: number) {
+    partySlots[index] = null;
+    if (overlayOn) emitPartyToOverlay();
   }
+
+  function addToParty(char: GachaCharacter) {
+    const emptyIndex = partySlots.findIndex((s) => s === null);
+    if (emptyIndex !== -1) {
+      partySlots[emptyIndex] = char;
+      if (overlayOn) emitPartyToOverlay();
+    }
+  }
+
+  // Drag-and-drop
+  let dragOverPartySlot = $state<number | null>(null);
+  let dragOverCollection = $state(false);
+
+  function findCharById(id: string): GachaCharacter | undefined {
+    return demoCharacters.find((c) => c.id === id);
+  }
+
+  function handlePartySlotDrop(e: DragEvent, slotIndex: number) {
+    e.preventDefault();
+    dragOverPartySlot = null;
+    const charId = e.dataTransfer?.getData('text/plain');
+    if (!charId) return;
+    const char = findCharById(charId);
+    if (!char) return;
+
+    // If dragged from another party slot, remove from old slot
+    const oldSlot = partySlots.findIndex((s) => s?.id === charId);
+    if (oldSlot !== -1) partySlots[oldSlot] = null;
+
+    // If dropping onto an occupied slot, swap
+    const displaced = partySlots[slotIndex];
+    partySlots[slotIndex] = char;
+    if (displaced && oldSlot !== -1) {
+      partySlots[oldSlot] = displaced;
+    }
+  }
+
+  function handleCollectionDrop(e: DragEvent) {
+    e.preventDefault();
+    dragOverCollection = false;
+    const charId = e.dataTransfer?.getData('text/plain');
+    if (!charId) return;
+    // Remove from party if it was there
+    const slotIndex = partySlots.findIndex((s) => s?.id === charId);
+    if (slotIndex !== -1) partySlots[slotIndex] = null;
+  }
+
+  // Commentary state
+  let isRunning = $state(false);
+  let isPaused = $state(false);
+  let overlayOn = $state(false);
+
+  // Screen sharing state
+  let pickerOpen = $state(false);
+  let pickerInitialTab = $state<'screen' | 'app'>('screen');
+  let activeShare = $state<CaptureSource | null>(null);
+  let captureSources = $state<CaptureSource[]>([]);
+  let loadingSources = $state(false);
+
+  async function openPicker(tab: 'screen' | 'app') {
+    pickerInitialTab = tab;
+    loadingSources = true;
+    pickerOpen = true;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const sources: any[] = await invoke('list_sources');
+      captureSources = sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        type: s.source_type === 'monitor' ? 'screen' as const : 'window' as const,
+        thumbnail: s.thumbnail ?? undefined,
+      }));
+    } catch (e) {
+      console.error('Failed to list sources:', e);
+      captureSources = [];
+    }
+    loadingSources = false;
+  }
+
+  function handleSourceSelect(source: CaptureSource) {
+    activeShare = source;
+    pickerOpen = false;
+  }
+
+  function stopSharing() {
+    activeShare = null;
+  }
+
+  let overlayDemoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function emitPartyToOverlay() {
+    try {
+      const { emitTo } = await import('@tauri-apps/api/event');
+      const activeMembers = partySlots
+        .filter((s): s is GachaCharacter => s !== null)
+        .map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, image: demoImages[c.id] }));
+      await emitTo('overlay', 'party-updated', { members: activeMembers });
+    } catch (e) {
+      console.error('Failed to emit party:', e);
+    }
+  }
+
+  async function startOverlayDemo() {
+    const { emitTo } = await import('@tauri-apps/api/event');
+    let idx = 0;
+    function next() {
+      if (!overlayOn) return;
+      const msg = chatLog[idx % chatLog.length];
+      const image = demoImages[msg.characterId];
+      emitTo('overlay', 'chat-message', {
+        name: msg.name,
+        rarity: msg.rarity,
+        text: msg.text,
+        image,
+      });
+      idx++;
+      overlayDemoTimer = setTimeout(next, 4500 + Math.random() * 2000);
+    }
+    overlayDemoTimer = setTimeout(next, 1500);
+  }
+
+  async function toggleOverlay() {
+    overlayOn = !overlayOn;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      if (overlayOn) {
+        await invoke('show_overlay');
+        // Wait for overlay to signal it's ready
+        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+        const webview = getCurrentWebview();
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('[main] Overlay ready timeout, proceeding anyway');
+            resolve();
+          }, 5000);
+          webview.listen('overlay-ready', () => {
+            clearTimeout(timeout);
+            console.log('[main] Overlay ready signal received');
+            resolve();
+          });
+        });
+        await emitPartyToOverlay();
+        startOverlayDemo();
+      } else {
+        await invoke('hide_overlay');
+        if (overlayDemoTimer) clearTimeout(overlayDemoTimer);
+      }
+    } catch (e) {
+      console.error('Overlay toggle failed:', e);
+    }
+  }
+
+  // Placeholder chat messages
+  interface ChatMessage {
+    id: string;
+    characterId: string;
+    name: string;
+    rarity: string;
+    text: string;
+    time: string;
+  }
+
+  const chatLog: ChatMessage[] = [
+    { id: '1', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'Waiting for game capture to start...', time: '12:00' },
+    { id: '2', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: '*adjusts desk lamp* The anticipation is killing me.', time: '12:00' },
+    { id: '3', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'I see a desktop. Riveting content so far.', time: '12:01' },
+    { id: '4', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: 'Oh come on, this is clearly the calm before the storm. I can FEEL it.', time: '12:01' },
+    { id: '5', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'You said that about the screensaver too.', time: '12:02' },
+    { id: '6', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: 'And I was RIGHT. That was a top-tier screensaver.', time: '12:02' },
+  ];
+
+  // Context menu state
+  let contextMenu = $state<{ x: number; y: number; character: GachaCharacter; inPartySlot?: number } | null>(null);
+
+  function openContextMenu(e: MouseEvent, char: GachaCharacter, partySlot?: number) {
+    contextMenu = { x: e.clientX, y: e.clientY, character: char, inPartySlot: partySlot };
+  }
+
+  // Card viewer state
+  let viewerCharacter = $state<GachaCharacter | null>(null);
+
+  const rarityNameColor: Record<string, string> = {
+    common: 'var(--rarity-common)',
+    rare: 'var(--rarity-rare)',
+    epic: 'var(--rarity-epic)',
+    legendary: 'var(--rarity-legendary)',
+  };
 </script>
 
-<h1>GlazeBot</h1>
-<p class="subtitle">Your AI gaming companion</p>
+<svelte:head>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Michroma&display=swap"
+    rel="stylesheet"
+  />
+</svelte:head>
 
-<section>
-  <h2>Characters</h2>
-  <div class="card-showcase">
-    {#each demoCharacters as char (char.id)}
-      <CharacterCard
-        character={char}
-        flipped={flippedStates[char.id]}
-        onflip={() => toggleFlip(char.id)}
-        image={{ 'demo-common': '/testCharacter1.png', 'demo-rare': '/testCharacter2.png', 'demo-epic': '/testCharacter3.png', 'demo-legendary': '/testCharacter4.png' }[char.id]}
-      />
-    {/each}
+<div class="home">
+  <!-- Left / Center area -->
+  <div class="main-area">
+    <header class="title-bar">
+      <h1>GlazeBot <span class="tagline">// AI-Powered Commentary Engine</span></h1>
+    </header>
+
+    <!-- Commentary Log -->
+    <div class="chat-log">
+      {#each chatLog as msg (msg.id)}
+        <div class="chat-msg">
+          <div class="msg-avatar" style="border-color: {rarityNameColor[msg.rarity]}">
+            {#if demoImages[msg.characterId]}
+              <img src={demoImages[msg.characterId]} alt="" />
+            {:else}
+              <span class="msg-avatar-fallback">{msg.name[0]}</span>
+            {/if}
+          </div>
+          <div class="msg-body">
+            <div class="msg-header">
+              <span class="msg-name" style="color: {rarityNameColor[msg.rarity]}">{msg.name}</span>
+              <span class="msg-time">{msg.time}</span>
+            </div>
+            <p class="msg-text">{msg.text}</p>
+          </div>
+        </div>
+      {/each}
+    </div>
+
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <!-- Capture group / Active share -->
+      <div class="ctrl-group">
+        <span class="ctrl-label">Capture</span>
+        {#if activeShare}
+          <div class="share-inline">
+            <div class="share-pulse"></div>
+            <span class="share-name" title={activeShare.name}>{activeShare.name}</span>
+            <button class="share-x" onclick={stopSharing} title="Stop sharing">&times;</button>
+          </div>
+        {:else}
+          <div class="ctrl-group-buttons">
+            <button class="ctrl-btn capture" onclick={() => openPicker('screen')}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
+              Screen
+            </button>
+            <button class="ctrl-btn capture" onclick={() => openPicker('app')}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              App
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <div class="ctrl-divider"></div>
+
+      <!-- Playback group -->
+      <div class="ctrl-group">
+        <span class="ctrl-label">Commentary</span>
+        <div class="ctrl-group-buttons">
+          <button class="ctrl-btn start" disabled={isRunning} onclick={() => { isRunning = true; isPaused = false; }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
+            Start
+          </button>
+          <button class="ctrl-btn" disabled={!isRunning} onclick={() => { isPaused = !isPaused; }}>
+            {#if isPaused}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
+              Resume
+            {:else}
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>
+              Pause
+            {/if}
+          </button>
+          <button class="ctrl-btn stop" disabled={!isRunning} onclick={() => { isRunning = false; isPaused = false; }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+
+      <div class="ctrl-divider"></div>
+
+      <!-- Overlay toggle -->
+      <div class="ctrl-group">
+        <span class="ctrl-label">Overlay</span>
+        <button class="toggle" class:toggle-on={overlayOn} onclick={toggleOverlay} aria-pressed={overlayOn}>
+          <span class="toggle-knob"></span>
+        </button>
+      </div>
+    </div>
   </div>
-</section>
+
+  <!-- Right Panel -->
+  <aside class="right-panel">
+    <div class="panel-section party-section">
+      <div class="panel-header">
+        <h2>Active Party</h2>
+        <div class="party-actions">
+          <button class="small-btn">Save</button>
+          <button class="small-btn">Load</button>
+        </div>
+      </div>
+      <div class="party-slots">
+        {#each partySlots as slot, i}
+          <div
+            class="drop-zone"
+            class:drop-active={dragOverPartySlot === i}
+            ondragover={(e) => { e.preventDefault(); dragOverPartySlot = i; }}
+            ondragleave={() => { if (dragOverPartySlot === i) dragOverPartySlot = null; }}
+            ondrop={(e) => handlePartySlotDrop(e, i)}
+          >
+            {#if slot}
+              <CharacterCardRow
+                character={slot}
+                image={demoImages[slot.id]}
+                draggable={true}
+                onremove={() => removeFromParty(i)}
+                oncontextmenu={(e) => openContextMenu(e, slot, i)}
+              />
+            {:else}
+              <div class="empty-slot">
+                <span class="plus">+</span>
+                <span class="empty-label">Drag character here</span>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    <div class="panel-divider"></div>
+
+    <div class="panel-section collection-section">
+      <div class="panel-header">
+        <h2>Collection</h2>
+      </div>
+      <input
+        class="search-input"
+        type="text"
+        placeholder="Search characters..."
+        bind:value={searchQuery}
+      />
+      <div
+        class="collection-list"
+        class:drop-active={dragOverCollection}
+        ondragover={(e) => { e.preventDefault(); dragOverCollection = true; }}
+        ondragleave={() => { dragOverCollection = false; }}
+        ondrop={handleCollectionDrop}
+      >
+        {#each filteredCollection as char (char.id)}
+          <CharacterCardRow
+            character={char}
+            image={demoImages[char.id]}
+            draggable={true}
+            onclick={() => addToParty(char)}
+            oncontextmenu={(e) => openContextMenu(e, char)}
+          />
+        {:else}
+          <p class="empty-msg">
+            {searchQuery ? 'No matches found.' : 'All characters are in your party!'}
+          </p>
+        {/each}
+      </div>
+    </div>
+  </aside>
+</div>
+
+{#if contextMenu}
+  <ContextMenu
+    x={contextMenu.x}
+    y={contextMenu.y}
+    onclose={() => { contextMenu = null; }}
+    items={[
+      {
+        label: 'View Card',
+        icon: '🃏',
+        onclick: () => { viewerCharacter = contextMenu!.character; },
+      },
+      ...(contextMenu.inPartySlot !== undefined
+        ? [
+            { label: '', icon: '', onclick: () => {}, separator: true },
+            {
+              label: 'Remove from Party',
+              icon: '✕',
+              onclick: () => { removeFromParty(contextMenu!.inPartySlot!); },
+            },
+          ]
+        : []),
+    ]}
+  />
+{/if}
+
+<CardViewer
+  character={viewerCharacter}
+  image={viewerCharacter ? demoImages[viewerCharacter.id] : undefined}
+  onclose={() => { viewerCharacter = null; }}
+/>
+
+<ScreenPicker
+  open={pickerOpen}
+  initialTab={pickerInitialTab}
+  sources={captureSources}
+  loading={loadingSources}
+  onselect={handleSourceSelect}
+  onclose={() => { pickerOpen = false; }}
+/>
 
 <style>
-  h1 {
-    font-size: 2rem;
-    color: var(--color-pink);
-    margin-bottom: 4px;
-  }
-
-  .subtitle {
-    color: var(--color-text-secondary);
-    margin-bottom: 32px;
-  }
-
-  h2 {
-    font-size: 1.25rem;
-    color: var(--color-text-primary);
-    margin-bottom: 16px;
-  }
-
-  .card-showcase {
+  .home {
     display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
+    height: 100%;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ── Main area (left/center) ── */
+  .main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .title-bar {
+    padding: 16px 20px 12px;
+    flex-shrink: 0;
+  }
+
+  h1 {
+    font-family: 'Michroma', sans-serif;
+    font-size: 1.6rem;
+    margin: 0;
+    color: #c0c8d4;
+    letter-spacing: 1px;
+    line-height: 1.3;
+  }
+
+  .tagline {
+    font-size: 0.7rem;
+    font-family: 'Michroma', sans-serif;
+    color: #5a6474;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── Chat log ── */
+  .chat-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chat-msg {
+    display: flex;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    transition: background 0.1s;
+  }
+
+  .chat-msg:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .msg-avatar {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+    background: rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+  }
+
+  .msg-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+  }
+
+  .msg-avatar-fallback {
+    font-size: 0.7rem;
+    color: var(--color-text-muted, #5a6474);
+    font-weight: 600;
+  }
+
+  .msg-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .msg-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .msg-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .msg-time {
+    font-size: 0.65rem;
+    color: var(--color-text-muted, #5a6474);
+  }
+
+  .msg-text {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary, #8a94a6);
+    line-height: 1.4;
+  }
+
+  /* ── Inline share indicator (replaces capture buttons) ── */
+  .share-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(59, 151, 151, 0.08);
+    border: 1px solid rgba(59, 151, 151, 0.2);
+    max-width: 180px;
+  }
+
+  .share-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3B9797;
+    box-shadow: 0 0 5px rgba(59, 151, 151, 0.6);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .share-name {
+    flex: 1;
+    font-size: 0.72rem;
+    color: #5bcece;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .share-x {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: none;
+    background: rgba(255, 80, 80, 0.15);
+    color: #ff6b6b;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+
+  .share-x:hover {
+    background: rgba(255, 80, 80, 0.3);
+  }
+
+  /* ── Controls bar ── */
+  .controls-bar {
+    flex-shrink: 0;
+    padding: 10px 20px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .ctrl-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--color-text-muted, #5a6474);
+    font-weight: 600;
+  }
+
+  .ctrl-group-buttons {
+    display: flex;
+    gap: 4px;
+  }
+
+  .ctrl-divider {
+    width: 1px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+    align-self: flex-end;
+  }
+
+  .ctrl-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-secondary, #8a94a6);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary, #e2e8f0);
+  }
+
+  .ctrl-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .ctrl-btn.capture {
+    color: var(--rarity-rare, #3B9797);
+    border-color: rgba(59, 151, 151, 0.2);
+  }
+
+  .ctrl-btn.capture:hover:not(:disabled) {
+    background: rgba(59, 151, 151, 0.1);
+    border-color: rgba(59, 151, 151, 0.35);
+  }
+
+  .ctrl-btn.start {
+    color: #5bca7a;
+    border-color: rgba(91, 202, 122, 0.2);
+  }
+
+  .ctrl-btn.start:hover:not(:disabled) {
+    background: rgba(91, 202, 122, 0.1);
+    border-color: rgba(91, 202, 122, 0.35);
+  }
+
+  .ctrl-btn.stop {
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.2);
+  }
+
+  .ctrl-btn.stop:hover:not(:disabled) {
+    background: rgba(255, 107, 107, 0.1);
+    border-color: rgba(255, 107, 107, 0.35);
+  }
+
+  /* ── Toggle switch ── */
+  .toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s, border-color 0.2s;
+  }
+
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-text-muted, #5a6474);
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .toggle.toggle-on {
+    background: rgba(176, 106, 255, 0.2);
+    border-color: rgba(176, 106, 255, 0.4);
+  }
+
+  .toggle.toggle-on .toggle-knob {
+    transform: translateX(18px);
+    background: var(--rarity-epic, #B06AFF);
+  }
+
+  /* ── Right panel ── */
+  .right-panel {
+    width: 280px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+  }
+
+  .panel-section {
+    padding: 14px 12px;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .panel-header h2 {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted, #5a6474);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .party-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .small-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-muted, #5a6474);
+    font-size: 0.65rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .small-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-secondary, #8a94a6);
+  }
+
+  .party-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .drop-zone {
+    border-radius: 10px;
+    border: 1.5px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .drop-zone.drop-active {
+    border-color: rgba(59, 151, 151, 0.5);
+    background: rgba(59, 151, 151, 0.05);
+  }
+
+  .empty-slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    background: transparent;
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 56px;
+    color: var(--color-text-muted, #5a6474);
+  }
+
+  .drop-zone.drop-active .empty-slot {
+    border-color: rgba(59, 151, 151, 0.4);
+    background: rgba(59, 151, 151, 0.05);
+  }
+
+  .plus {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .empty-label {
+    font-size: 0.78rem;
+  }
+
+  .panel-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 0 12px;
+  }
+
+  .collection-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-primary, #e2e8f0);
+    font-size: 0.78rem;
+    outline: none;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+  }
+
+  .search-input::placeholder {
+    color: var(--color-text-muted, #5a6474);
+  }
+
+  .search-input:focus {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .collection-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+    padding: 2px;
+  }
+
+  .collection-list.drop-active {
+    border-color: rgba(59, 151, 151, 0.4);
+    background: rgba(59, 151, 151, 0.03);
+  }
+
+  /* Dim collection items — they're not active party members */
+  .collection-list :global(.card-row) {
+    opacity: 0.5;
+    filter: brightness(0.8);
+    transition: opacity 0.2s, filter 0.2s, transform 0.2s, box-shadow 0.2s;
+  }
+
+  .collection-list :global(.card-row:hover) {
+    opacity: 1;
+    filter: brightness(1);
+  }
+
+  .empty-msg {
+    font-size: 0.78rem;
+    color: var(--color-text-muted, #5a6474);
+    text-align: center;
+    padding: 16px 0;
+    margin: 0;
   }
 </style>

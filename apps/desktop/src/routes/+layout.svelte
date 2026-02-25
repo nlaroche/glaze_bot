@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import Titlebar from '$lib/components/Titlebar.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import AuthScreen from '$lib/components/AuthScreen.svelte';
@@ -10,29 +11,37 @@
   let { children } = $props();
   const auth = getAuthState();
 
+  const isOverlay = $derived(page.url.pathname.startsWith('/overlay'));
+
   onMount(() => {
-    initializeAuth();
+    if (!isOverlay) {
+      initializeAuth();
+    }
   });
 </script>
 
-<NightSkyBackground />
-<div class="app-shell">
-  <Titlebar />
-  {#if auth.loading}
-    <div class="loading-screen">
-      <p>Loading...</p>
-    </div>
-  {:else if !auth.isAuthenticated}
-    <AuthScreen />
-  {:else}
-    <div class="body">
-      <Sidebar />
-      <main class="content">
-        {@render children()}
-      </main>
-    </div>
-  {/if}
-</div>
+{#if isOverlay}
+  {@render children()}
+{:else}
+  <NightSkyBackground />
+  <div class="app-shell">
+    <Titlebar />
+    {#if auth.loading}
+      <div class="loading-screen">
+        <p>Loading...</p>
+      </div>
+    {:else if !auth.isAuthenticated}
+      <AuthScreen />
+    {:else}
+      <div class="body">
+        <Sidebar />
+        <main class="content">
+          {@render children()}
+        </main>
+      </div>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .loading-screen {

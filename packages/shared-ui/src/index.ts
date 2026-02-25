@@ -1,7 +1,13 @@
 export { default as ProceduralAvatar } from './gacha/ProceduralAvatar.svelte';
 export { default as RarityBadge } from './gacha/RarityBadge.svelte';
 export { default as CharacterCard } from './gacha/CharacterCard.svelte';
+export { default as CharacterCardRow } from './gacha/CharacterCardRow.svelte';
 export { default as PackOpener } from './gacha/PackOpener.svelte';
 export { default as CollectionGrid } from './gacha/CollectionGrid.svelte';
 export { default as PartyManager } from './gacha/PartyManager.svelte';
 export { default as CharacterDetail } from './gacha/CharacterDetail.svelte';
+export { default as Spotlight } from './overlay/Spotlight.svelte';
+export { default as ContextMenu } from './overlay/ContextMenu.svelte';
+export { default as CardViewer } from './overlay/CardViewer.svelte';
+export { default as ScreenPicker } from './overlay/ScreenPicker.svelte';
+export type { CaptureSource } from './overlay/ScreenPicker.svelte';
