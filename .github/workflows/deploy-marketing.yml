@@ -6,6 +6,7 @@ on:
     paths:
       - "apps/marketing/**"
       - "packages/**"
+      - ".github/workflows/deploy-marketing.yml"
 
 jobs:
   deploy:
@@ -13,12 +14,51 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SECRETS_REPO_SSH_KEY }}
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
+
+      - name: Install SOPS and setup age key
+        run: |
+          curl -LO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+          chmod +x sops-v3.9.4.linux.amd64
+          sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+          chmod 600 ~/.config/sops/age/keys.txt
+
+      - name: Decrypt secrets
+        id: secrets
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            SECRETS_FILE="secrets/secrets.production.yaml"
+          else
+            SECRETS_FILE="secrets/secrets.staging.yaml"
+          fi
+
+          sops --decrypt "$SECRETS_FILE" > /tmp/decrypted.yaml
+
+          CF_API_TOKEN=$(grep -m1 'CF_API_TOKEN' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
+          CF_ACCOUNT_ID=$(grep -m1 'CF_ACCOUNT_ID' /tmp/decrypted.yaml | sed 's/[^:]*: *//' || true)
+
+          echo "::add-mask::$CF_API_TOKEN"
+          echo "::add-mask::$CF_ACCOUNT_ID"
+          echo "cf_api_token=$CF_API_TOKEN" >> "$GITHUB_OUTPUT"
+          echo "cf_account_id=$CF_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+
+          rm -f /tmp/decrypted.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -28,7 +68,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          apiToken: ${{ steps.secrets.outputs.cf_api_token }}
+          accountId: ${{ steps.secrets.outputs.cf_account_id }}
           workingDirectory: apps/marketing
           command: pages deploy dist --project-name=glazebot-marketing --branch=${{ github.ref_name }}
