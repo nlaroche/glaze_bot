@@ -10,8 +10,8 @@ build/
 .turbo/
 
 # Tauri / Rust
-src-tauri/target/
-src-tauri/gen/
+**/src-tauri/target/
+**/src-tauri/gen/
 *.rs.bk
 
 # Environment
