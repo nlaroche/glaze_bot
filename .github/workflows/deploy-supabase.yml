@@ -24,29 +24,52 @@ jobs:
         with:
           version: latest
 
-      - name: Determine environment
+      - name: Install SOPS
+        run: |
+          curl -LO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+          chmod +x sops-v3.9.4.linux.amd64
+          sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops
+
+      - name: Determine environment and decrypt secrets
         id: env
         run: |
+          set -euo pipefail
+
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "project_id=tspalglvgypdktuhgqtf" >> "$GITHUB_OUTPUT"
             echo "env_name=production" >> "$GITHUB_OUTPUT"
-            echo "db_password=${{ secrets.SUPABASE_DB_PASSWORD_PROD }}" >> "$GITHUB_OUTPUT"
+            SECRETS_FILE="secrets/secrets.production.yaml"
           else
             echo "project_id=zwpwjceczndedcoegerx" >> "$GITHUB_OUTPUT"
             echo "env_name=staging" >> "$GITHUB_OUTPUT"
-            echo "db_password=${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}" >> "$GITHUB_OUTPUT"
+            SECRETS_FILE="secrets/secrets.staging.yaml"
           fi
+
+          # Decrypt SOPS — all values come from here
+          sops --decrypt "$SECRETS_FILE" > /tmp/decrypted.yaml
+
+          # Extract infrastructure values CI needs
+          DB_PASSWORD=$(grep 'SUPABASE_DB_PASSWORD' /tmp/decrypted.yaml | head -1 | sed 's/[^:]*: *//')
+          ACCESS_TOKEN=$(grep 'SUPABASE_ACCESS_TOKEN' /tmp/decrypted.yaml | head -1 | sed 's/[^:]*: *//')
+
+          # Mask and export
+          echo "::add-mask::$DB_PASSWORD"
+          echo "::add-mask::$ACCESS_TOKEN"
+          echo "db_password=$DB_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "access_token=$ACCESS_TOKEN" >> "$GITHUB_OUTPUT"
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Link Supabase project
         run: supabase link --project-ref ${{ steps.env.outputs.project_id }}
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ steps.env.outputs.access_token }}
           SUPABASE_DB_PASSWORD: ${{ steps.env.outputs.db_password }}
 
       - name: Push database migrations
         run: supabase db push
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ steps.env.outputs.access_token }}
           SUPABASE_DB_PASSWORD: ${{ steps.env.outputs.db_password }}
 
       - name: Deploy edge functions
@@ -58,49 +81,38 @@ jobs:
             supabase functions deploy "$fn_name" --project-ref ${{ steps.env.outputs.project_id }}
           done
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
-      - name: Install SOPS
-        run: |
-          curl -LO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
-          chmod +x sops-v3.9.4.linux.amd64
-          sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops
+          SUPABASE_ACCESS_TOKEN: ${{ steps.env.outputs.access_token }}
 
       - name: Sync secrets from SOPS to Supabase
         run: |
           set -euo pipefail
 
           PROJECT_REF="${{ steps.env.outputs.project_id }}"
-          ENV_NAME="${{ steps.env.outputs.env_name }}"
-          SECRETS_FILE="secrets/secrets.${ENV_NAME}.yaml"
 
-          # Decrypt SOPS file
-          sops --decrypt "$SECRETS_FILE" > /tmp/decrypted.yaml
-
-          # Parse all key-value pairs from YAML (skip VITE_ prefixed — those are client-side only)
+          # Parse all key-value pairs from decrypted YAML
+          # Skip VITE_ (client-side), SUPABASE_DB_PASSWORD and SUPABASE_ACCESS_TOKEN (infrastructure only)
           declare -A sops_keys
           set_args=()
           while IFS=': ' read -r key value; do
-            # Skip empty lines, comments, VITE_ keys
             [[ -z "$key" || "$key" == \#* || "$key" == VITE_* ]] && continue
-            # Trim whitespace
+            [[ "$key" == SUPABASE_DB_PASSWORD || "$key" == SUPABASE_ACCESS_TOKEN ]] && continue
             value="$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
             [[ -z "$value" ]] && continue
             sops_keys["$key"]=1
             set_args+=("${key}=${value}")
           done < /tmp/decrypted.yaml
 
-          # Set all secrets from SOPS
+          # Set all secrets
           if [ ${#set_args[@]} -gt 0 ]; then
             echo "Setting ${#set_args[@]} secrets on project $PROJECT_REF"
             supabase secrets set "${set_args[@]}" --project-ref "$PROJECT_REF"
           fi
 
-          # Get current secrets and remove any not in SOPS
-          # (skip Supabase built-in secrets that start with SUPABASE_)
+          # Remove stale secrets (skip Supabase built-ins)
           existing=$(supabase secrets list --project-ref "$PROJECT_REF" 2>/dev/null | tail -n +3 | awk '{print $1}')
           unset_args=()
           for existing_key in $existing; do
+            [[ -z "$existing_key" ]] && continue
             [[ "$existing_key" == SUPABASE_* ]] && continue
             if [[ -z "${sops_keys[$existing_key]+x}" ]]; then
               echo "Removing stale secret: $existing_key"
@@ -116,5 +128,4 @@ jobs:
           rm -f /tmp/decrypted.yaml
           echo "Secrets sync complete."
         env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ steps.env.outputs.access_token }}
