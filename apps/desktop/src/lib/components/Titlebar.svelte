@@ -50,7 +50,7 @@
   }
 
   .title {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 12px;
     font-weight: 400;
     color: #c0c8d4;
@@ -58,7 +58,7 @@
   }
 
   .tagline {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 9px;
     font-weight: 400;
     color: #6B7788;

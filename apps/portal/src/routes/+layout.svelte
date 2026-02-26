@@ -116,7 +116,7 @@
 
   /* ─── Sidebar ─── */
   .sidebar {
-    width: 180px;
+    width: 220px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -130,26 +130,26 @@
   .sidebar-brand {
     display: flex;
     flex-direction: column;
-    padding: var(--space-4) var(--space-4) var(--space-3-5);
+    padding: var(--space-5) var(--space-5) var(--space-4);
     border-bottom: 1px solid var(--color-border);
     margin-bottom: var(--space-1);
   }
 
   .brand-title {
-    font-family: 'Michroma', sans-serif;
-    font-size: var(--font-brand-md);
+    font-family: var(--font-brand);
+    font-size: var(--font-xl);
     font-weight: 400;
-    color: var(--color-text-primary);
-    letter-spacing: 1px;
+    color: var(--color-pink);
+    letter-spacing: 2px;
   }
 
   .brand-tagline {
-    font-family: 'Michroma', sans-serif;
-    font-size: var(--font-brand-sm);
+    font-family: var(--font-brand);
+    font-size: var(--font-xs);
     font-weight: 400;
     color: var(--color-text-muted);
     letter-spacing: 1.5px;
-    margin-top: var(--space-0-5);
+    margin-top: var(--space-1);
   }
 
   .nav-items {

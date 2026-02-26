@@ -9,3 +9,14 @@ export {
   characterTaglineKey,
   characterMediaPrefix,
 } from "./r2.ts";
+export {
+  weightedPick,
+  rollTokenPools,
+  buildDirective,
+} from "./tokenPools.ts";
+export type {
+  TokenPoolEntry,
+  TokenPool,
+  TokenPools,
+  TokenRoll,
+} from "./tokenPools.ts";

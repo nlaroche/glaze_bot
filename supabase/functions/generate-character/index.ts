@@ -8,7 +8,10 @@ import {
   uploadToPublicBucket,
   characterPortraitKey,
   characterTaglineKey,
+  rollTokenPools,
+  buildDirective,
 } from "../_shared/mod.ts";
+import type { TokenPools } from "../_shared/mod.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
 const DASHSCOPE_BASE_URL =
@@ -143,6 +146,11 @@ async function generateCharacter(
   const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.`;
   const temperature = baseTemp + quality.tempBoost;
 
+  // Roll token pools for diversity (if configured)
+  const tokenPools = config.tokenPools as TokenPools | undefined;
+  const tokenRoll = tokenPools ? rollTokenPools(tokenPools) : null;
+  const directive = tokenRoll ? buildDirective(tokenRoll) : "";
+
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -158,7 +166,7 @@ async function generateCharacter(
           { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Generate a ${rarity} rarity character. Return ONLY valid JSON.`,
+            content: `Generate a ${rarity} rarity character.${directive} Return ONLY valid JSON.`,
           },
         ],
         max_tokens: quality.maxTokens,

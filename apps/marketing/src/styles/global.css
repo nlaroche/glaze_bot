@@ -15,13 +15,7 @@
   font-style: italic;
   font-display: swap;
 }
-@font-face {
-  font-family: 'Michroma';
-  src: url('/fonts/Michroma-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
+/* Plus Jakarta Sans loaded via Layout.astro <link> tag */
 
 /* ── Design Tokens ── */
 :root {
@@ -62,7 +56,7 @@
 /* ── Tailwind Theme ── */
 @theme {
   --font-sans: 'Satoshi', system-ui, sans-serif;
-  --font-display: 'Michroma', system-ui, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
   --color-navy: #0a0e18;
   --color-pink: #FDB5CE;
   --color-teal: #3B9797;

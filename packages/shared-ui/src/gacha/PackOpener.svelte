@@ -8,9 +8,13 @@
   interface Props {
     characters?: GachaCharacter[];
     images?: Record<string, string>;
+    onrequestopen?: () => Promise<{ characters: GachaCharacter[]; images: Record<string, string> }>;
   }
 
-  let { characters = [], images = {} }: Props = $props();
+  let { characters = [], images: initialImages = {}, onrequestopen }: Props = $props();
+
+  // Local mutable copy so onrequestopen can update it mid-animation
+  let images = $state<Record<string, string>>({...initialImages});
 
   let phase: Phase = $state('idle');
   let packCards: GachaCharacter[] = $state([]);
@@ -85,7 +89,50 @@
   });
 
   async function openPack() {
-    if (phase !== 'idle' || characters.length === 0) return;
+    if (phase !== 'idle') return;
+
+    // When onrequestopen is provided, fetch cards from it; otherwise use local pool
+    if (onrequestopen) {
+      // Start animation immediately, fetch in parallel
+      flippedCards = [false, false, false];
+      cardVisible = [false, false, false];
+
+      const fetchPromise = onrequestopen();
+
+      // Shake phase runs while we fetch
+      phase = 'shake';
+      shakeIntensity = 0;
+      spawnWindStreaks();
+      const shakeStart = performance.now();
+      const shakeDuration = 2000;
+      const [result] = await Promise.all([
+        fetchPromise,
+        new Promise<void>((resolve) => {
+          function tick(now: number) {
+            const elapsed = now - shakeStart;
+            const t = Math.min(1, elapsed / shakeDuration);
+            shakeIntensity = t * t * t;
+            if (t < 1) requestAnimationFrame(tick);
+            else resolve();
+          }
+          requestAnimationFrame(tick);
+        }),
+      ]);
+
+      if (result.characters.length === 0) {
+        resetToIdle();
+        return;
+      }
+
+      packCards = result.characters;
+      images = result.images;
+
+      // Continue to tear phase (skip the shake section below)
+      await doTearBurstReveal();
+      return;
+    }
+
+    if (characters.length === 0) return;
 
     packCards = pickThreeCards();
     flippedCards = [false, false, false];
@@ -112,6 +159,10 @@
       requestAnimationFrame(tick);
     });
 
+    await doTearBurstReveal();
+  }
+
+  async function doTearBurstReveal() {
     // Tear phase
     phase = 'tear';
     windStreaks = [];

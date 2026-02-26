@@ -29,6 +29,7 @@ export {
   updateCharacter,
   getAllCharacters,
   deleteCharacter,
+  deleteAllCharacters,
   purgeCharacterMedia,
   purgeAllDeletedCharacters,
   getDeletedCharacters,
@@ -37,5 +38,9 @@ export {
   syncFishVoices,
   getFishVoices,
   generativeTts,
+  getCharacterTemplates,
+  rollTokenPools,
+  buildDirective,
+  weightedPick,
 } from "./gacha.js";
-export type { FishVoice } from "./gacha.js";
+export type { FishVoice, TokenPool, TokenPools, TokenPoolEntry, TokenRoll } from "./gacha.js";

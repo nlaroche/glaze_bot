@@ -34,7 +34,7 @@
 <svelte:head>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link href="https://fonts.googleapis.com/css2?family=Michroma&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 </svelte:head>
 
 {#if isOverlay}
@@ -88,7 +88,7 @@
   .content {
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding: var(--space-6);
     border-radius: 0;
     border-top: none;
   }

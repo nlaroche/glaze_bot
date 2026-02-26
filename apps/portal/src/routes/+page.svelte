@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ProceduralAvatar, RarityBadge } from '@glazebot/shared-ui';
 
-  // Demo character data for the component showcase
+  // Demo data
   const demoCharacters = [
     { name: 'Jinx McFlare', rarity: 'legendary' as const, seed: 'jinx-abc', description: 'Explosive hype caster who loses it during clutch plays. Screams at headshots.' },
     { name: 'Coach Stonewall', rarity: 'epic' as const, seed: 'coach-xyz', description: 'Tactical analyst. Breaks down every play like it\'s a championship final.' },
@@ -18,42 +18,48 @@
     { action: 'Opened a booster pack', time: '1 day ago', detail: '2 Rares, 1 Common' },
     { action: 'Created a party', time: '2 days ago', detail: 'Squad Alpha' },
   ];
-
-  let activeBtn = $state('primary');
 </script>
 
 <div class="home">
-  <!-- Header -->
+  <!-- ── Page Header ── -->
   <div class="page-header">
     <h1 class="page-title">Dashboard</h1>
-    <p class="page-subtitle">Component playground — experimenting with styles</p>
+    <p class="page-subtitle">// Overview</p>
   </div>
 
-  <!-- Stats Row -->
+  <!-- ── Stats Row ── -->
   <div class="stats-row">
     <div class="stat-card">
-      <div class="stat-icon">🃏</div>
+      <div class="stat-icon stat-icon-teal">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="16" height="16" rx="3"/><path d="M8 8h6M8 11h6M8 14h3"/></svg>
+      </div>
       <div class="stat-body">
         <span class="stat-value">24</span>
         <span class="stat-label">Characters</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon">📦</div>
+      <div class="stat-icon stat-icon-epic">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="12" height="18" rx="2"/><path d="M5 7h12M5 15h12"/></svg>
+      </div>
       <div class="stat-body">
         <span class="stat-value">3</span>
         <span class="stat-label">Packs Today</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon">⭐</div>
+      <div class="stat-icon stat-icon-gold">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11,2 13.5,8 20,8.5 15,13 16.5,20 11,16 5.5,20 7,13 2,8.5 8.5,8"/></svg>
+      </div>
       <div class="stat-body">
         <span class="stat-value">2</span>
         <span class="stat-label">Legendaries</span>
       </div>
     </div>
     <div class="stat-card">
-      <div class="stat-icon">🎮</div>
+      <div class="stat-icon stat-icon-pink">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><polyline points="11,7 11,11 14,13"/></svg>
+      </div>
       <div class="stat-body">
         <span class="stat-value">12h</span>
         <span class="stat-label">Watch Time</span>
@@ -61,42 +67,40 @@
     </div>
   </div>
 
+  <!-- ── Two Column ── -->
   <div class="two-col">
-    <!-- Left: Character Cards -->
-    <div class="section">
-      <div class="section-header">
-        <h2 class="section-title">Your Characters</h2>
+    <!-- Left: Characters -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Your Characters</h2>
         <button class="btn btn-ghost btn-sm">View All</button>
       </div>
-
       <div class="character-grid">
         {#each demoCharacters as char}
-          <div class="char-card rarity-border-{char.rarity}">
-            <div class="char-card-inner">
-              <div class="char-card-top">
-                <ProceduralAvatar seed={char.seed} rarity={char.rarity} size={56} />
-                <div class="char-card-meta">
-                  <span class="char-name">{char.name}</span>
-                  <RarityBadge rarity={char.rarity} />
-                </div>
+          <div class="char-card rarity-accent-{char.rarity}">
+            <div class="char-top">
+              <ProceduralAvatar seed={char.seed} rarity={char.rarity} size={48} />
+              <div class="char-meta">
+                <span class="char-name">{char.name}</span>
+                <RarityBadge rarity={char.rarity} />
               </div>
-              <p class="char-desc">{char.description}</p>
-              <div class="char-card-footer">
-                <button class="btn btn-outline btn-xs">Details</button>
-                <button class="btn btn-primary btn-xs">Add to Party</button>
-              </div>
+            </div>
+            <p class="char-desc">{char.description}</p>
+            <div class="char-actions">
+              <button class="btn btn-outline btn-xs">Details</button>
+              <button class="btn btn-primary btn-xs">Add to Party</button>
             </div>
           </div>
         {/each}
       </div>
     </div>
 
-    <!-- Right: Activity + Buttons -->
+    <!-- Right column -->
     <div class="right-col">
-      <!-- Activity List -->
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Recent Activity</h2>
+      <!-- Activity -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Recent Activity</h2>
         </div>
         <div class="activity-list">
           {#each recentActivity as item, i}
@@ -112,30 +116,30 @@
         </div>
       </div>
 
-      <!-- Button Showcase -->
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Buttons</h2>
+      <!-- Buttons -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Buttons</h2>
         </div>
-        <div class="button-grid">
-          <button class="btn btn-primary" onclick={() => activeBtn = 'primary'}>Primary</button>
+        <div class="button-row">
+          <button class="btn btn-primary">Primary</button>
           <button class="btn btn-secondary">Secondary</button>
           <button class="btn btn-outline">Outline</button>
           <button class="btn btn-ghost">Ghost</button>
           <button class="btn btn-danger">Danger</button>
-          <button class="btn btn-primary" disabled>Disabled</button>
         </div>
-        <div class="button-grid" style="margin-top: 12px;">
+        <div class="button-row">
           <button class="btn btn-primary btn-sm">Small</button>
           <button class="btn btn-primary">Medium</button>
           <button class="btn btn-primary btn-lg">Large</button>
+          <button class="btn btn-primary" disabled>Disabled</button>
         </div>
       </div>
 
-      <!-- Playing Card Preview -->
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Card Backs</h2>
+      <!-- Card Backs -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title">Card Backs</h2>
         </div>
         <div class="card-back-row">
           {#each ['common', 'rare', 'epic', 'legendary'] as rarity}
@@ -157,14 +161,14 @@
 
 <style>
   .home {
-    padding: var(--space-8);
+    padding: var(--space-7) var(--space-8);
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
     max-width: 1200px;
   }
 
-  /* Header */
+  /* ── Page Header ── */
   .page-header {
     display: flex;
     flex-direction: column;
@@ -172,21 +176,21 @@
   }
 
   .page-title {
-    font-family: 'Michroma', sans-serif;
-    font-size: var(--font-xl);
+    font-family: var(--font-brand);
+    font-size: var(--font-4xl);
     font-weight: 400;
-    color: var(--color-heading);
+    color: var(--color-pink);
     letter-spacing: 1px;
   }
 
   .page-subtitle {
-    font-family: 'Michroma', sans-serif;
-    font-size: var(--font-micro);
+    font-family: var(--font-brand);
+    font-size: var(--font-xs);
     color: var(--color-text-muted);
     letter-spacing: 1.5px;
   }
 
-  /* Stats row */
+  /* ── Stats Row ── */
   .stats-row {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -197,49 +201,51 @@
     display: flex;
     align-items: center;
     gap: var(--space-3-5);
-    padding: var(--space-4) 18px;
-    background: rgba(10, 22, 42, 0.5);
+    padding: var(--space-4) var(--space-4);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--panel-radius);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--white-a6);
-    border-radius: var(--radius-xl);
-    box-shadow:
-      inset 0 1px 0 var(--white-a3),
-      0 1px 3px var(--black-a40),
-      0 4px 12px var(--black-a20);
+    box-shadow: var(--panel-shadow);
   }
 
   .stat-icon {
-    font-size: var(--font-3xl);
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--white-a3);
     border-radius: var(--radius-lg);
-    border: 1px solid var(--color-border-subtle);
+    flex-shrink: 0;
   }
+
+  .stat-icon-teal { background: var(--teal-a12); color: var(--color-teal); }
+  .stat-icon-epic { background: var(--epic-a12); color: var(--rarity-epic); }
+  .stat-icon-gold { background: var(--gold-a15); color: var(--rarity-legendary); }
+  .stat-icon-pink { background: rgba(253, 181, 206, 0.1); color: var(--color-pink); }
 
   .stat-body {
     display: flex;
     flex-direction: column;
+    gap: var(--space-0-5);
   }
 
-  .stat-body .stat-value {
+  .stat-value {
     font-size: var(--font-2xl);
-    font-weight: 700;
+    font-weight: 600;
     color: var(--color-text-primary);
     line-height: 1.2;
+    font-variant-numeric: tabular-nums;
   }
 
-  .stat-body .stat-label {
-    font-size: var(--font-xs);
+  .stat-label {
+    font-size: var(--font-sm);
     color: var(--color-text-muted);
     font-weight: 500;
   }
 
-  /* Two-column layout */
+  /* ── Two-Column Layout ── */
   .two-col {
     display: grid;
     grid-template-columns: 1fr 380px;
@@ -250,79 +256,72 @@
   .right-col {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-5);
   }
 
-  /* Sections */
-  .section {
+  /* ── Panels ── */
+  .panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--panel-radius);
+    padding: var(--space-5);
     display: flex;
     flex-direction: column;
-    gap: var(--space-3-5);
+    gap: var(--space-4);
   }
 
-  .section-header {
+  .panel-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
 
-  .section-title {
-    font-size: var(--font-md);
-    font-weight: 600;
-    color: var(--color-text-primary);
-    letter-spacing: -0.01em;
+  .panel-title {
+    font-family: var(--font-brand);
+    font-size: var(--font-sm);
+    font-weight: 400;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin: 0;
   }
 
-  /* Character grid */
+  /* ── Character Grid ── */
   .character-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: var(--space-3);
   }
 
   .char-card {
-    background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
+    background: var(--white-a2);
     border: 1px solid var(--white-a6);
     border-radius: var(--radius-xl);
-    overflow: hidden;
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
     transition: all var(--transition-slow) ease;
-    box-shadow:
-      inset 0 1px 0 var(--white-a3),
-      0 1px 2px var(--black-a30),
-      0 4px 8px var(--black-a15);
   }
 
   .char-card:hover {
     border-color: var(--white-a10);
     transform: translateY(-1px);
-    box-shadow:
-      inset 0 1px 0 var(--white-a4),
-      0 2px 4px var(--black-a40),
-      0 8px 16px var(--black-a25);
+    box-shadow: 0 4px 16px var(--black-a25);
   }
 
-  /* Subtle rarity left-border accent */
-  .rarity-border-legendary { border-left: 2px solid var(--rarity-legendary); }
-  .rarity-border-epic { border-left: 2px solid var(--rarity-epic); }
-  .rarity-border-rare { border-left: 2px solid var(--rarity-rare); }
-  .rarity-border-common { border-left: 2px solid var(--rarity-common); }
+  .rarity-accent-legendary { border-left: 2px solid var(--rarity-legendary); }
+  .rarity-accent-epic { border-left: 2px solid var(--rarity-epic); }
+  .rarity-accent-rare { border-left: 2px solid var(--rarity-rare); }
+  .rarity-accent-common { border-left: 2px solid var(--rarity-common); }
 
-  .char-card-inner {
-    padding: var(--space-3-5);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2-5);
-  }
-
-  .char-card-top {
+  .char-top {
     display: flex;
     gap: var(--space-3);
     align-items: center;
   }
 
-  .char-card-meta {
+  .char-meta {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
@@ -339,23 +338,24 @@
   }
 
   .char-desc {
-    font-size: var(--font-brand-md);
+    font-size: var(--font-sm);
     color: var(--color-text-secondary);
-    line-height: 1.4;
+    line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    margin: 0;
   }
 
-  .char-card-footer {
+  .char-actions {
     display: flex;
     gap: var(--space-2);
-    padding-top: var(--space-1-5);
+    padding-top: var(--space-2);
     border-top: 1px solid var(--color-border-subtle);
   }
 
-  /* Buttons — shadcn-esque with skeuomorphic depth */
+  /* ── Buttons ── */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -365,7 +365,7 @@
     font-size: var(--font-base);
     font-weight: 500;
     font-family: inherit;
-    border-radius: 7px;
+    border-radius: var(--radius-lg);
     border: 1px solid transparent;
     cursor: pointer;
     transition: all var(--transition-base) ease;
@@ -374,37 +374,25 @@
     color: var(--color-text-primary);
   }
 
-  .btn:active:not(:disabled) {
-    transform: translateY(0.5px);
-  }
-
-  .btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  .btn:active:not(:disabled) { transform: translateY(0.5px); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .btn-primary {
     background: linear-gradient(180deg, #449999 0%, #327272 100%);
     border-color: var(--teal-a40);
     color: #fff;
-    box-shadow:
-      inset 0 1px 0 var(--white-a12),
-      0 1px 2px var(--black-a30);
+    box-shadow: inset 0 1px 0 var(--white-a12), 0 1px 2px var(--black-a30);
   }
 
   .btn-primary:hover:not(:disabled) {
     background: linear-gradient(180deg, #4daaaa 0%, #3a8484 100%);
-    box-shadow:
-      inset 0 1px 0 var(--white-a15),
-      0 2px 6px var(--teal-a30);
+    box-shadow: inset 0 1px 0 var(--white-a15), 0 2px 6px var(--teal-a30);
   }
 
   .btn-secondary {
     background: linear-gradient(180deg, var(--color-surface-overlay) 0%, var(--color-surface-raised) 100%);
     border-color: var(--color-border);
-    box-shadow:
-      inset 0 1px 0 var(--white-a4),
-      0 1px 2px var(--black-a30);
+    box-shadow: inset 0 1px 0 var(--white-a4), 0 1px 2px var(--black-a30);
   }
 
   .btn-secondary:hover:not(:disabled) {
@@ -414,12 +402,12 @@
 
   .btn-outline {
     background: transparent;
-    border-color: var(--color-border);
+    border-color: var(--white-a8);
     color: var(--color-text-secondary);
   }
 
   .btn-outline:hover:not(:disabled) {
-    background: var(--white-a3);
+    background: var(--white-a4);
     border-color: var(--white-a12);
     color: var(--color-text-primary);
   }
@@ -439,55 +427,40 @@
     background: linear-gradient(180deg, #9b3030 0%, #7a2424 100%);
     border-color: rgba(200, 50, 50, 0.3);
     color: var(--color-error-soft);
-    box-shadow:
-      inset 0 1px 0 var(--white-a8),
-      0 1px 2px var(--black-a30);
+    box-shadow: inset 0 1px 0 var(--white-a8), 0 1px 2px var(--black-a30);
   }
 
   .btn-danger:hover:not(:disabled) {
     background: linear-gradient(180deg, #b33636 0%, #8a2a2a 100%);
   }
 
-  .btn-sm { padding: 5px var(--space-2-5); font-size: var(--font-xs); border-radius: var(--radius-md); }
-  .btn-xs { padding: var(--space-1) var(--space-2); font-size: 0.72rem; border-radius: 5px; }
-  .btn-lg { padding: 11px 22px; font-size: var(--font-md); border-radius: var(--radius-lg); }
+  .btn-sm { padding: var(--space-1-5) var(--space-2-5); font-size: var(--font-xs); border-radius: var(--radius-md); }
+  .btn-xs { padding: var(--space-1) var(--space-2); font-size: var(--font-xs); border-radius: var(--radius-md); }
+  .btn-lg { padding: var(--space-2-5) var(--space-5); font-size: var(--font-md); border-radius: var(--radius-lg); }
 
-  .button-grid {
+  .button-row {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
   }
 
-  /* Activity list */
+  /* ── Activity List ── */
   .activity-list {
     display: flex;
     flex-direction: column;
-    background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--white-a6);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-    box-shadow:
-      inset 0 1px 0 var(--white-a2),
-      0 1px 3px var(--black-a30);
   }
 
   .activity-item {
     display: flex;
     gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
+    padding: var(--space-3) 0;
     align-items: flex-start;
     border-bottom: 1px solid var(--color-border-subtle);
-    transition: background var(--transition-base);
-  }
-
-  .activity-item:hover {
-    background: rgba(255, 255, 255, 0.015);
   }
 
   .activity-item.activity-last {
     border-bottom: none;
+    padding-bottom: 0;
   }
 
   .activity-dot {
@@ -495,7 +468,7 @@
     height: 8px;
     border-radius: var(--radius-full);
     background: var(--color-teal);
-    margin-top: 5px;
+    margin-top: 6px;
     flex-shrink: 0;
     box-shadow: 0 0 6px var(--teal-a40);
   }
@@ -514,16 +487,16 @@
   }
 
   .activity-detail {
-    font-size: var(--font-xs);
+    font-size: var(--font-sm);
     color: var(--color-text-secondary);
   }
 
   .activity-time {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--color-text-muted);
   }
 
-  /* Playing card backs — skeuomorphic */
+  /* ── Playing Card Backs ── */
   .card-back-row {
     display: flex;
     gap: var(--space-3);
@@ -539,26 +512,25 @@
   .playing-card-inner {
     width: 72px;
     height: 100px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     position: relative;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.2s ease;
-    /* Skeuomorphic card: beveled edge, layered shadow */
+    transition: all var(--transition-slow) ease;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-      0 2px 4px rgba(0, 0, 0, 0.4),
-      0 6px 12px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 var(--white-a8),
+      inset 0 -1px 0 var(--black-a30),
+      0 2px 4px var(--black-a40),
+      0 6px 12px var(--black-a20);
   }
 
   .playing-card-inner:hover {
     transform: translateY(-3px) rotateZ(-1deg);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-      0 4px 8px rgba(0, 0, 0, 0.5),
-      0 12px 24px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 var(--white-a10),
+      inset 0 -1px 0 var(--black-a30),
+      0 4px 8px var(--black-a50),
+      0 12px 24px var(--black-a30);
   }
 
   .playing-card-common .playing-card-inner {
@@ -568,28 +540,27 @@
 
   .playing-card-rare .playing-card-inner {
     background: linear-gradient(145deg, #1a3535 0%, #0f2828 50%, #183030 100%);
-    border: 1px solid rgba(59, 151, 151, 0.2);
+    border: 1px solid var(--teal-a20);
   }
 
   .playing-card-epic .playing-card-inner {
     background: linear-gradient(145deg, #2a1a40 0%, #1f1030 50%, #281838 100%);
-    border: 1px solid rgba(176, 106, 255, 0.2);
+    border: 1px solid var(--epic-a20);
   }
 
   .playing-card-legendary .playing-card-inner {
     background: linear-gradient(145deg, #3a2a10 0%, #2a1e08 50%, #342510 100%);
-    border: 1px solid rgba(255, 215, 0, 0.2);
+    border: 1px solid var(--gold-a20);
   }
 
   .playing-card-pattern {
     position: absolute;
     inset: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Crosshatch texture via repeating gradient */
     background:
       repeating-linear-gradient(
         45deg,
@@ -601,11 +572,12 @@
   }
 
   .playing-card-emblem {
-    font-size: 1.6rem;
-    font-weight: 800;
+    font-family: var(--font-brand);
+    font-size: var(--font-3xl);
+    font-weight: 400;
     opacity: 0.15;
     color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 1px 2px var(--black-a50);
   }
 
   .playing-card-common .playing-card-emblem { color: var(--rarity-common); opacity: 0.2; }
@@ -616,33 +588,32 @@
   .playing-card-edge {
     position: absolute;
     inset: 0;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     pointer-events: none;
-    /* Highlight on top edge for 3D bevel */
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 30%, transparent 90%, rgba(0, 0, 0, 0.1) 100%);
+    background: linear-gradient(180deg, var(--white-a4) 0%, transparent 30%, transparent 90%, var(--black-a10) 100%);
   }
 
   .playing-card-legendary .playing-card-inner:hover {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-      0 4px 8px rgba(0, 0, 0, 0.5),
-      0 12px 24px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(255, 215, 0, 0.15);
+      inset 0 1px 0 var(--white-a10),
+      inset 0 -1px 0 var(--black-a30),
+      0 4px 8px var(--black-a50),
+      0 12px 24px var(--black-a30),
+      0 0 20px var(--gold-a15);
   }
 
   .playing-card-epic .playing-card-inner:hover {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
-      0 4px 8px rgba(0, 0, 0, 0.5),
-      0 12px 24px rgba(0, 0, 0, 0.3),
-      0 0 16px rgba(176, 106, 255, 0.15);
+      inset 0 1px 0 var(--white-a10),
+      inset 0 -1px 0 var(--black-a30),
+      0 4px 8px var(--black-a50),
+      0 12px 24px var(--black-a30),
+      0 0 16px var(--epic-a15);
   }
 
   .playing-card-label {
     font-size: var(--font-xs);
-    font-weight: 600;
+    font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);

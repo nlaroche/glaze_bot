@@ -1,68 +1,44 @@
 <script lang="ts">
   import { PackOpener } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
+  import { openBoosterPack } from '@glazebot/supabase-client';
 
-  const demoCharacters: GachaCharacter[] = [
-    {
-      id: 'demo-common',
-      user_id: 'demo',
-      name: 'Snapjaw',
-      description: '"The mic was already on when I sat down. I haven\'t left since."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 35, positivity: 60, formality: 30, talkativeness: 45, attitude: 40, humor: 55 },
-      rarity: 'common',
-      avatar_seed: 'demo-common-rex',
-      created_at: '',
-    },
-    {
-      id: 'demo-rare',
-      user_id: 'demo',
-      name: 'Chad Worthington III',
-      description: '"I didn\'t choose the analyst desk. The analyst desk chose me, and then I sued it."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 45, positivity: 70, formality: 65, talkativeness: 55, attitude: 30, humor: 40 },
-      rarity: 'rare',
-      avatar_seed: 'demo-rare-sage',
-      created_at: '',
-    },
-    {
-      id: 'demo-epic',
-      user_id: 'demo',
-      name: 'Blobsworth',
-      description: '"They gave me a desk. I gave them content. We are not the same."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 90, positivity: 80, formality: 20, talkativeness: 85, attitude: 60, humor: 75 },
-      rarity: 'epic',
-      avatar_seed: 'demo-epic-neon',
-      created_at: '',
-    },
-    {
-      id: 'demo-legendary',
-      user_id: 'demo',
-      name: 'Grug the Famished',
-      description: '"First I finish the pasta. Then I finish the game. Then I finish you."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 70, positivity: 40, formality: 50, talkativeness: 75, attitude: 85, humor: 90 },
-      rarity: 'legendary',
-      avatar_seed: 'demo-legendary-vex',
-      created_at: '',
-    },
-  ];
+  let error = $state('');
+  let collectionComplete = $state(false);
 
-  const demoImages: Record<string, string> = {
-    'demo-common': '/testCharacter1.png',
-    'demo-rare': '/testCharacter2.png',
-    'demo-epic': '/testCharacter3.png',
-    'demo-legendary': '/testCharacter4.png',
-  };
+  async function handleRequestOpen(): Promise<{ characters: GachaCharacter[]; images: Record<string, string> }> {
+    error = '';
+    const result = await openBoosterPack();
+
+    if ('collection_complete' in result && result.collection_complete) {
+      collectionComplete = true;
+      return { characters: [], images: {} };
+    }
+
+    const images: Record<string, string> = {};
+    for (const c of result.characters) {
+      if (c.avatar_url) {
+        images[c.id] = c.avatar_url;
+      }
+    }
+
+    return { characters: result.characters, images };
+  }
 </script>
 
 <div class="page">
-  <PackOpener characters={demoCharacters} images={demoImages} />
+  {#if collectionComplete}
+    <div class="complete-state">
+      <h2>Collection Complete!</h2>
+      <p>You've collected every character. Check your collection!</p>
+    </div>
+  {:else}
+    <PackOpener onrequestopen={handleRequestOpen} />
+  {/if}
+
+  {#if error}
+    <div class="error-toast">{error}</div>
+  {/if}
 </div>
 
 <style>
@@ -72,5 +48,39 @@
     justify-content: center;
     height: 100%;
     padding: 24px;
+    position: relative;
+  }
+
+  .complete-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-primary, #e2e8f0);
+    text-align: center;
+  }
+
+  .complete-state h2 {
+    font-size: 1.6rem;
+    color: var(--color-pink, #FDB5CE);
+    margin: 0;
+  }
+
+  .complete-state p {
+    color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+    margin: 0;
+  }
+
+  .error-toast {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(248, 113, 113, 0.15);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: #f87171;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
   }
 </style>

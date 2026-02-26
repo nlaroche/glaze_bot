@@ -1,91 +1,58 @@
 <script lang="ts">
   import { CharacterCard } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
+  import { getCollection } from '@glazebot/supabase-client';
+  import { onMount } from 'svelte';
 
-  const demoCharacters: GachaCharacter[] = [
-    {
-      id: 'demo-common',
-      user_id: 'demo',
-      name: 'Snapjaw',
-      description: '"The mic was already on when I sat down. I haven\'t left since."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 35, positivity: 60, formality: 30, talkativeness: 45, attitude: 40, humor: 55 },
-      rarity: 'common',
-      avatar_seed: 'demo-common-rex',
-      created_at: '',
-    },
-    {
-      id: 'demo-rare',
-      user_id: 'demo',
-      name: 'Chad Worthington III',
-      description: '"I didn\'t choose the analyst desk. The analyst desk chose me, and then I sued it."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 45, positivity: 70, formality: 65, talkativeness: 55, attitude: 30, humor: 40 },
-      rarity: 'rare',
-      avatar_seed: 'demo-rare-sage',
-      created_at: '',
-    },
-    {
-      id: 'demo-epic',
-      user_id: 'demo',
-      name: 'Blobsworth',
-      description: '"They gave me a desk. I gave them content. We are not the same."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 90, positivity: 80, formality: 20, talkativeness: 85, attitude: 60, humor: 75 },
-      rarity: 'epic',
-      avatar_seed: 'demo-epic-neon',
-      created_at: '',
-    },
-    {
-      id: 'demo-legendary',
-      user_id: 'demo',
-      name: 'Grug the Famished',
-      description: '"First I finish the pasta. Then I finish the game. Then I finish you."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 70, positivity: 40, formality: 50, talkativeness: 75, attitude: 85, humor: 90 },
-      rarity: 'legendary',
-      avatar_seed: 'demo-legendary-vex',
-      created_at: '',
-    },
-  ];
+  let characters: GachaCharacter[] = $state([]);
+  let loading = $state(true);
+  let error = $state('');
 
-  const demoImages: Record<string, string> = {
-    'demo-common': '/testCharacter1.png',
-    'demo-rare': '/testCharacter2.png',
-    'demo-epic': '/testCharacter3.png',
-    'demo-legendary': '/testCharacter4.png',
-  };
-
-  let flippedStates = $state<Record<string, boolean>>({
-    'demo-common': true,
-    'demo-rare': true,
-    'demo-epic': true,
-    'demo-legendary': true,
-  });
+  let flippedStates = $state<Record<string, boolean>>({});
 
   function toggleFlip(id: string) {
     flippedStates[id] = !flippedStates[id];
   }
 
-  let selectedCharacter: GachaCharacter | null = $state(null);
+  onMount(async () => {
+    try {
+      characters = await getCollection();
+      // Start all cards flipped (showing front)
+      for (const c of characters) {
+        flippedStates[c.id] = true;
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to load collection';
+    } finally {
+      loading = false;
+    }
+  });
 </script>
 
 <div class="page">
   <h2>Collection</h2>
-  <div class="card-grid">
-    {#each demoCharacters as char (char.id)}
-      <CharacterCard
-        character={char}
-        flipped={flippedStates[char.id]}
-        onflip={() => toggleFlip(char.id)}
-        image={demoImages[char.id]}
-      />
-    {/each}
-  </div>
+
+  {#if loading}
+    <div class="empty-state">Loading collection...</div>
+  {:else if error}
+    <div class="empty-state error">{error}</div>
+  {:else if characters.length === 0}
+    <div class="empty-state">
+      <p>No characters yet!</p>
+      <p class="hint">Open a booster pack to start your collection.</p>
+    </div>
+  {:else}
+    <div class="card-grid">
+      {#each characters as char (char.id)}
+        <CharacterCard
+          character={char}
+          flipped={flippedStates[char.id]}
+          onflip={() => toggleFlip(char.id)}
+          image={char.avatar_url}
+        />
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -108,5 +75,29 @@
     display: flex;
     gap: 24px;
     flex-wrap: wrap;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--color-text-secondary, rgba(255, 255, 255, 0.55));
+    font-size: 1.1rem;
+    gap: 4px;
+  }
+
+  .empty-state.error {
+    color: var(--color-error, #f87171);
+  }
+
+  .empty-state p {
+    margin: 0;
+  }
+
+  .hint {
+    font-size: 0.9rem;
+    opacity: 0.7;
   }
 </style>

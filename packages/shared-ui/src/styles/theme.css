@@ -1,6 +1,9 @@
 /* GlazeBot Design Tokens — single source of truth */
 
 :root {
+  /* Brand font */
+  --font-brand: 'Plus Jakarta Sans', sans-serif;
+
   /* Brand colors */
   --color-pink: #FDB5CE;
   --color-navy: #0a0e18;

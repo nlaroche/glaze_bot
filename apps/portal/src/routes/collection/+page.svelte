@@ -40,7 +40,7 @@
   }
 
   h2 {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: var(--font-xl);
     font-weight: 400;
     color: var(--color-heading);
@@ -61,7 +61,7 @@
 
   /* Override shared-ui PartyManager h2 */
   .party-section :global(h2) {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 1.1rem;
     font-weight: 400;
     letter-spacing: 1px;

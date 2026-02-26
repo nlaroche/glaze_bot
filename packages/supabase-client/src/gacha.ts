@@ -1,4 +1,4 @@
-import type { GachaCharacter, BoosterPackResult } from "@glazebot/shared-types";
+import type { GachaCharacter, CharacterTemplate, BoosterPackResult } from "@glazebot/shared-types";
 import { createSupabaseClient } from "./client.js";
 import {
   FunctionsHttpError,
@@ -94,6 +94,20 @@ export async function getDailyPacksRemaining(): Promise<{
     remaining: Math.max(0, 3 - used),
     resets_at: tomorrow.toISOString(),
   };
+}
+
+// ─── Template Operations ────────────────────────────────────────────
+
+/** Get all active character templates (the master pool) */
+export async function getCharacterTemplates(): Promise<CharacterTemplate[]> {
+  // Table added by migration; cast needed until types are regenerated
+  const { data, error } = await (db() as any)
+    .from("character_templates")
+    .select("*")
+    .eq("is_active", true)
+    .order("rarity", { ascending: true });
+  if (error) throw error;
+  return data as unknown as CharacterTemplate[];
 }
 
 // ─── Collection Operations ──────────────────────────────────────────
@@ -194,8 +208,12 @@ export async function generateTestCharacter(
 /** Step 1: Generate character text only (admin pipeline) */
 export async function generateCharacterText(
   rarity: string,
+  tokenRoll?: Record<string, string>,
 ): Promise<GachaCharacter> {
-  return callEdgeFunction<GachaCharacter>("generate-character-text", { rarity });
+  return callEdgeFunction<GachaCharacter>("generate-character-text", {
+    rarity,
+    ...(tokenRoll ? { tokenRoll } : {}),
+  });
 }
 
 /** Step 2: Generate character sprite image (admin pipeline) */
@@ -276,6 +294,17 @@ export async function deleteCharacter(id: string): Promise<void> {
     .update({ is_active: false, deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
+}
+
+/** Soft-delete ALL active characters at once */
+export async function deleteAllCharacters(): Promise<number> {
+  const { data, error } = await db()
+    .from("characters")
+    .update({ is_active: false, deleted_at: new Date().toISOString() })
+    .eq("is_active", true)
+    .select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
 }
 
 /** Purge a single soft-deleted character (R2 media + hard-delete DB row) */
@@ -371,6 +400,92 @@ export async function getFishVoices(): Promise<FishVoice[]> {
     .order("task_count", { ascending: false });
   if (error) throw error;
   return data as FishVoice[];
+}
+
+// ─── Token Pool Utilities (client-side) ─────────────────────────────
+
+export interface TokenPoolEntry {
+  value: string;
+  weight: number;
+}
+
+export interface TokenPool {
+  label: string;
+  description: string;
+  entries: TokenPoolEntry[];
+  conditionalOn?: { pool: string; values: string[] };
+}
+
+export type TokenPools = Record<string, TokenPool>;
+export type TokenRoll = Record<string, string>;
+
+/** Weighted random selection from entries */
+export function weightedPick(entries: TokenPoolEntry[]): string {
+  if (entries.length === 0) return "";
+  const total = entries.reduce((s, e) => s + e.weight, 0);
+  if (total <= 0) return entries[0].value;
+  let r = Math.random() * total;
+  for (const e of entries) {
+    r -= e.weight;
+    if (r <= 0) return e.value;
+  }
+  return entries[entries.length - 1].value;
+}
+
+/** Roll all token pools, resolving conditional dependencies */
+export function rollTokenPools(pools: TokenPools): TokenRoll {
+  const result: TokenRoll = {};
+  const unconditional: [string, TokenPool][] = [];
+  const conditional: [string, TokenPool][] = [];
+
+  for (const [key, pool] of Object.entries(pools)) {
+    if (pool.conditionalOn) {
+      conditional.push([key, pool]);
+    } else {
+      unconditional.push([key, pool]);
+    }
+  }
+
+  for (const [key, pool] of unconditional) {
+    if (pool.entries.length > 0) {
+      result[key] = weightedPick(pool.entries);
+    }
+  }
+
+  for (const [key, pool] of conditional) {
+    const cond = pool.conditionalOn!;
+    const rolledValue = result[cond.pool];
+    if (rolledValue && cond.values.includes(rolledValue)) {
+      if (pool.entries.length > 0) {
+        result[key] = weightedPick(pool.entries);
+      }
+    }
+  }
+
+  return result;
+}
+
+/** Format rolled tokens into a CHARACTER DIRECTIVE block */
+export function buildDirective(tokens: TokenRoll): string {
+  const labelMap: Record<string, string> = {
+    gender: "Gender",
+    species: "Species",
+    ethnicity: "Ethnicity",
+    ageRange: "Age Range",
+    archetype: "Role/Archetype",
+    personalityVibe: "Personality Vibe",
+    definingTrait: "Defining Trait",
+    settingTheme: "Setting/Theme",
+  };
+
+  const lines: string[] = [];
+  for (const [key, value] of Object.entries(tokens)) {
+    const label = labelMap[key] ?? key;
+    lines.push(`${label}: ${value}`);
+  }
+
+  if (lines.length === 0) return "";
+  return "\n\nCHARACTER DIRECTIVE (follow these exactly):\n" + lines.join("\n");
 }
 
 /** Generate TTS audio with Fish Audio S1 — supports emotion markers and no-reference generative mode */

@@ -216,7 +216,7 @@
   }
 
   .pack-label-top {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 10px;
     color: rgba(253, 181, 206, 0.7);
     letter-spacing: 3px;
@@ -224,7 +224,7 @@
   }
 
   .pack-label-bot {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 8px;
     color: rgba(59, 151, 151, 0.6);
     letter-spacing: 2px;
@@ -281,7 +281,7 @@
   }
 
   .title {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: 1.6rem;
     font-weight: 400;
     color: #c8d0dc;
@@ -290,7 +290,7 @@
   }
 
   .tagline {
-    font-family: 'Michroma', sans-serif;
+    font-family: var(--font-brand);
     font-size: var(--font-micro);
     font-weight: 400;
     color: var(--color-text-muted);

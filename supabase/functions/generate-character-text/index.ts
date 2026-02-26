@@ -5,7 +5,10 @@ import {
   errorResponse,
   getRequestUser,
   getServiceClient,
+  rollTokenPools,
+  buildDirective,
 } from "../_shared/mod.ts";
+import type { TokenPools } from "../_shared/mod.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
 const DASHSCOPE_BASE_URL =
@@ -14,6 +17,7 @@ const DASHSCOPE_BASE_URL =
 
 interface GenerateTextRequest {
   rarity: string;
+  tokenRoll?: Record<string, string>;
 }
 
 function parseJsonResponse(text: string): Record<string, unknown> {
@@ -56,9 +60,13 @@ Deno.serve(async (req: Request) => {
     if ("error" in auth) return auth.error;
 
     let rarity = "common";
+    let clientTokenRoll: Record<string, string> | undefined;
     try {
       const body: GenerateTextRequest = await req.json();
       if (body.rarity) rarity = body.rarity;
+      if (body.tokenRoll && typeof body.tokenRoll === "object") {
+        clientTokenRoll = body.tokenRoll;
+      }
     } catch {
       // Default to common
     }
@@ -94,28 +102,63 @@ Deno.serve(async (req: Request) => {
     const guidance = rarityGuidance[rarity] ?? "";
     const range = traitRanges[rarity] ?? { min: 25, max: 75 };
 
-    const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.`;
+    const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.\n\nIMPORTANT: Every character MUST be completely different from any previous generation. Do not repeat names, archetypes, or themes. Be wildly creative.`;
     const temperature = baseTemp + quality.tempBoost;
 
-    // Build the Dashscope request
+    // Fetch recently created character names to explicitly exclude them
+    const { data: recentChars } = await serviceClient
+      .from("characters")
+      .select("name")
+      .eq("user_id", auth.user.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    const recentNames = (recentChars ?? []).map(
+      (c: { name: string }) => c.name,
+    );
+    const avoidClause =
+      recentNames.length > 0
+        ? `\n\nDo NOT reuse or closely resemble any of these existing character names: ${recentNames.join(", ")}. Create something completely different.`
+        : "";
+
+    // Use client-provided token roll if available, otherwise roll server-side
+    const tokenPools = config.tokenPools as TokenPools | undefined;
+    const tokenRoll = clientTokenRoll
+      ? clientTokenRoll
+      : tokenPools
+        ? rollTokenPools(tokenPools)
+        : null;
+    const directive = tokenRoll ? buildDirective(tokenRoll) : "";
+
+    // Build the Dashscope request — random seed ensures different sampling each call
     const dashscopeRequest = {
       model,
       messages: [
         { role: "system", content: systemPrompt },
         {
           role: "user",
-          content: `Generate a ${rarity} rarity character. Return ONLY valid JSON.`,
+          content: `Generate a ${rarity} rarity character.${directive}${avoidClause} Return ONLY valid JSON.`,
         },
       ],
       max_tokens: quality.maxTokens,
       temperature,
+      seed: Math.floor(Math.random() * 2147483647),
     };
+
+    // Build a Set of existing names for duplicate detection
+    const existingNames = new Set(
+      recentNames.map((n: string) => n.toLowerCase()),
+    );
 
     let lastError: Error | null = null;
     let dashscopeResponse: Record<string, unknown> | null = null;
     let character: Record<string, unknown> | null = null;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // Up to 3 attempts: retry on parse failure OR duplicate name
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Use a fresh seed each attempt
+      dashscopeRequest.seed = Math.floor(Math.random() * 2147483647);
+
       const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: {
@@ -141,8 +184,19 @@ Deno.serve(async (req: Request) => {
           range.max,
         );
 
+        const generatedName = (parsed.name as string) ?? "Unknown";
+
+        // Check for duplicate name — retry if collision
+        if (existingNames.has(generatedName.toLowerCase())) {
+          console.log(
+            `[generate-character-text] Duplicate name "${generatedName}" on attempt ${attempt + 1}, retrying...`,
+          );
+          lastError = new Error(`Duplicate name: ${generatedName}`);
+          continue;
+        }
+
         character = {
-          name: parsed.name ?? "Unknown",
+          name: generatedName,
           description: parsed.description ?? "",
           backstory: parsed.backstory ?? "",
           system_prompt: parsed.system_prompt ?? "",
@@ -156,6 +210,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Final fallback: if still a duplicate name after retries, append a suffix
+    if (
+      character &&
+      existingNames.has((character.name as string).toLowerCase())
+    ) {
+      const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      character.name = `${character.name} ${suffix}`;
+      console.log(
+        `[generate-character-text] All retries produced duplicates, using suffix: ${character.name}`,
+      );
+    }
+
     if (!character) {
       throw lastError ?? new Error("Failed to generate character text");
     }
@@ -165,6 +231,7 @@ Deno.serve(async (req: Request) => {
       request: dashscopeRequest,
       response: dashscopeResponse ?? {},
       timestamp: new Date().toISOString(),
+      ...(tokenRoll ? { tokenRoll } : {}),
     };
 
     // Insert character (text only — no image or voice)

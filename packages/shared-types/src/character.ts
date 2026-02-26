@@ -46,10 +46,30 @@ export interface GenerationMetadata {
   step3_voice?: GenerationStep;
 }
 
+/** A character template in the master pool (no user_id) */
+export interface CharacterTemplate {
+  id: string;
+  name: string;
+  description: string;
+  backstory: string;
+  system_prompt: string;
+  personality?: Personality;
+  rarity: CharacterRarity;
+  voice_id?: string;
+  voice_name?: string;
+  avatar_seed: string;
+  avatar_url?: string;
+  tagline?: string;
+  tagline_url?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 /** A gacha-generated character stored in the database */
 export interface GachaCharacter extends Character {
   id: string;
   user_id: string;
+  template_id?: string;
   backstory: string;
   rarity: CharacterRarity;
   voice_id?: string;

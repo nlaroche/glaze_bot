@@ -3,9 +3,12 @@
 
 <style>
   h1 {
-    font-size: 2rem;
+    font-family: var(--font-brand);
+    font-size: var(--font-3xl);
+    font-weight: 400;
     color: var(--color-pink);
-    margin-bottom: 8px;
+    letter-spacing: 1px;
+    margin-bottom: var(--space-2);
   }
 
   .muted {

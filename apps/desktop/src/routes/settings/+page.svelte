@@ -7,6 +7,31 @@
   let autoScroll = $state(true);
   let logContainer: HTMLDivElement | undefined = $state();
 
+  // Resizable divider
+  let rightWidth = $state(480);
+  let dragging = $state(false);
+
+  function startResize(e: PointerEvent) {
+    dragging = true;
+    const startX = e.clientX;
+    const startWidth = rightWidth;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    function onMove(ev: PointerEvent) {
+      const delta = startX - ev.clientX;
+      rightWidth = Math.max(280, Math.min(900, startWidth + delta));
+    }
+
+    function onUp() {
+      dragging = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
   // Auto-scroll when new entries arrive
   $effect(() => {
     void debug.entries.length;
@@ -45,17 +70,18 @@
     }
   }
 
+  const entryColors: Record<string, string> = {
+    'frame': 'var(--color-text-muted)',
+    'llm-request': 'var(--color-teal)',
+    'llm-response': 'var(--color-start)',
+    'tts-request': 'var(--rarity-epic)',
+    'tts-response': '#d4a0ff',
+    'error': 'var(--color-error)',
+    'info': 'var(--color-text-secondary)',
+  };
+
   function entryColor(type: string): string {
-    switch (type) {
-      case 'frame': return '#6B7788';
-      case 'llm-request': return '#3B9797';
-      case 'llm-response': return '#5bca7a';
-      case 'tts-request': return '#B06AFF';
-      case 'tts-response': return '#d4a0ff';
-      case 'error': return '#ff6b6b';
-      case 'info': return '#8a94a6';
-      default: return '#8a94a6';
-    }
+    return entryColors[type] ?? 'var(--color-text-secondary)';
   }
 
   function summarize(entry: DebugEntry): string {
@@ -86,101 +112,117 @@
   }
 </script>
 
-<div class="debug-page">
-  <h1>Settings & Debug</h1>
+<div class="settings-layout">
+  <!-- Left column: Settings & Stats -->
+  <div class="settings-col">
+    <h1>Settings</h1>
 
-  <!-- Commentary Options -->
-  <section class="section">
-    <h2>Commentary Options</h2>
-    <div class="control-row">
-      <label>
-        <span>Game Hint</span>
+    <!-- Commentary Options -->
+    <section class="card">
+      <h2>Commentary Options</h2>
+
+      <div class="field">
+        <label class="field-label" for="game-hint">Game Hint</label>
         <input
+          id="game-hint"
           class="text-input"
           type="text"
           placeholder="e.g. League of Legends, Elden Ring..."
           value={debug.gameHint}
           oninput={(e) => setGameHint((e.target as HTMLInputElement).value)}
         />
-      </label>
-    </div>
-    <div class="control-row">
-      <label>
-        <span>Commentary Gap</span>
-        <input
-          type="range"
-          value={debug.commentaryGap}
-          min="30"
-          max="120"
-          step="5"
-          oninput={(e) => setCommentaryGap(parseInt((e.target as HTMLInputElement).value, 10))}
-        />
-        <span class="range-val">{debug.commentaryGap}s</span>
-      </label>
-    </div>
-    <div class="instructions-row">
-      <label>
-        <span>Custom Instructions</span>
-      </label>
-      <textarea
-        class="instructions-editor"
-        placeholder="Extra instructions sent alongside each character's system prompt. E.g. 'Focus on teamfights', 'Be family-friendly', 'Speak in short sentences'..."
-        value={debug.customSystemInstructions}
-        oninput={(e) => setCustomSystemInstructions((e.target as HTMLTextAreaElement).value)}
-        rows="3"
-      ></textarea>
-    </div>
-  </section>
+      </div>
 
-  <!-- Debug Controls -->
-  <section class="section">
-    <h2>Debug</h2>
-    <div class="control-row">
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={autoScroll} />
-        <span>Auto-scroll log</span>
-      </label>
-      <button class="btn-secondary" onclick={clearDebugLog}>Clear Log</button>
-    </div>
-  </section>
+      <div class="field">
+        <label class="field-label" for="commentary-gap">Commentary Gap</label>
+        <div class="range-row">
+          <input
+            id="commentary-gap"
+            type="range"
+            value={debug.commentaryGap}
+            min="30"
+            max="120"
+            step="5"
+            oninput={(e) => setCommentaryGap(parseInt((e.target as HTMLInputElement).value, 10))}
+          />
+          <span class="range-value">{debug.commentaryGap}s</span>
+        </div>
+      </div>
 
-  <!-- Stats -->
-  <section class="section">
-    <h2>Stats</h2>
-    <div class="stats-grid">
-      <div class="stat">
-        <span class="stat-label">Uptime</span>
-        <span class="stat-value">{uptimeStr()}</span>
+      <div class="field">
+        <label class="field-label" for="custom-instructions">Custom Instructions</label>
+        <textarea
+          id="custom-instructions"
+          class="textarea"
+          placeholder="Extra instructions sent alongside each character's system prompt..."
+          value={debug.customSystemInstructions}
+          oninput={(e) => setCustomSystemInstructions((e.target as HTMLTextAreaElement).value)}
+          rows="3"
+        ></textarea>
       </div>
-      <div class="stat">
-        <span class="stat-label">LLM Calls</span>
-        <span class="stat-value">{debug.totalLlmCalls}</span>
+    </section>
+
+    <!-- Stats -->
+    <section class="card">
+      <h2>Session Stats</h2>
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-label">Uptime</span>
+          <span class="stat-value">{uptimeStr()}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">LLM Calls</span>
+          <span class="stat-value">{debug.totalLlmCalls}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">TTS Calls</span>
+          <span class="stat-value">{debug.totalTtsCalls}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Tokens In</span>
+          <span class="stat-value">{debug.totalInputTokens.toLocaleString()}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Tokens Out</span>
+          <span class="stat-value">{debug.totalOutputTokens.toLocaleString()}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Log Entries</span>
+          <span class="stat-value">{debug.entries.length}</span>
+        </div>
       </div>
-      <div class="stat">
-        <span class="stat-label">TTS Calls</span>
-        <span class="stat-value">{debug.totalTtsCalls}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Tokens In</span>
-        <span class="stat-value">{debug.totalInputTokens.toLocaleString()}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Tokens Out</span>
-        <span class="stat-value">{debug.totalOutputTokens.toLocaleString()}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">Log Entries</span>
-        <span class="stat-value">{debug.entries.length}</span>
+    </section>
+  </div>
+
+  <!-- Resize handle -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="resize-handle"
+    class:resize-active={dragging}
+    onpointerdown={startResize}
+  >
+    <div class="resize-grip"></div>
+  </div>
+
+  <!-- Right column: Event Log -->
+  <div class="log-col" style="width: {rightWidth}px; min-width: {rightWidth}px;">
+    <div class="log-header">
+      <h2>Event Log</h2>
+      <div class="log-controls">
+        <label class="checkbox-row">
+          <input type="checkbox" bind:checked={autoScroll} />
+          <span>Auto-scroll</span>
+        </label>
+        <button class="clear-btn" onclick={clearDebugLog}>Clear</button>
       </div>
     </div>
-  </section>
 
-  <!-- Log -->
-  <section class="section log-section">
-    <h2>Event Log</h2>
     <div class="log-container" bind:this={logContainer}>
       {#if debug.entries.length === 0}
-        <p class="empty-msg">No events yet. Start commentary to see debug output.</p>
+        <div class="log-empty">
+          <p>No events yet.</p>
+          <p class="log-empty-hint">Start commentary to see debug output.</p>
+        </div>
       {:else}
         {#each debug.entries as entry (entry.id)}
           <div class="log-entry" class:error-entry={entry.type === 'error'}>
@@ -191,240 +233,335 @@
         {/each}
       {/if}
     </div>
-  </section>
+  </div>
 </div>
 
 <style>
-  .debug-page {
-    padding: var(--space-6);
+  .settings-layout {
+    display: flex;
     height: 100%;
+    overflow: hidden;
+    margin: calc(-1 * var(--space-6));
+  }
+
+  /* ── Left column: Settings ── */
+  .settings-col {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    padding: var(--space-6) var(--space-7);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    gap: var(--space-5);
   }
 
   h1 {
-    font-size: 1.8rem;
+    font-family: var(--font-brand);
+    font-size: var(--font-3xl);
+    font-weight: 400;
     color: var(--color-pink);
-    margin-bottom: var(--space-5);
-    flex-shrink: 0;
+    letter-spacing: 1px;
+    margin: 0;
   }
 
-  h2 {
+  /* ── Card sections ── */
+  .card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--panel-radius);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .card h2 {
     font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    color: var(--color-text-muted, #6B7788);
-    margin: 0 0 var(--space-2-5);
+    color: var(--color-text-muted);
+    margin: 0;
     font-weight: 600;
   }
 
-  .section {
-    margin-bottom: var(--space-5);
-    flex-shrink: 0;
-  }
-
-  .log-section {
-    flex: 1;
+  /* ── Form fields ── */
+  .field {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    min-height: 0;
+    gap: var(--space-1-5);
   }
 
-  .control-row {
+  .field-label {
+    font-size: var(--font-sm);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+  }
+
+  .text-input {
+    width: 100%;
+    padding: var(--input-padding);
+    border-radius: var(--input-radius);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-base);
+    outline: none;
+    transition: border-color var(--transition-base), background var(--transition-base);
+    box-sizing: border-box;
+  }
+
+  .text-input::placeholder { color: var(--color-text-muted); }
+  .text-input:focus {
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
+  }
+
+  .textarea {
+    width: 100%;
+    padding: var(--input-padding);
+    border-radius: var(--input-radius);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--font-base);
+    resize: vertical;
+    outline: none;
+    transition: border-color var(--transition-base), background var(--transition-base);
+    box-sizing: border-box;
+    line-height: 1.5;
+  }
+
+  .textarea::placeholder { color: var(--color-text-muted); }
+  .textarea:focus {
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
+  }
+
+  .range-row {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    margin-bottom: var(--space-2);
-  }
-
-  label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  label span:first-child {
-    font-size: var(--font-base);
-    color: var(--color-text-secondary);
-    min-width: 120px;
   }
 
   input[type="range"] {
     flex: 1;
-    max-width: 200px;
+    max-width: 280px;
+    accent-color: var(--color-teal);
   }
 
-  .range-val {
-    font-size: var(--font-brand-md);
-    color: var(--color-text-muted);
+  .range-value {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--color-teal);
     min-width: 40px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 
-  .checkbox-label {
-    gap: var(--space-1-5);
-    cursor: pointer;
-  }
-
-  .checkbox-label span {
-    min-width: auto !important;
-  }
-
-  input[type="checkbox"] {
-    accent-color: var(--color-teal, #3B9797);
-  }
-
-  .btn-secondary {
-    padding: 5px var(--space-3-5);
-    border: 1px solid var(--white-a8);
-    border-radius: var(--radius-md);
-    background: var(--white-a4);
-    color: var(--color-text-secondary, #8a94a6);
-    cursor: pointer;
-    font-family: inherit;
-    font-size: var(--font-xs);
-    transition: background var(--transition-base);
-  }
-
-  .btn-secondary:hover {
-    background: var(--white-a8);
-    color: var(--color-text-primary);
-  }
-
-  .text-input {
-    flex: 1;
-    padding: var(--space-1-5) var(--space-2-5);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--white-a8);
-    background: var(--white-a4);
-    color: var(--color-text-primary, #e2e8f0);
-    font-family: inherit;
-    font-size: var(--font-brand-md);
-    outline: none;
-    transition: border-color var(--transition-base);
-  }
-
-  .text-input::placeholder {
-    color: var(--color-text-muted, #6B7788);
-  }
-
-  .text-input:focus {
-    border-color: var(--teal-a40);
-  }
-
-  .instructions-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1-5);
-    margin-bottom: var(--space-2);
-  }
-
-  .instructions-editor {
-    width: 100%;
-    padding: var(--space-2) var(--space-2-5);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--white-a8);
-    background: var(--white-a4);
-    color: var(--color-text-primary, #e2e8f0);
-    font-family: inherit;
-    font-size: var(--font-brand-md);
-    resize: vertical;
-    outline: none;
-    transition: border-color var(--transition-base);
-    box-sizing: border-box;
-  }
-
-  .instructions-editor::placeholder {
-    color: var(--color-text-muted, #6B7788);
-  }
-
-  .instructions-editor:focus {
-    border-color: var(--teal-a40);
-  }
-
-  /* Stats */
+  /* ── Stats ── */
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-2);
+    gap: var(--space-2-5);
   }
 
   .stat {
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-3) var(--space-3-5);
     border-radius: var(--radius-lg);
     background: var(--white-a3);
     border: 1px solid var(--white-a6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
   }
 
   .stat-label {
-    display: block;
-    font-size: var(--font-brand-sm);
+    font-size: var(--font-2xs);
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: var(--color-text-muted, #6B7788);
-    margin-bottom: var(--space-0-5);
+    color: var(--color-text-muted);
+    font-weight: 600;
   }
 
   .stat-value {
-    font-size: var(--font-xl);
+    font-size: var(--font-2xl);
     font-weight: 600;
-    color: var(--color-text-primary, #e2e8f0);
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
   }
 
-  /* Log */
+  /* ── Resize handle ── */
+  .resize-handle {
+    width: 8px;
+    flex-shrink: 0;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+    transition: background var(--transition-base);
+  }
+
+  .resize-handle:hover,
+  .resize-active {
+    background: var(--teal-a10);
+  }
+
+  .resize-grip {
+    width: 3px;
+    height: 32px;
+    border-radius: var(--radius-pill);
+    background: var(--white-a10);
+    transition: background var(--transition-base), height var(--transition-base);
+  }
+
+  .resize-handle:hover .resize-grip,
+  .resize-active .resize-grip {
+    background: var(--teal-a40);
+    height: 48px;
+  }
+
+  /* ── Right column: Event Log ── */
+  .log-col {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--black-a15);
+    border-left: 1px solid var(--white-a6);
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-4) var(--space-3);
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--white-a6);
+  }
+
+  .log-header h2 {
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .log-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    cursor: pointer;
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .checkbox-row input[type="checkbox"] {
+    accent-color: var(--color-teal);
+  }
+
+  .clear-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-md);
+    background: var(--white-a4);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    transition: background var(--transition-base), color var(--transition-base);
+  }
+
+  .clear-btn:hover {
+    background: var(--error-a15);
+    color: var(--color-error);
+    border-color: var(--error-a20);
+  }
+
+  /* ── Log entries ── */
   .log-container {
     flex: 1;
     overflow-y: auto;
-    background: var(--black-a20);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--white-a6);
-    padding: var(--space-1-5);
-    font-family: 'Courier New', monospace;
-    font-size: var(--font-xs);
+    padding: var(--space-2);
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: var(--font-sm);
+    line-height: 1.6;
+  }
+
+  .log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: var(--space-1);
+    color: var(--color-text-muted);
+    font-family: 'Satoshi', system-ui, sans-serif;
+  }
+
+  .log-empty p {
+    font-size: var(--font-base);
+  }
+
+  .log-empty-hint {
+    font-size: var(--font-sm);
+    opacity: 0.6;
   }
 
   .log-entry {
     display: flex;
-    gap: var(--space-2);
-    padding: 3px var(--space-1-5);
-    border-radius: var(--radius-xs);
+    gap: var(--space-2-5);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
     align-items: baseline;
+    transition: background var(--transition-fast);
   }
 
   .log-entry:hover {
-    background: var(--white-a3);
+    background: var(--white-a4);
   }
 
   .error-entry {
-    background: rgba(255, 107, 107, 0.06);
+    background: var(--error-a12);
+  }
+
+  .error-entry:hover {
+    background: var(--error-a15);
   }
 
   .log-time {
-    color: var(--color-text-muted, #6B7788);
+    color: var(--color-text-muted);
     flex-shrink: 0;
-    font-size: 0.7rem;
+    font-size: var(--font-xs);
+    font-variant-numeric: tabular-nums;
   }
 
   .log-badge {
     flex-shrink: 0;
     font-weight: 700;
-    font-size: var(--font-brand-sm);
-    min-width: 56px;
+    font-size: var(--font-xs);
+    min-width: 64px;
+    text-align: right;
   }
 
   .log-text {
-    color: var(--color-text-secondary, #8a94a6);
+    color: var(--color-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .empty-msg {
-    color: var(--color-text-muted, #6B7788);
-    text-align: center;
-    padding: var(--space-6);
-    font-family: inherit;
-    font-size: var(--font-base);
+    flex: 1;
+    min-width: 0;
   }
 </style>
