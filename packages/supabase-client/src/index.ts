@@ -37,6 +37,7 @@ export {
   setDefaultCharacter,
   syncFishVoices,
   getFishVoices,
+  getVoiceUsageMap,
   generativeTts,
   getCharacterTemplates,
   rollTokenPools,

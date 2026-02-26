@@ -17,6 +17,7 @@
     setDefaultCharacter,
     syncFishVoices,
     getFishVoices,
+    getVoiceUsageMap,
     generativeTts,
     rollTokenPools as rollTokenPoolsFn,
     buildDirective as buildDirectiveFn,
@@ -87,6 +88,35 @@
   let generationPrompt = $state('');
   let imageSystemInfo = $state('facing south, sitting at a table, 128x128 pixel art sprite, no background');
   let dropRates = $state({ common: 0.6, rare: 0.25, epic: 0.12, legendary: 0.03 });
+
+  // ─── State: Commentary LLM ───────────────────────────────────────
+  const DEFAULT_COMMENTARY_DIRECTIVE = `You are a live gaming commentator watching the player's screen. Your CHARACTER VOICE is flavor — it should color HOW you say things, not WHAT you talk about. DO NOT roleplay or narrate in-character. DO NOT address the player with in-character nicknames or catchphrases. DO NOT use emojis.
+
+Your job: react to what is ACTUALLY HAPPENING on screen right now. Be specific. Name the things you see. If someone dies, say they died. If the player makes a mistake, call it out. If something cool happens, hype it.
+
+Think of yourself as a Twitch co-caster, not a D&D character.`;
+
+  const DEFAULT_COMMENTARY_NUDGES = [
+    'React to ONE specific thing you see on screen.',
+    'Reference a movie, show, or meme this reminds you of.',
+    'Make a bold prediction about what happens next.',
+    'Roast the player\'s decision. Be specific.',
+    'Ask a rhetorical question about what just happened.',
+    'Give a backhanded compliment about the play.',
+    'Pick one thing on screen and fixate on it.',
+    'React to health, gold, or resources — not just the action.',
+    'Notice something small in the background nobody else would.',
+    'Express a strong opinion about something on screen that doesn\'t matter.',
+    'Compare the player to a fictional character based on what they did.',
+    'React to the PACE — is it frantic, slow, tense?',
+  ];
+
+  let commentaryDirective = $state(DEFAULT_COMMENTARY_DIRECTIVE);
+  let commentaryMaxTokens = $state(80);
+  let commentaryTemperature = $state(0.9);
+  let commentaryPresencePenalty = $state(1.5);
+  let commentaryFrequencyPenalty = $state(0.8);
+  let commentaryStyleNudgesText = $state(DEFAULT_COMMENTARY_NUDGES.join('\n'));
 
   // ─── State: Token Pools ───────────────────────────────────────────
   interface TokenPoolEntry { value: string; weight: number; }
@@ -446,7 +476,17 @@
   let imagePrompt = $state('');
   let voiceTestText = $state('Hey there! Ready to watch some games?');
   let voicePlaying = $state(false);
-  let availableVoices: { id: string; name: string }[] = $state([]);
+  let previewAudio: HTMLAudioElement | null = $state(null);
+  // Step 3 voice picker state (DataTable)
+  let step3Search = $state('');
+  let step3Page = $state(1);
+  let step3PageSize = $state(25);
+  let step3SortKey = $state('task_count');
+  let step3SortDirection: 'asc' | 'desc' = $state('desc');
+  let step3ActiveTags: string[] = $state([]);
+
+  // Voice usage map (voice_id → characters)
+  let voiceUsageMap: Map<string, { id: string; name: string }[]> = $state(new Map());
 
   // ─── State: Confirm Dialog ────────────────────────────────────────
   let confirmOpen = $state(false);
@@ -465,6 +505,7 @@
   let fishVoices: FishVoice[] = $state([]);
   let loadingVoices = $state(false);
   let syncingVoices = $state(false);
+  let syncPageCount = $state(10);
   let voicesLoaded = $state(false);
   let playingVoiceId: string | null = $state(null);
   let currentAudio: HTMLAudioElement | null = $state(null);
@@ -475,6 +516,7 @@
   let voiceSortDirection: 'asc' | 'desc' = $state('desc');
   let activeVoiceTags: string[] = $state([]);
   let hideCelebrities = $state(true);
+  let voiceUsageFilter: 'all' | 'in_use' | 'unused' = $state('all');
   let pinnedVoiceIds: Set<string> = $state(new Set());
 
   // ─── Celebrity Voice Filter ──────────────────────────────────────
@@ -521,6 +563,7 @@
     { key: 'play', label: '', width: '48px' },
     { key: 'title', label: 'Name', sortable: true },
     { key: 'tags', label: 'Tags', width: '200px' },
+    { key: 'used_by', label: 'Used By', width: '150px' },
     { key: 'task_count', label: 'Popularity', sortable: true, width: '110px' },
     { key: 'like_count', label: 'Likes', sortable: true, width: '90px' },
     { key: 'author_name', label: 'Author', sortable: true, width: '120px' },
@@ -566,6 +609,12 @@
       );
     }
 
+    if (voiceUsageFilter === 'in_use') {
+      result = result.filter(v => voiceUsageMap.has(v.id));
+    } else if (voiceUsageFilter === 'unused') {
+      result = result.filter(v => !voiceUsageMap.has(v.id));
+    }
+
     return result;
   });
 
@@ -590,6 +639,74 @@
   const voicePaginated = $derived(
     voiceSorted.slice((voicePage - 1) * voicePageSize, voicePage * voicePageSize)
   );
+
+  // ─── Step 3 voice DataTable derived chain ──────────────────────────
+  const step3Columns: Column[] = [
+    { key: 'play', label: '', width: '48px' },
+    { key: 'title', label: 'Name', sortable: true },
+    { key: 'tags', label: 'Tags', width: '180px' },
+    { key: 'used_by', label: 'Used By', width: '150px' },
+    { key: 'task_count', label: 'Popularity', sortable: true, width: '100px' },
+    { key: 'author_name', label: 'Author', width: '110px' },
+  ];
+
+  const step3FilterTags: Tag[] = $derived.by(() => {
+    const tagCounts = new Map<string, number>();
+    for (const v of fishVoices) {
+      if (isCelebrityVoice(v)) continue;
+      for (const t of v.tags) {
+        tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+      }
+    }
+    const sorted = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+    return sorted.map(([tag]) => ({ key: tag, label: tag, group: 'Tags' }));
+  });
+
+  const step3Filtered = $derived.by(() => {
+    let result = fishVoices.filter(v => !isCelebrityVoice(v));
+
+    if (step3Search) {
+      const q = step3Search.toLowerCase();
+      result = result.filter(v =>
+        v.title.toLowerCase().includes(q)
+          || v.tags.some(t => t.toLowerCase().includes(q))
+          || (v.author_name ?? '').toLowerCase().includes(q)
+      );
+    }
+
+    if (step3ActiveTags.length > 0) {
+      result = result.filter(v =>
+        step3ActiveTags.every(tag => v.tags.includes(tag))
+      );
+    }
+
+    return result;
+  });
+
+  const step3Sorted = $derived.by(() => {
+    const arr = [...step3Filtered];
+    arr.sort((a, b) => {
+      const aVal = (a as Record<string, unknown>)[step3SortKey];
+      const bVal = (b as Record<string, unknown>)[step3SortKey];
+      let cmp = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') cmp = aVal - bVal;
+      else if (typeof aVal === 'string' && typeof bVal === 'string') cmp = aVal.localeCompare(bVal);
+      else cmp = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+      return step3SortDirection === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  });
+
+  const step3Paginated = $derived(
+    step3Sorted.slice((step3Page - 1) * step3PageSize, step3Page * step3PageSize)
+  );
+
+  // Reset step3 page when filters change
+  $effect(() => {
+    step3Search;
+    step3ActiveTags;
+    step3Page = 1;
+  });
 
   // ─── Derived: Pinned voices for generative tab ─────────────────────
   const pinnedVoices = $derived(fishVoices.filter(v => pinnedVoiceIds.has(v.id)));
@@ -773,7 +890,7 @@
   $effect(() => {
     loadConfig();
     loadCharacters();
-    if (activeTab === 'voices') loadFishVoices();
+    if (activeTab === 'voices') { loadFishVoices(); loadVoiceUsageMap(); }
   });
 
   // Persist active tab to localStorage
@@ -795,9 +912,15 @@
     voicePage = 1;
   });
 
-  // Load voices when entering Step 3
+  // Stop audio + load voices on step change
+  let prevStep: number | null = null;
   $effect(() => {
-    if (activeStep === 3 && workingCharacter) {
+    const step = activeStep;
+    if (prevStep !== null && prevStep !== step) {
+      stopAllAudio();
+    }
+    prevStep = step;
+    if (step === 3 && workingCharacter) {
       loadVoicesForStep3();
     }
   });
@@ -874,6 +997,14 @@
     generationPrompt = (config.generationPrompt as string) ?? '';
     imageSystemInfo = (config.imageSystemInfo as string) ?? 'facing south, sitting at a table, 128x128 pixel art sprite, no background';
     tokenPools = (config.tokenPools as Record<string, TokenPool>) ?? structuredClone(DEFAULT_TOKEN_POOLS);
+    const c = config.commentary as Record<string, unknown> | undefined;
+    commentaryDirective = (c?.directive as string) ?? DEFAULT_COMMENTARY_DIRECTIVE;
+    commentaryMaxTokens = (c?.maxTokens as number) ?? 80;
+    commentaryTemperature = (c?.temperature as number) ?? 0.9;
+    commentaryPresencePenalty = (c?.presencePenalty as number) ?? 1.5;
+    commentaryFrequencyPenalty = (c?.frequencyPenalty as number) ?? 0.8;
+    const nudgesArr = (c?.styleNudges as string[]) ?? DEFAULT_COMMENTARY_NUDGES;
+    commentaryStyleNudgesText = nudgesArr.join('\n');
   }
 
   function syncToConfig() {
@@ -887,6 +1018,14 @@
       generationPrompt,
       imageSystemInfo,
       tokenPools,
+      commentary: {
+        directive: commentaryDirective,
+        maxTokens: commentaryMaxTokens,
+        temperature: commentaryTemperature,
+        presencePenalty: commentaryPresencePenalty,
+        frequencyPenalty: commentaryFrequencyPenalty,
+        styleNudges: commentaryStyleNudgesText.split('\n').map(s => s.trim()).filter(Boolean),
+      },
     };
     rawJson = JSON.stringify(config, null, 2);
   }
@@ -938,7 +1077,17 @@
     detailPanelOpen = true;
   }
 
+  function stopAllAudio() {
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    playingVoiceId = null;
+    if (previewAudio) { previewAudio.pause(); previewAudio = null; }
+    voicePlaying = false;
+    if (genAudio) { genAudio.pause(); genAudio = null; }
+    genPlaying = false;
+  }
+
   function closeDetailPanel() {
+    stopAllAudio();
     detailPanelOpen = false;
     activeStep = 1;
   }
@@ -1140,20 +1289,25 @@
   let loadingStep3Voices = $state(false);
 
   async function loadVoicesForStep3() {
-    if (availableVoices.length > 0) return;
+    if (voicesLoaded) return;
     loadingStep3Voices = true;
     try {
-      // Load from fish_voices DB if not already loaded
-      if (!voicesLoaded) await loadFishVoices();
-      // Map fish voices to the simple format, excluding celebrities
-      availableVoices = fishVoices
-        .filter(v => !isCelebrityVoice(v))
-        .slice(0, 100)
-        .map(v => ({ id: v.id, name: v.title }));
+      await Promise.all([
+        loadFishVoices(),
+        loadVoiceUsageMap(),
+      ]);
     } catch (e) {
       console.error('Failed to load voices for step 3:', e);
     } finally {
       loadingStep3Voices = false;
+    }
+  }
+
+  async function loadVoiceUsageMap() {
+    try {
+      voiceUsageMap = await getVoiceUsageMap();
+    } catch (e) {
+      console.error('Failed to load voice usage map:', e);
     }
   }
 
@@ -1162,17 +1316,25 @@
     pipeline.step3 = 'running';
     stepErrors.step3 = '';
     try {
-      const result = await assignCharacterVoice(workingCharacter.id, voiceId);
-      workingCharacter = {
-        ...workingCharacter,
-        voice_id: result.voice_id,
-        voice_name: result.voice_name,
-      };
-      availableVoices = result.voices;
-      const { getCharacter } = await import('@glazebot/supabase-client');
-      workingCharacter = await getCharacter(workingCharacter.id);
+      if (voiceId) {
+        // Direct DB update — instant, no edge function overhead
+        const voice = fishVoices.find(v => v.id === voiceId);
+        const voiceName = voice?.title ?? 'Unknown';
+        await updateCharacter(workingCharacter.id, {
+          voice_id: voiceId,
+          voice_name: voiceName,
+        } as Partial<GachaCharacter>);
+        workingCharacter = { ...workingCharacter, voice_id: voiceId, voice_name: voiceName };
+      } else {
+        // Auto-assign: use edge function (LLM picks best voice)
+        const result = await assignCharacterVoice(workingCharacter.id);
+        workingCharacter = { ...workingCharacter, voice_id: result.voice_id, voice_name: result.voice_name };
+        const { getCharacter } = await import('@glazebot/supabase-client');
+        workingCharacter = await getCharacter(workingCharacter.id);
+      }
       pipeline.step3 = 'done';
       characters = characters.map(c => c.id === workingCharacter!.id ? workingCharacter! : c);
+      loadVoiceUsageMap();
     } catch (e) {
       pipeline.step3 = 'error';
       stepErrors.step3 = e instanceof Error ? e.message : 'Voice assignment failed';
@@ -1181,15 +1343,17 @@
 
   async function playVoicePreview() {
     if (!workingCharacter?.voice_id) return;
+    if (previewAudio) { previewAudio.pause(); previewAudio = null; }
     voicePlaying = true;
     try {
       const audioData = await previewVoice(workingCharacter.voice_id, voiceTestText);
       const blob = new Blob([audioData], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => { voicePlaying = false; URL.revokeObjectURL(url); };
-      audio.onerror = () => { voicePlaying = false; URL.revokeObjectURL(url); };
+      audio.onended = () => { voicePlaying = false; previewAudio = null; URL.revokeObjectURL(url); };
+      audio.onerror = () => { voicePlaying = false; previewAudio = null; URL.revokeObjectURL(url); };
       audio.play();
+      previewAudio = audio;
     } catch {
       voicePlaying = false;
     }
@@ -1212,7 +1376,7 @@
   async function handleSyncVoices() {
     syncingVoices = true;
     try {
-      await syncFishVoices({ page_count: 10 });
+      await syncFishVoices({ page_count: syncPageCount });
       fishVoices = await getFishVoices();
       voicesLoaded = true;
     } catch (e) {
@@ -1240,9 +1404,9 @@
     const audio = new Audio(voice.sample_url);
     audio.onended = () => { playingVoiceId = null; currentAudio = null; };
     audio.onerror = () => { playingVoiceId = null; currentAudio = null; };
-    audio.play();
     currentAudio = audio;
     playingVoiceId = voice.id;
+    audio.play().catch(() => { playingVoiceId = null; currentAudio = null; });
   }
 
   function formatNumber(n: number): string {
@@ -1302,36 +1466,61 @@
   <!-- ═══ HEADER ═══ -->
   <div class="page-header">
     <h1>Admin</h1>
-    <div class="header-actions" class:hidden-actions={activeTab !== 'workshop'}>
-      <Button
-        variant="ghost"
-        onclick={handleDeleteAll}
-        testid="delete-all-btn"
-      >
-        Delete All
-      </Button>
-      <Button
-        variant="primary"
-        onclick={() => {
-          workingCharacter = null;
-          pipeline = { step1: 'idle', step2: 'idle', step3: 'idle' };
-          stepErrors = { step1: '', step2: '', step3: '' };
-          editName = '';
-          editDescription = '';
-          editBackstory = '';
-          editTagline = '';
-          editSystemPrompt = '';
-          editPersonality = { energy: 50, positivity: 50, formality: 50, talkativeness: 50, attitude: 50, humor: 50 };
-          imagePrompt = '';
-          availableVoices = [];
-          activeStep = 1;
-          doRollAllTokens();
-          detailPanelOpen = true;
-        }}
-        testid="generate-new-btn"
-      >
-        + Generate New
-      </Button>
+    <div class="header-actions">
+      {#if activeTab === 'workshop'}
+        <Button
+          variant="ghost"
+          onclick={handleDeleteAll}
+          testid="delete-all-btn"
+        >
+          Delete All
+        </Button>
+        <Button
+          variant="primary"
+          onclick={() => {
+            workingCharacter = null;
+            pipeline = { step1: 'idle', step2: 'idle', step3: 'idle' };
+            stepErrors = { step1: '', step2: '', step3: '' };
+            editName = '';
+            editDescription = '';
+            editBackstory = '';
+            editTagline = '';
+            editSystemPrompt = '';
+            editPersonality = { energy: 50, positivity: 50, formality: 50, talkativeness: 50, attitude: 50, humor: 50 };
+            imagePrompt = '';
+            step3Search = '';
+            step3Page = 1;
+            step3ActiveTags = [];
+            activeStep = 1;
+            doRollAllTokens();
+            detailPanelOpen = true;
+          }}
+          testid="generate-new-btn"
+        >
+          + Generate New
+        </Button>
+      {:else if activeTab === 'voices'}
+        <div class="sync-controls">
+          <select
+            class="sync-pages-select"
+            bind:value={syncPageCount}
+            data-testid="sync-pages-select"
+          >
+            <option value={5}>500 voices</option>
+            <option value={10}>1,000 voices</option>
+            <option value={20}>2,000 voices</option>
+            <option value={50}>5,000 voices</option>
+          </select>
+          <Button
+            variant="secondary"
+            loading={syncingVoices}
+            onclick={handleSyncVoices}
+            testid="sync-voices-btn"
+          >
+            {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
+          </Button>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -1358,7 +1547,7 @@
     <button
       class="top-tab"
       class:active={activeTab === 'voices'}
-      onclick={() => { activeTab = 'voices'; loadFishVoices(); }}
+      onclick={() => { activeTab = 'voices'; loadFishVoices(); loadVoiceUsageMap(); }}
       data-testid="tab-voices"
     >Voices</button>
   </div>
@@ -1624,6 +1813,42 @@
           </div>
         </div>
 
+        <!-- Commentary LLM: Parameters -->
+        <div class="cfg-card" data-testid="commentary-llm-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">Commentary LLM</h3>
+            <p class="cfg-desc">Model parameters for the live commentary edge function</p>
+          </div>
+          <div class="cfg-body">
+            <NumberInput label="Max Tokens" bind:value={commentaryMaxTokens} min={10} max={500} onchange={syncToConfig} testid="config-commentary-max-tokens" />
+            <SliderInput label="Temperature" bind:value={commentaryTemperature} min={0.1} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-temperature" />
+            <SliderInput label="Presence Penalty" bind:value={commentaryPresencePenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-presence-penalty" />
+            <SliderInput label="Frequency Penalty" bind:value={commentaryFrequencyPenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-frequency-penalty" />
+          </div>
+        </div>
+
+        <!-- Commentary LLM: Prompts side by side -->
+        <div class="cfg-row-2col">
+          <div class="cfg-card">
+            <div class="cfg-header">
+              <h3 class="cfg-title">Commentary Directive</h3>
+              <p class="cfg-desc">System prompt that tells the LLM how to commentate</p>
+            </div>
+            <div class="cfg-body">
+              <TextArea bind:value={commentaryDirective} rows={12} monospace placeholder="System directive for commentary..." onchange={syncToConfig} testid="config-commentary-directive" />
+            </div>
+          </div>
+          <div class="cfg-card">
+            <div class="cfg-header">
+              <h3 class="cfg-title">Style Nudges</h3>
+              <p class="cfg-desc">One per line — a random nudge is picked each call for variety</p>
+            </div>
+            <div class="cfg-body">
+              <TextArea bind:value={commentaryStyleNudgesText} rows={12} monospace placeholder="One nudge per line..." onchange={syncToConfig} testid="config-commentary-nudges" />
+            </div>
+          </div>
+        </div>
+
         <!-- Row 3: Raw JSON full width -->
         <div class="cfg-card">
           <div class="cfg-header">
@@ -1733,14 +1958,6 @@
         <!-- ─── Library Sub-tab ─── -->
         <div class="voices-toolbar">
           <div class="voices-toolbar-left">
-            <Button
-              variant="primary"
-              loading={syncingVoices}
-              onclick={handleSyncVoices}
-              testid="sync-voices-btn"
-            >
-              {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
-            </Button>
             {#if fishVoices.length > 0}
               <Badge variant="default" text="{voiceFiltered.length} voice{voiceFiltered.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
             {/if}
@@ -1757,6 +1974,18 @@
                 Hiding {celebrityCount} celebrity voice{celebrityCount !== 1 ? 's' : ''}
               </span>
             {/if}
+            <div class="usage-filter" data-testid="usage-filter">
+              {#each [['all', 'All'], ['in_use', 'In Use'], ['unused', 'Unused']] as [val, label]}
+                <button
+                  class="usage-filter-btn"
+                  class:active={voiceUsageFilter === val}
+                  onclick={() => { voiceUsageFilter = val as 'all' | 'in_use' | 'unused'; voicePage = 1; }}
+                  data-testid="usage-filter-{val}"
+                >
+                  {label}
+                </button>
+              {/each}
+            </div>
           </div>
           <div class="voices-search">
             <input
@@ -1828,6 +2057,11 @@
                     <span class="tag-pill tag-more">+{row.tags.length - 3}</span>
                   {/if}
                 </div>
+              {:else if column.key === 'used_by'}
+                {@const chars = voiceUsageMap.get(row.id)}
+                <span class="cell-muted" title={chars?.map(c => c.name).join(', ') ?? ''}>
+                  {chars ? chars.map(c => c.name).join(', ') : '\u2014'}
+                </span>
               {:else if column.key === 'task_count'}
                 <span class="cell-number">{formatNumber(row.task_count)}</span>
               {:else if column.key === 'like_count'}
@@ -2168,7 +2402,9 @@
                     editSystemPrompt = '';
                     editPersonality = { energy: 50, positivity: 50, formality: 50, talkativeness: 50, attitude: 50, humor: 50 };
                     imagePrompt = '';
-                    availableVoices = [];
+                    step3Search = '';
+                    step3Page = 1;
+                    step3ActiveTags = [];
                     doRollAllTokens();
                   }}
                   testid="new-generation-btn"
@@ -2296,48 +2532,91 @@
                 </div>
               {/if}
 
-              <!-- Voice selection list -->
+              <!-- Voice selection table -->
               <div class="voice-list">
                 <span class="info-label">
                   {#if loadingStep3Voices}
                     Loading voices...
                   {:else}
-                    Available Voices ({availableVoices.length}) — click to assign
+                    Available Voices ({step3Filtered.length}) — click a row to assign
                   {/if}
                 </span>
-                {#if availableVoices.length > 0}
-                  <input
-                    type="text"
-                    class="voice-search"
-                    placeholder="Search voices..."
-                    oninput={(e) => {
-                      const q = (e.target as HTMLInputElement).value.toLowerCase();
-                      if (!q) {
-                        // Reset to full list
-                        availableVoices = fishVoices
-                          .filter(v => !isCelebrityVoice(v))
-                          .slice(0, 100)
-                          .map(v => ({ id: v.id, name: v.title }));
-                      } else {
-                        availableVoices = fishVoices
-                          .filter(v => !isCelebrityVoice(v) && v.title.toLowerCase().includes(q))
-                          .slice(0, 100)
-                          .map(v => ({ id: v.id, name: v.title }));
-                      }
-                    }}
-                    data-testid="voice-search-step3"
-                  />
-                  <div class="voice-options">
-                    {#each availableVoices as voice (voice.id)}
-                      <button
-                        class="voice-option"
-                        class:active={workingCharacter.voice_id === voice.id}
-                        onclick={() => runStep3(voice.id)}
-                      >
-                        {voice.name}
-                      </button>
-                    {/each}
+                {#if fishVoices.length > 0}
+                  <div class="step3-toolbar">
+                    <input
+                      type="text"
+                      class="search-input"
+                      placeholder="Search voices..."
+                      bind:value={step3Search}
+                      data-testid="voice-search-step3"
+                    />
                   </div>
+
+                  {#if step3FilterTags.length > 0}
+                    <div class="voice-tag-filter">
+                      <TagFilter
+                        tags={step3FilterTags}
+                        active={step3ActiveTags}
+                        onchange={(tags) => step3ActiveTags = tags}
+                      />
+                    </div>
+                  {/if}
+
+                  <DataTable
+                    columns={step3Columns}
+                    rows={step3Paginated}
+                    sortKey={step3SortKey}
+                    sortDirection={step3SortDirection}
+                    onsort={(key, dir) => { step3SortKey = key; step3SortDirection = dir; }}
+                    selectedId={workingCharacter.voice_id}
+                    onrowclick={(row) => runStep3(row.id)}
+                  >
+                    {#snippet cell({ row, column })}
+                      {#if column.key === 'play'}
+                        {#if row.sample_url}
+                          <button
+                            class="play-btn"
+                            class:playing={playingVoiceId === row.id}
+                            onclick={(e) => { e.stopPropagation(); playVoiceSample(row); }}
+                            data-testid="play-voice-step3-{row.id}"
+                            title={playingVoiceId === row.id ? 'Stop' : 'Play sample'}
+                          >
+                            {playingVoiceId === row.id ? '\u23F9' : '\u25B6'}
+                          </button>
+                        {:else}
+                          <span class="no-sample" title="No sample available">{'\u2014'}</span>
+                        {/if}
+                      {:else if column.key === 'title'}
+                        <span class="cell-name">{row.title}</span>
+                      {:else if column.key === 'tags'}
+                        <div class="tag-pills">
+                          {#each row.tags.slice(0, 3) as tag}
+                            <span class="tag-pill">{tag}</span>
+                          {/each}
+                          {#if row.tags.length > 3}
+                            <span class="tag-pill tag-more">+{row.tags.length - 3}</span>
+                          {/if}
+                        </div>
+                      {:else if column.key === 'used_by'}
+                        {@const chars = voiceUsageMap.get(row.id)}
+                        <span class="cell-muted" title={chars?.map(c => c.name).join(', ') ?? ''}>
+                          {chars ? chars.map(c => c.name).join(', ') : '\u2014'}
+                        </span>
+                      {:else if column.key === 'task_count'}
+                        <span class="cell-number">{formatNumber(row.task_count)}</span>
+                      {:else if column.key === 'author_name'}
+                        <span class="cell-muted">{row.author_name ?? '\u2014'}</span>
+                      {/if}
+                    {/snippet}
+                  </DataTable>
+
+                  <Pagination
+                    total={step3Filtered.length}
+                    page={step3Page}
+                    pageSize={step3PageSize}
+                    onpagechange={(p) => step3Page = p}
+                    onpagesizechange={(s) => { step3PageSize = s; step3Page = 1; }}
+                  />
                 {/if}
               </div>
 
@@ -2447,9 +2726,25 @@
     gap: var(--space-3);
   }
 
-  .header-actions.hidden-actions {
-    visibility: hidden;
-    pointer-events: none;
+  .sync-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .sync-pages-select {
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-1-5) var(--space-3);
+    font-size: var(--font-sm);
+    cursor: pointer;
+  }
+
+  .sync-pages-select:focus {
+    outline: none;
+    border-color: var(--color-pink);
   }
 
   .muted { color: var(--color-text-muted); }
@@ -2670,7 +2965,7 @@
   }
 
   .wizard-step-label {
-    font-size: var(--font-sm);
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-muted);
     transition: color 0.3s ease;
@@ -2866,7 +3161,7 @@
   .character-summary {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-5);
   }
 
   .summary-row {
@@ -2877,7 +3172,7 @@
 
   .summary-row.stacked {
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-1-5);
   }
 
   .summary-label {
@@ -2891,9 +3186,9 @@
   }
 
   .summary-value {
-    font-size: var(--font-sm);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
-    line-height: 1.5;
+    line-height: 1.6;
   }
 
   .summary-actions {
@@ -3327,35 +3622,42 @@
     border-top: 1px solid var(--color-border);
   }
 
-  .voice-options {
+  .step3-toolbar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-height: 280px;
-    overflow-y: auto;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
   }
 
-  .voice-option {
-    padding: var(--space-1) var(--space-3);
+  .step3-toolbar .search-input {
+    flex: 1;
+  }
+
+  .usage-filter {
+    display: flex;
+    gap: 2px;
     border: 1px solid var(--glass-border);
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .usage-filter-btn {
+    padding: var(--space-1) var(--space-2-5);
     background: none;
+    border: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: var(--font-sm);
+    font-size: var(--font-xs);
     cursor: pointer;
     transition: all var(--transition-base);
   }
 
-  .voice-option:hover {
+  .usage-filter-btn:hover {
     background: var(--white-a4);
-    color: var(--color-text-secondary);
   }
 
-  .voice-option.active {
+  .usage-filter-btn.active {
     background: var(--teal-a15);
     color: var(--color-teal);
-    border-color: var(--color-teal);
   }
 
   .voice-current {
@@ -3380,27 +3682,6 @@
     font-size: var(--font-sm);
     font-weight: 600;
     color: var(--color-text-primary);
-  }
-
-  .voice-search {
-    width: 100%;
-    padding: var(--space-2) var(--space-3);
-    background: var(--white-a3);
-    border: 1px solid var(--white-a8);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    font-family: inherit;
-    font-size: var(--font-sm);
-    outline: none;
-    transition: border-color var(--transition-base);
-  }
-
-  .voice-search:focus {
-    border-color: var(--color-teal);
-  }
-
-  .voice-search::placeholder {
-    color: var(--color-text-muted);
   }
 
   /* ─── Show Deleted Toggle ─── */
@@ -4070,4 +4351,5 @@
     border-color: var(--color-teal);
     color: var(--color-teal);
   }
+
 </style>

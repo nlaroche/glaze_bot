@@ -391,6 +391,23 @@ export interface FishVoice {
   created_at: string;
 }
 
+/** Build a map of voice_id → characters using that voice */
+export async function getVoiceUsageMap(): Promise<Map<string, { id: string; name: string }[]>> {
+  const { data, error } = await db()
+    .from("characters")
+    .select("id, name, voice_id")
+    .not("voice_id", "is", null);
+  if (error) throw error;
+
+  const map = new Map<string, { id: string; name: string }[]>();
+  for (const row of data as { id: string; name: string; voice_id: string }[]) {
+    const arr = map.get(row.voice_id);
+    if (arr) arr.push({ id: row.id, name: row.name });
+    else map.set(row.voice_id, [{ id: row.id, name: row.name }]);
+  }
+  return map;
+}
+
 /** Sync voices from Fish Audio API into the DB (admin) */
 export async function syncFishVoices(opts?: {
   page_size?: number;

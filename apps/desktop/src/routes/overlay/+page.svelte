@@ -44,6 +44,13 @@
     ensureMasterLoop();
   }
 
+  let dismissRequested = $state(false);
+
+  function requestDismiss() {
+    // Dismiss after 1s delay so the bubble lingers briefly after audio ends
+    setTimeout(() => { dismissRequested = true; }, 1000);
+  }
+
   function ensureMasterLoop() {
     if (masterRunning) return;
     masterRunning = true;
@@ -59,13 +66,15 @@
             changed = true;
           } else {
             b.typingDone = true;
-            b.holdUntil = now + 2500;
+            // No fixed holdUntil — wait for dismiss signal
+            b.holdUntil = 0;
             changed = true;
           }
-        } else if (!b.exiting && now >= b.holdUntil) {
+        } else if (!b.exiting && dismissRequested) {
           b.exiting = true;
           b.visible = false;
           b.holdUntil = now + 500;
+          dismissRequested = false;
           changed = true;
         } else if (b.exiting && now >= b.holdUntil) {
           b.holdUntil = -1;
@@ -98,6 +107,10 @@
         await webview.listen('chat-message', (event: any) => {
           const p = event.payload;
           addBubble(p.name, p.rarity, p.text, p.image);
+        });
+
+        await webview.listen('chat-dismiss', () => {
+          requestDismiss();
         });
 
         await webview.listen('party-updated', () => {});

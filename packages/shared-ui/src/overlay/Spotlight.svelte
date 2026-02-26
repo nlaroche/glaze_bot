@@ -25,10 +25,8 @@
     }
   });
 
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onclose();
-    }
+  function handleBackdropMousedown() {
+    onclose();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -50,14 +48,15 @@
   <div
     class="spotlight-backdrop"
     class:entering={animating}
-    onclick={handleBackdropClick}
+    onmousedown={handleBackdropMousedown}
     onkeydown={handleKeydown}
     bind:this={backdropEl}
     tabindex={0}
     role="dialog"
     aria-modal="true"
   >
-    <div class="spotlight-content" class:entering={animating}>
+    <!-- stopPropagation prevents mousedown inside content from bubbling to backdrop -->
+    <div class="spotlight-content" class:entering={animating} onmousedown={(e) => e.stopPropagation()}>
       {@render children()}
     </div>
   </div>

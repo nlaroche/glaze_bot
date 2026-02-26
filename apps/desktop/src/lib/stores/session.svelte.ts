@@ -8,6 +8,9 @@ let partySlots = $state<(GachaCharacter | null)[]>([null, null, null]);
 let isRunning = $state(false);
 let isPaused = $state(false);
 let overlayOn = $state(false);
+// Plain mirror of overlayOn for use in non-reactive async callbacks (engine callbacks).
+// $state signals may not resolve correctly outside Svelte's reactive tracking context.
+let _overlayOnRaw = false;
 let chatLog = $state<ChatLogEntry[]>([]);
 let activeShare = $state<CaptureSource | null>(null);
 
@@ -17,13 +20,22 @@ engine.onChatMessage = (entry) => {
 };
 
 engine.onOverlayMessage = async (msg) => {
-  // Read overlayOn via getter to ensure we get the current $state value
-  if (!getSessionStore().overlayOn) return;
+  if (!_overlayOnRaw) return;
   try {
     const { emitTo } = await import('@tauri-apps/api/event');
     await emitTo('overlay', 'chat-message', msg);
   } catch (e) {
     console.error('Failed to emit to overlay:', e);
+  }
+};
+
+engine.onOverlayDismiss = async () => {
+  if (!_overlayOnRaw) return;
+  try {
+    const { emitTo } = await import('@tauri-apps/api/event');
+    await emitTo('overlay', 'chat-dismiss', {});
+  } catch (e) {
+    console.error('Failed to emit dismiss to overlay:', e);
   }
 };
 
@@ -57,6 +69,7 @@ export function setPaused(value: boolean) {
 
 export function setOverlayOn(value: boolean) {
   overlayOn = value;
+  _overlayOnRaw = value;
 }
 
 export function addChatEntry(entry: ChatLogEntry) {

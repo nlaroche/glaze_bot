@@ -2,7 +2,7 @@
   import { CharacterCardRow, ContextMenu, CardViewer, ScreenPicker } from '@glazebot/shared-ui';
   import type { CaptureSource } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
-  import { getCollection } from '@glazebot/supabase-client';
+  import { getCollection, getCharacter } from '@glazebot/supabase-client';
   import { getAuthState } from '$lib/stores/auth.svelte';
   import {
     getSessionStore,
@@ -169,10 +169,25 @@
     const party = getActiveParty();
     if (party.length === 0) return;
 
+    // Re-fetch characters from DB to pick up any changes (e.g. voice reassignment)
+    const freshParty = await Promise.all(
+      party.map(async (c) => {
+        try {
+          const fresh = await getCharacter(c.id);
+          // Update the party slot with fresh data
+          const idx = session.partySlots.findIndex((s) => s?.id === c.id);
+          if (idx !== -1) setPartySlot(idx, fresh);
+          return fresh;
+        } catch {
+          return c; // fallback to cached if fetch fails
+        }
+      })
+    );
+
     setRunning(true);
     setPaused(false);
     clearChatLog();
-    await session.engine.start(session.activeShare.id, party);
+    await session.engine.start(session.activeShare.id, freshParty);
   }
 
   function handlePauseResume() {

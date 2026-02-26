@@ -4,6 +4,7 @@ import {
   jsonResponse,
   errorResponse,
   getRequestUser,
+  getServiceClient,
 } from "../_shared/mod.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
@@ -11,32 +12,33 @@ const DASHSCOPE_BASE_URL =
   Deno.env.get("VISION_BASE_URL") ??
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const VISION_MODEL = Deno.env.get("VISION_MODEL") ?? "qwen3-vl-flash";
-const MAX_RESPONSE_TOKENS = parseInt(
-  Deno.env.get("MAX_RESPONSE_TOKENS") ?? "150",
-  10,
-);
 
-/** 18 style nudges — one is picked at random per call for variety */
-const STYLE_NUDGES = [
-  "Describe ONE specific thing you see on screen and react to that, not the vibe.",
-  "Reference a specific movie, show, or meme that this moment reminds you of.",
-  "Make a bold prediction about what will happen in the next 30 seconds.",
-  "Roast the player's decision-making with love. Be specific about what they did wrong.",
-  "Compare what just happened to something completely unrelated and absurd.",
-  "React as if this is the single greatest or worst moment in gaming history.",
-  "Ask a rhetorical question that highlights the absurdity of the situation.",
-  "Give a backhanded compliment about the play you just witnessed.",
-  "Narrate this moment as if it is the climax of a documentary about the player.",
-  "Pick one object or character on screen and fixate on it for your whole response.",
-  "React to the player's health, gold, or resources specifically — not just the action.",
-  "Say something that would make sense as commentary on a nature documentary.",
-  "Imagine you are commentating this for someone who cannot see the screen.",
-  "Pretend this exact moment will be in a montage, describe why.",
-  "React to the PACE of what is happening — is it frantic, slow, building tension?",
-  "Notice something small or in the background that nobody else would comment on.",
-  "Express a strong opinion about something on screen that does not matter at all.",
-  "Compare the player to a specific fictional character based on what they just did.",
+/** Default style nudges — one is picked at random per call for variety */
+const DEFAULT_STYLE_NUDGES = [
+  "React to ONE specific thing you see on screen.",
+  "Reference a movie, show, or meme this reminds you of.",
+  "Make a bold prediction about what happens next.",
+  "Roast the player's decision. Be specific.",
+  "Ask a rhetorical question about what just happened.",
+  "Give a backhanded compliment about the play.",
+  "Pick one thing on screen and fixate on it.",
+  "React to health, gold, or resources — not just the action.",
+  "Notice something small in the background nobody else would.",
+  "Express a strong opinion about something on screen that doesn't matter.",
+  "Compare the player to a fictional character based on what they did.",
+  "React to the PACE — is it frantic, slow, tense?",
 ];
+
+const DEFAULT_DIRECTIVE = `You are a live gaming commentator watching the player's screen. Your CHARACTER VOICE is flavor — it should color HOW you say things, not WHAT you talk about. DO NOT roleplay or narrate in-character. DO NOT address the player with in-character nicknames or catchphrases. DO NOT use emojis.
+
+Your job: react to what is ACTUALLY HAPPENING on screen right now. Be specific. Name the things you see. If someone dies, say they died. If the player makes a mistake, call it out. If something cool happens, hype it.
+
+Think of yourself as a Twitch co-caster, not a D&D character.`;
+
+const DEFAULT_MAX_TOKENS = 80;
+const DEFAULT_TEMPERATURE = 0.9;
+const DEFAULT_PRESENCE_PENALTY = 1.5;
+const DEFAULT_FREQUENCY_PENALTY = 0.8;
 
 interface Personality {
   energy: number;
@@ -117,32 +119,55 @@ Deno.serve(async (req: Request) => {
       return errorResponse("Dashscope API key not configured", 500);
     }
 
-    // Build full system prompt with personality modifier
-    const fullSystemPrompt =
-      system_prompt + buildPersonalityModifier(personality);
+    // Fetch commentary config from gacha_config (same pattern as generate-character)
+    const serviceClient = getServiceClient();
+    const { data: configRow } = await serviceClient
+      .from("gacha_config")
+      .select("config")
+      .eq("id", "default")
+      .single();
+
+    const commentary =
+      ((configRow?.config as Record<string, unknown>)?.commentary as
+        | Record<string, unknown>
+        | undefined) ?? {};
+    const directive = (commentary.directive as string) ?? DEFAULT_DIRECTIVE;
+    const nudges =
+      (commentary.styleNudges as string[]) ?? DEFAULT_STYLE_NUDGES;
+    const maxTokens =
+      (commentary.maxTokens as number) ?? DEFAULT_MAX_TOKENS;
+    const temperature =
+      (commentary.temperature as number) ?? DEFAULT_TEMPERATURE;
+    const presencePenalty =
+      (commentary.presencePenalty as number) ?? DEFAULT_PRESENCE_PENALTY;
+    const frequencyPenalty =
+      (commentary.frequencyPenalty as number) ?? DEFAULT_FREQUENCY_PENALTY;
+
+    // Build full system prompt: character persona + commentary instructions
+    const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
+
+    const fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective;
 
     // Pick a random style nudge
-    const nudge = STYLE_NUDGES[Math.floor(Math.random() * STYLE_NUDGES.length)];
+    const nudge = nudges[Math.floor(Math.random() * nudges.length)];
 
     // Build text context for the user message
     const textParts: string[] = [];
     if (game_hint) {
-      textParts.push(`The player is playing: ${game_hint}`);
+      textParts.push(`Game: ${game_hint}`);
     }
     if (react_to) {
       textParts.push(
-        `Your co-caster ${react_to.name} just said: "${react_to.text}" — react to them or the screen.`,
+        `Co-caster ${react_to.name} just said: "${react_to.text}"`,
       );
     }
     if (player_text) {
-      textParts.push(`The player just said: "${player_text}"`);
+      textParts.push(`Player said: "${player_text}"`);
     }
-    textParts.push(`[Style hint: ${nudge}]`);
+    textParts.push(`[${nudge}]`);
+    textParts.push("/no_think");
     textParts.push(
-      "/no_think",
-    );
-    textParts.push(
-      "CRITICAL: Keep your response to 1-2 short sentences MAX (under 40 words). Be punchy and reactive, not descriptive or analytical. If nothing interesting is happening, respond with exactly [SILENCE].",
+      "1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]",
     );
 
     // Build multimodal user content (OpenAI-compatible format)
@@ -186,10 +211,10 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({
           model: VISION_MODEL,
           messages,
-          max_tokens: MAX_RESPONSE_TOKENS,
-          temperature: 1.2,
-          presence_penalty: 2.0,
-          frequency_penalty: 1.0,
+          max_tokens: maxTokens,
+          temperature,
+          presence_penalty: presencePenalty,
+          frequency_penalty: frequencyPenalty,
         }),
       },
     );

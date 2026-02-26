@@ -10,6 +10,21 @@ import {
   setFrameResponse,
 } from '../stores/debug.svelte';
 
+/** Strip markdown formatting so TTS doesn't read asterisks, hashes, etc. */
+function cleanForTTS(text: string): string {
+  return text
+    .replace(/\*{1,3}(.*?)\*{1,3}/g, '$1')   // *bold*, **bold**, ***bold***
+    .replace(/_{1,3}(.*?)_{1,3}/g, '$1')       // _italic_, __underline__
+    .replace(/~~(.*?)~~/g, '$1')                // ~~strikethrough~~
+    .replace(/`{1,3}(.*?)`{1,3}/gs, '$1')      // `code`, ```blocks```
+    .replace(/^#{1,6}\s+/gm, '')                // # headers
+    .replace(/^\s*[-*+]\s+/gm, '')              // - bullet points
+    .replace(/^\s*\d+\.\s+/gm, '')              // 1. numbered lists
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')    // [links](url)
+    .replace(/\n{3,}/g, '\n\n')                 // collapse excess newlines
+    .trim();
+}
+
 const MAX_HISTORY = 10; // 10 turns = 20 messages
 const POLL_INTERVAL_MS = 2000;
 const REACT_CHANCE = 0.25;
@@ -60,6 +75,9 @@ export class CommentaryEngine {
   onOverlayMessage:
     | ((msg: { name: string; rarity: string; text: string; image?: string }) => void)
     | null = null;
+
+  /** Callback fired when overlay bubble should dismiss (after audio ends) */
+  onOverlayDismiss: (() => void) | null = null;
 
   get isRunning() {
     return this.running;
@@ -283,7 +301,7 @@ export class CommentaryEngine {
                 Authorization: `Bearer ${session.access_token}`,
               },
               body: JSON.stringify({
-                text: responseText,
+                text: cleanForTTS(responseText),
                 reference_id: character.voice_id,
               }),
             },
@@ -340,6 +358,7 @@ export class CommentaryEngine {
       if (audioBlobUrl) {
         await this.playAudio(audioBlobUrl);
       }
+      this.onOverlayDismiss?.();
 
       this.lastSpokeTime = Date.now();
 
@@ -445,7 +464,7 @@ export class CommentaryEngine {
                 Authorization: `Bearer ${session.access_token}`,
               },
               body: JSON.stringify({
-                text: responseText,
+                text: cleanForTTS(responseText),
                 reference_id: reactor.voice_id,
               }),
             },
@@ -490,6 +509,7 @@ export class CommentaryEngine {
       if (audioBlobUrl) {
         await this.playAudio(audioBlobUrl);
       }
+      this.onOverlayDismiss?.();
     } catch (err) {
       logDebug('error', {
         step: 'reaction',
