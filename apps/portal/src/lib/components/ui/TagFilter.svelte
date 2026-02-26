@@ -60,32 +60,32 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-1-5);
   }
 
   .tag-separator {
     color: var(--glass-border);
-    font-size: 0.9rem;
-    margin: 0 2px;
+    font-size: var(--font-md);
+    margin: 0 var(--space-0-5);
     user-select: none;
   }
 
   .tag-chip {
-    padding: 5px 14px;
+    padding: 5px var(--space-3-5);
     border: 1px solid var(--glass-border);
     border-radius: 14px;
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.12s;
+    transition: all var(--transition-fast);
     white-space: nowrap;
   }
 
   .tag-chip:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--white-a4);
     color: var(--color-text-secondary);
   }
 

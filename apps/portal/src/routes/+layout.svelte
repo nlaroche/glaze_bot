@@ -130,53 +130,53 @@
   .sidebar-brand {
     display: flex;
     flex-direction: column;
-    padding: 16px 16px 14px;
+    padding: var(--space-4) var(--space-4) var(--space-3-5);
     border-bottom: 1px solid var(--color-border);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
   }
 
   .brand-title {
     font-family: 'Michroma', sans-serif;
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     font-weight: 400;
-    color: #c0c8d4;
+    color: var(--color-text-primary);
     letter-spacing: 1px;
   }
 
   .brand-tagline {
     font-family: 'Michroma', sans-serif;
-    font-size: 0.5rem;
+    font-size: var(--font-brand-sm);
     font-weight: 400;
     color: var(--color-text-muted);
     letter-spacing: 1.5px;
-    margin-top: 2px;
+    margin-top: var(--space-0-5);
   }
 
   .nav-items {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 4px 8px;
+    gap: var(--space-0-5);
+    padding: var(--space-1) var(--space-2);
   }
 
   .nav-bottom {
     margin-top: auto;
-    padding: 8px;
+    padding: var(--space-2);
     border-top: 1px solid var(--color-border);
   }
 
   .nav-link {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    color: var(--color-text-muted);
+    gap: var(--space-2-5);
+    padding: var(--space-2) var(--space-2-5);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
     text-decoration: none;
-    font-size: 0.8125rem;
+    font-size: var(--font-base);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
     border: none;
     background: none;
     font-family: inherit;
@@ -184,12 +184,12 @@
   }
 
   .nav-link:hover {
-    background: rgba(59, 151, 151, 0.12);
+    background: var(--teal-a12);
     color: var(--color-text-primary);
   }
 
   .nav-link.active {
-    background: rgba(59, 151, 151, 0.2);
+    background: var(--teal-a20);
     color: var(--color-teal);
   }
 
@@ -207,8 +207,8 @@
   }
 
   .logout-link:hover {
-    background: rgba(248, 113, 113, 0.12);
-    color: #f87171;
+    background: var(--error-a12);
+    color: var(--color-error);
   }
 
   /* ─── Content ─── */

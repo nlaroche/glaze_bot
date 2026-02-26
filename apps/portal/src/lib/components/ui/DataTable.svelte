@@ -83,21 +83,21 @@
 <style>
   .data-table-wrap {
     overflow-x: auto;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--white-a6);
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 var(--white-a3),
+      0 1px 3px var(--black-a40),
+      0 4px 12px var(--black-a20);
   }
 
   .data-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.875rem;
+    font-size: var(--font-base);
   }
 
   thead {
@@ -107,14 +107,14 @@
   }
 
   th {
-    padding: 10px 14px;
+    padding: var(--space-2-5) var(--space-3-5);
     text-align: left;
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--color-text-muted);
-    background: rgba(10, 14, 24, 0.8);
+    background: var(--navy-a80);
     border-bottom: 1px solid var(--color-border);
     white-space: nowrap;
     user-select: none;
@@ -131,17 +131,17 @@
   .th-content {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .sort-arrow {
-    font-size: 0.625rem;
+    font-size: var(--font-2xs);
     color: var(--color-teal);
   }
 
   td {
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    padding: var(--space-2-5) var(--space-3-5);
+    border-bottom: 1px solid var(--white-a3);
     color: var(--color-text-secondary);
     vertical-align: middle;
   }
@@ -152,11 +152,11 @@
   }
 
   tbody tr:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--white-a4);
   }
 
   tbody tr.selected {
-    background: rgba(59, 151, 151, 0.08);
+    background: var(--teal-a8);
     border-left: 3px solid var(--color-teal);
   }
 
@@ -166,11 +166,11 @@
 
   .empty-row td {
     text-align: center;
-    padding: 40px 14px;
+    padding: var(--space-10) var(--space-3-5);
   }
 
   .empty-text {
     color: var(--color-text-muted);
-    font-size: 0.875rem;
+    font-size: var(--font-base);
   }
 </style>

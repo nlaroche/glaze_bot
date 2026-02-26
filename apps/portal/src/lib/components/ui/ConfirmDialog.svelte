@@ -45,7 +45,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: fadeIn 0.15s ease;
+    animation: fadeIn var(--transition-base) ease;
   }
 
   @keyframes fadeIn {
@@ -55,17 +55,17 @@
 
   .dialog {
     background: rgba(8, 14, 28, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--white-a8);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-radius: 14px;
-    padding: 24px;
+    padding: var(--space-6);
     min-width: 340px;
     max-width: 440px;
-    animation: slideUp 0.15s ease;
+    animation: slideUp var(--transition-base) ease;
     box-shadow:
-      0 0 60px rgba(59, 151, 151, 0.06),
-      0 8px 32px rgba(0, 0, 0, 0.4);
+      0 0 60px var(--teal-a5),
+      0 8px 32px var(--black-a40);
   }
 
   @keyframes slideUp {
@@ -74,22 +74,22 @@
   }
 
   .dialog-title {
-    font-size: 1.125rem;
+    font-size: var(--font-xl);
     font-weight: 700;
     color: var(--color-text-primary);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
   }
 
   .dialog-message {
-    font-size: 0.9375rem;
+    font-size: var(--font-md);
     color: var(--color-text-secondary);
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
     line-height: 1.5;
   }
 
   .dialog-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     justify-content: flex-end;
   }
 </style>

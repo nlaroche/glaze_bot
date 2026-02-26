@@ -12,18 +12,18 @@
   .badge {
     display: inline-flex;
     align-items: center;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 6px;
+    padding: var(--space-1) var(--space-2-5);
+    border-radius: var(--radius-md);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  .badge-default { background: rgba(59, 151, 151, 0.2); color: var(--color-teal); }
-  .badge-warning { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-  .badge-success { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-  .badge-common { background: rgba(160, 174, 192, 0.15); color: var(--rarity-common); }
-  .badge-rare { background: rgba(59, 151, 151, 0.15); color: var(--rarity-rare); }
-  .badge-epic { background: rgba(176, 106, 255, 0.15); color: var(--rarity-epic); }
-  .badge-legendary { background: rgba(255, 215, 0, 0.15); color: var(--rarity-legendary); }
+  .badge-default { background: var(--teal-a20); color: var(--color-teal); }
+  .badge-warning { background: var(--error-a20); color: var(--color-error); }
+  .badge-success { background: rgba(74, 222, 128, 0.2); color: var(--color-success); }
+  .badge-common { background: var(--rarity-common-bg); color: var(--rarity-common); }
+  .badge-rare { background: var(--rarity-rare-bg); color: var(--rarity-rare); }
+  .badge-epic { background: var(--rarity-epic-bg); color: var(--rarity-epic); }
+  .badge-legendary { background: var(--rarity-legendary-bg); color: var(--rarity-legendary); }
 </style>

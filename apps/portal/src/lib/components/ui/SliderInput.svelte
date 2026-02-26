@@ -36,13 +36,13 @@
 </div>
 
 <style>
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field-label { font-size: 0.875rem; font-weight: 500; color: var(--color-text-secondary); }
-  .slider-row { display: flex; align-items: center; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: var(--space-1-5); }
+  .field-label { font-size: var(--font-base); font-weight: 500; color: var(--color-text-secondary); }
+  .slider-row { display: flex; align-items: center; gap: var(--space-3-5); }
   .slider { flex: 1; max-width: 320px; cursor: pointer; }
   .slider:disabled { opacity: 0.5; cursor: not-allowed; }
   .slider-value {
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     color: var(--color-text-muted);
     min-width: 52px;
     text-align: right;

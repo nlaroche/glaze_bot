@@ -13,8 +13,8 @@
 <style>
   .badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
+    padding: var(--space-0-5) var(--space-2);
+    border-radius: var(--radius-sm);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -27,17 +27,17 @@
   }
 
   .rarity-rare {
-    background: rgba(59, 151, 151, 0.2);
+    background: var(--teal-a20);
     color: var(--rarity-rare);
   }
 
   .rarity-epic {
-    background: rgba(176, 106, 255, 0.2);
+    background: var(--epic-a20);
     color: var(--rarity-epic);
   }
 
   .rarity-legendary {
-    background: rgba(255, 215, 0, 0.2);
+    background: var(--gold-a20);
     color: var(--rarity-legendary);
   }
 </style>

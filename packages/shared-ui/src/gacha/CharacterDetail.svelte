@@ -97,7 +97,7 @@
     background: var(--color-navy);
     border: 1px solid var(--glass-border);
     border-radius: 16px;
-    padding: 24px;
+    padding: var(--space-6);
     max-width: 480px;
     width: 90%;
     max-height: 80vh;
@@ -110,14 +110,14 @@
 
   .close-btn {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: var(--space-3);
+    right: var(--space-3);
     background: none;
     border: none;
     color: var(--color-text-muted);
     font-size: 1.5rem;
     cursor: pointer;
-    padding: 4px;
+    padding: var(--space-1);
     line-height: 1;
   }
 
@@ -125,15 +125,15 @@
 
   .header {
     display: flex;
-    gap: 16px;
+    gap: var(--space-4);
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
   }
 
   .header-info {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .header-info h2 {
@@ -142,67 +142,67 @@
   }
 
   .voice {
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     color: var(--color-text-muted);
   }
 
   .description {
     color: var(--color-text-secondary);
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     line-height: 1.5;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
   }
 
   .section {
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
   }
 
   .section h3 {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     color: var(--color-text-muted);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
   .section p {
     color: var(--color-text-secondary);
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     line-height: 1.5;
   }
 
   .trait-grid {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .trait-header {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 2px;
+    margin-bottom: var(--space-0-5);
   }
 
   .trait-name {
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     color: var(--color-text-secondary);
   }
 
   .trait-value {
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     color: var(--color-text-muted);
   }
 
   .trait-bar {
     height: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 3px;
+    background: var(--white-a8);
+    border-radius: var(--radius-xs);
     overflow: hidden;
   }
 
   .trait-fill {
     height: 100%;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
     transition: width 0.5s ease-out;
   }
 
@@ -213,16 +213,16 @@
 
   .party-btn {
     width: 100%;
-    padding: 10px;
+    padding: var(--space-2-5);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--color-teal);
     color: white;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.2s;
+    transition: background var(--transition-slow);
   }
 
   .party-btn:hover { background: #4ab0b0; }

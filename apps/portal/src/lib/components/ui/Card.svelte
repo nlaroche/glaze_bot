@@ -21,14 +21,14 @@
   .card {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    padding: 20px;
+    border-radius: var(--panel-radius);
+    padding: var(--space-5);
     backdrop-filter: blur(var(--glass-blur));
   }
   .card-title {
-    font-size: 0.95rem;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--color-text-primary);
-    margin: 0 0 16px;
+    margin: 0 0 var(--space-4);
   }
 </style>

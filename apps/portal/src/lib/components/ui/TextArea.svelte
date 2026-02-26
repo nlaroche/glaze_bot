@@ -28,24 +28,24 @@
 </div>
 
 <style>
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field-label { font-size: 0.875rem; font-weight: 500; color: var(--color-text-secondary); }
+  .field { display: flex; flex-direction: column; gap: var(--space-1-5); }
+  .field-label { font-size: var(--font-base); font-weight: 500; color: var(--color-text-secondary); }
   .field-textarea {
     width: 100%;
-    padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
+    padding: var(--input-padding);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--input-radius);
     color: var(--color-text-primary);
     font-family: inherit;
-    font-size: 0.9375rem;
+    font-size: var(--input-font-size);
     line-height: 1.5;
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-base), background var(--transition-base);
   }
-  .field-textarea:focus { border-color: var(--color-teal); background: rgba(59, 151, 151, 0.05); }
+  .field-textarea:focus { border-color: var(--input-focus-border); background: var(--input-focus-bg); }
   .field-textarea:disabled { opacity: 0.5; cursor: not-allowed; }
-  .field-textarea.monospace { font-family: 'Courier New', monospace; font-size: 0.875rem; }
-  .field-desc { font-size: 0.8125rem; color: var(--color-text-muted); margin: 0; }
+  .field-textarea.monospace { font-family: 'Courier New', monospace; font-size: var(--font-base); }
+  .field-desc { font-size: var(--font-sm); color: var(--color-text-muted); margin: 0; }
 </style>

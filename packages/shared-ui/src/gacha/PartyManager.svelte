@@ -124,7 +124,7 @@
   .party-manager {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
   }
 
   h2 {
@@ -135,19 +135,19 @@
 
   .subtitle {
     color: var(--color-text-muted);
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     margin: 0;
   }
 
   .slots {
     display: flex;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .slot {
     flex: 1;
     min-height: 80px;
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     overflow: hidden;
@@ -160,21 +160,21 @@
   .slot-content {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px;
+    gap: var(--space-2);
+    padding: var(--space-3);
     position: relative;
   }
 
   .slot-info {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     min-width: 0;
   }
 
   .slot-name {
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -182,18 +182,18 @@
 
   .remove-btn {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: var(--space-1);
+    right: var(--space-1);
     background: none;
     border: none;
     color: var(--color-text-muted);
     font-size: 1.2rem;
     cursor: pointer;
-    padding: 4px;
+    padding: var(--space-1);
     line-height: 1;
   }
 
-  .remove-btn:hover { color: #f87171; }
+  .remove-btn:hover { color: var(--color-error); }
 
   .add-btn {
     width: 100%;
@@ -203,14 +203,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--space-1);
     background: none;
     border: none;
     color: var(--color-text-muted);
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.8rem;
-    transition: color 0.2s;
+    font-size: var(--font-brand-md);
+    transition: color var(--transition-slow);
   }
 
   .add-btn:hover { color: var(--color-teal); }
@@ -221,16 +221,16 @@
   }
 
   .save-btn {
-    padding: 10px 24px;
+    padding: var(--space-2-5) var(--space-6);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--color-teal);
     color: white;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
-    transition: background 0.2s;
+    transition: background var(--transition-slow);
     align-self: flex-start;
   }
 
@@ -240,31 +240,31 @@
   .picker {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    padding: 16px;
+    border-radius: var(--radius-2xl);
+    padding: var(--space-4);
   }
 
   .picker-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-3);
   }
 
   .picker-header h3 {
-    font-size: 0.95rem;
+    font-size: var(--font-md);
     margin: 0;
   }
 
   .cancel-btn {
     background: none;
     border: 1px solid var(--glass-border);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--color-text-secondary);
-    padding: 4px 12px;
+    padding: var(--space-1) var(--space-3);
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
   }
 
   .cancel-btn:hover { color: var(--color-text-primary); }
@@ -272,13 +272,13 @@
   .empty-msg {
     color: var(--color-text-muted);
     text-align: center;
-    padding: 20px;
+    padding: var(--space-5);
   }
 
   .picker-grid {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     max-height: 300px;
     overflow-y: auto;
   }
@@ -286,31 +286,31 @@
   .picker-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px;
-    border-radius: 8px;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
     background: none;
     border: 1px solid transparent;
     cursor: pointer;
     color: inherit;
     font-family: inherit;
     text-align: left;
-    transition: all 0.2s;
+    transition: all var(--transition-slow);
   }
 
   .picker-item:hover {
-    background: rgba(59, 151, 151, 0.1);
+    background: var(--teal-a10);
     border-color: var(--glass-border);
   }
 
   .picker-info {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-0-5);
   }
 
   .picker-name {
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-weight: 600;
   }
 </style>

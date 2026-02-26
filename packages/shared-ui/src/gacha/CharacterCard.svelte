@@ -407,7 +407,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
   }
 
   /* ── Full-bleed art ── */
@@ -522,19 +522,19 @@
     left: 0;
     right: 0;
     height: 110px;
-    padding: 14px;
+    padding: var(--space-3-5);
     background: rgba(8, 12, 22, 0.8);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--white-a8);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-1-5);
     z-index: 4;
   }
 
   .name {
-    font-size: 1.25rem;
+    font-size: var(--font-2xl);
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
@@ -545,7 +545,7 @@
   }
 
   .description {
-    font-size: 0.88rem;
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
     line-height: 1.4;
     overflow: hidden;
@@ -560,8 +560,8 @@
   /* ── Stats: single compact row of dot groups ── */
   .trait-row {
     display: flex;
-    gap: 10px;
-    margin-top: 2px;
+    gap: var(--space-2-5);
+    margin-top: var(--space-0-5);
   }
 
   .trait-group {
@@ -573,15 +573,15 @@
   .dot {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-full);
+    background: var(--white-a10);
+    border: 1px solid var(--white-a12);
     transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
   }
 
   .dot:not(.revealed) {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--white-a6);
+    border-color: var(--white-a8);
   }
 
   .card.rarity-common .dot.filled.revealed {
@@ -612,10 +612,10 @@
   .card-back {
     border: 4px solid;
     border-color:
-      rgba(255, 255, 255, 0.12)
-      rgba(255, 255, 255, 0.06)
-      rgba(0, 0, 0, 0.3)
-      rgba(255, 255, 255, 0.06);
+      var(--white-a12)
+      var(--white-a6)
+      var(--black-a30)
+      var(--white-a6);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -624,7 +624,7 @@
   .card-back-inner {
     position: absolute;
     inset: 0;
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
     overflow: hidden;
     background: linear-gradient(135deg, var(--color-navy, #0a0e18), #1a3a5c);
     display: flex;
@@ -645,8 +645,8 @@
   .card-back-pattern {
     width: 80%;
     height: 80%;
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
+    border: 2px solid var(--white-a10);
+    border-radius: var(--radius-lg);
     display: flex;
     align-items: center;
     justify-content: center;

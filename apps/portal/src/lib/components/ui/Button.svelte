@@ -35,15 +35,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 22px;
+    gap: var(--space-2);
+    padding: var(--space-2-5) 22px;
     border: 1px solid transparent;
     border-radius: 7px;
     font-weight: 600;
     font-family: inherit;
-    font-size: 0.9375rem;
+    font-size: var(--font-md);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all var(--transition-base) ease;
     white-space: nowrap;
     line-height: 1;
   }
@@ -52,17 +52,17 @@
 
   .btn-primary {
     background: linear-gradient(180deg, #449999 0%, #327272 100%);
-    border-color: rgba(59, 151, 151, 0.4);
+    border-color: var(--teal-a40);
     color: #fff;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 1px 2px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 var(--white-a12),
+      0 1px 2px var(--black-a30);
   }
   .btn-primary:hover:not(:disabled) {
     background: linear-gradient(180deg, #4daaaa 0%, #3a8484 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.15),
-      0 2px 6px rgba(59, 151, 151, 0.3);
+      inset 0 1px 0 var(--white-a15),
+      0 2px 6px var(--teal-a30);
   }
 
   .btn-secondary {
@@ -70,21 +70,21 @@
     border-color: var(--color-border);
     color: var(--color-text-primary);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.04),
-      0 1px 2px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 var(--white-a4),
+      0 1px 2px var(--black-a30);
   }
   .btn-secondary:hover:not(:disabled) {
     background: linear-gradient(180deg, #1e2740 0%, #1a2035 100%);
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--white-a10);
   }
 
   .btn-destructive {
     background: linear-gradient(180deg, #9b3030 0%, #7a2424 100%);
     border-color: rgba(200, 50, 50, 0.3);
-    color: #fca5a5;
+    color: var(--color-error-soft);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 1px 2px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 var(--white-a8),
+      0 1px 2px var(--black-a30);
   }
   .btn-destructive:hover:not(:disabled) {
     background: linear-gradient(180deg, #b33636 0%, #8a2a2a 100%);
@@ -96,7 +96,7 @@
     color: var(--color-text-secondary);
   }
   .btn-ghost:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--white-a4);
     color: var(--color-text-primary);
   }
 

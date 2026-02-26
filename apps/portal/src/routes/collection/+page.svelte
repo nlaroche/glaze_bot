@@ -28,8 +28,8 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 20px 28px 48px;
-    gap: 24px;
+    padding: var(--space-5) var(--space-7) var(--space-12);
+    gap: var(--space-6);
     overflow-y: auto;
 
     /* Override shared-ui CSS vars for portal styling */
@@ -41,11 +41,11 @@
 
   h2 {
     font-family: 'Michroma', sans-serif;
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     font-weight: 400;
-    color: #c0c8d4;
+    color: var(--color-heading);
     letter-spacing: 1px;
-    margin: 0 0 12px;
+    margin: 0 0 var(--space-3);
   }
 
   .party-section {
@@ -70,25 +70,25 @@
   /* Glass surfaces for party slots and picker */
   .party-section :global(.slot) {
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-color: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-color: var(--white-a6);
   }
 
   .party-section :global(.picker) {
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-color: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-color: var(--white-a6);
   }
 
   /* Gradient save button */
   .party-section :global(.save-btn) {
     background: linear-gradient(180deg, #449999 0%, #327272 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.15),
-      0 1px 3px rgba(0, 0, 0, 0.3);
-    border-radius: 8px;
+      inset 0 1px 0 var(--white-a15),
+      0 1px 3px var(--black-a30);
+    border-radius: var(--radius-lg);
   }
 
   .party-section :global(.save-btn:hover:not(:disabled)) {
@@ -98,14 +98,14 @@
   /* Glass search and filter inputs */
   .collection-section :global(.search),
   .collection-section :global(.filter-select) {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.07);
+    background: var(--input-bg);
+    border-color: var(--input-border);
   }
 
   .collection-section :global(.search:focus),
   .collection-section :global(.filter-select:focus) {
-    border-color: var(--color-teal);
-    background: rgba(59, 151, 151, 0.05);
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
   }
 
   /* Glass character detail modal */
@@ -113,18 +113,18 @@
     background: rgba(8, 14, 28, 0.82);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border-color: rgba(255, 255, 255, 0.07);
+    border-color: var(--white-a8);
     box-shadow:
-      0 0 60px rgba(59, 151, 151, 0.06),
-      0 8px 32px rgba(0, 0, 0, 0.4);
+      0 0 60px var(--teal-a5),
+      0 8px 32px var(--black-a40);
   }
 
   /* Gradient party button in detail modal */
   .page :global(.party-btn) {
     background: linear-gradient(180deg, #449999 0%, #327272 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.15),
-      0 1px 3px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 var(--white-a15),
+      0 1px 3px var(--black-a30);
   }
 
   .page :global(.party-btn:hover) {
@@ -133,6 +133,6 @@
 
   /* Cancel button glass style */
   .party-section :global(.cancel-btn) {
-    border-color: rgba(255, 255, 255, 0.07);
+    border-color: var(--white-a8);
   }
 </style>

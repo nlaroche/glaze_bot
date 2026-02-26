@@ -90,16 +90,16 @@
     position: fixed;
     z-index: 2000;
     min-width: 160px;
-    padding: 4px;
-    border-radius: 8px;
+    padding: var(--space-1);
+    border-radius: var(--radius-lg);
     background: rgba(16, 22, 36, 0.95);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--white-a10);
     box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.5),
-      0 2px 8px rgba(0, 0, 0, 0.3);
-    animation: menu-in 0.12s ease-out;
+      0 8px 32px var(--black-a50),
+      0 2px 8px var(--black-a30);
+    animation: menu-in var(--transition-fast) ease-out;
   }
 
   @keyframes menu-in {
@@ -116,21 +116,21 @@
   .menu-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     width: 100%;
-    padding: 7px 12px;
+    padding: 7px var(--space-3);
     border: none;
     border-radius: 5px;
     background: transparent;
     color: var(--color-text-primary, #e2e8f0);
-    font-size: 0.82rem;
+    font-size: var(--font-sm);
     cursor: pointer;
     text-align: left;
     transition: background 0.1s;
   }
 
   .menu-item:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--white-a8);
   }
 
   .menu-item.disabled {
@@ -139,14 +139,14 @@
   }
 
   .icon {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     width: 18px;
     text-align: center;
   }
 
   .separator {
     height: 1px;
-    background: rgba(255, 255, 255, 0.08);
-    margin: 4px 8px;
+    background: var(--white-a8);
+    margin: var(--space-1) var(--space-2);
   }
 </style>

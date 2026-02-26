@@ -116,19 +116,139 @@
   let playingVoiceId: string | null = $state(null);
   let currentAudio: HTMLAudioElement | null = $state(null);
   let voiceSearch = $state('');
+  let voicePage = $state(1);
+  let voicePageSize = $state(25);
+  let voiceSortKey = $state('task_count');
+  let voiceSortDirection: 'asc' | 'desc' = $state('desc');
+  let activeVoiceTags: string[] = $state([]);
+  let hideCelebrities = $state(true);
+  let pinnedVoiceIds: Set<string> = $state(new Set());
 
-  let filteredVoices = $derived(
-    voiceSearch
-      ? fishVoices.filter(v => {
-          const q = voiceSearch.toLowerCase();
-          return v.title.toLowerCase().includes(q)
-            || v.description.toLowerCase().includes(q)
-            || v.tags.some(t => t.toLowerCase().includes(q));
-        })
-      : fishVoices
+  // ─── Celebrity Voice Filter ──────────────────────────────────────
+  const CELEBRITY_NAMES: string[] = [
+    // Real people
+    'elon musk', 'donald trump', 'trump', 'taylor swift', 'barack obama', 'obama',
+    'morgan freeman', 'david attenborough', 'sydney sweeney', 'gigi hadid', 'mrbeast',
+    'billy graham', 'napoleon hill', 'warren buffett', 'warren buffet', 'ronaldo',
+    'jim rohn', 'voddie baucham', 'shi heng yi', 'neville goddard', 'matthew hussey',
+    'angela white', 'denzel', 'andrew tate', 'joe rogan', 'jordan peterson',
+    'ben shapiro', 'pewdiepie', 'snoop dogg', 'kanye', 'drake', 'ariana grande',
+    'kim kardashian', 'oprah', 'jeff bezos', 'mark zuckerberg', 'joe biden', 'biden',
+    // Fictional characters
+    'spongebob', 'peter griffin', 'goku', 'rick sanchez', 'glados', 'hatsune miku',
+    'sonic', 'bluey', 'mario', 'jarvis', 'dexter morgan', 'sorting hat',
+    'raiden shogun', 'invincible', 'shadow milk cookie', 'homer simpson',
+    'bart simpson', 'stewie griffin', 'cartman', 'darth vader', 'gollum',
+    'optimus prime', 'pikachu', 'naruto', 'vegeta',
+  ];
+
+  const CELEBRITY_KEYWORDS: string[] = [
+    'copyrighted', 'impression', 'impersonation', 'clone of', 'voice clone', 'potus',
+  ];
+
+  function isCelebrityVoice(v: FishVoice): boolean {
+    const title = v.title.toLowerCase();
+    const tagStr = v.tags.map(t => t.toLowerCase());
+
+    for (const name of CELEBRITY_NAMES) {
+      if (title.includes(name)) return true;
+      if (tagStr.some(t => t.includes(name))) return true;
+    }
+    for (const kw of CELEBRITY_KEYWORDS) {
+      if (title.includes(kw)) return true;
+      if (tagStr.some(t => t.includes(kw))) return true;
+    }
+    return false;
+  }
+
+  const celebrityCount = $derived(fishVoices.filter(v => isCelebrityVoice(v)).length);
+
+  const voiceColumns: Column[] = [
+    { key: 'pin', label: '', width: '40px' },
+    { key: 'play', label: '', width: '48px' },
+    { key: 'title', label: 'Name', sortable: true },
+    { key: 'tags', label: 'Tags', width: '200px' },
+    { key: 'task_count', label: 'Popularity', sortable: true, width: '110px' },
+    { key: 'like_count', label: 'Likes', sortable: true, width: '90px' },
+    { key: 'author_name', label: 'Author', sortable: true, width: '120px' },
+    { key: 'description', label: 'Description' },
+  ];
+
+  // Build tag filter options dynamically from voice data
+  const voiceFilterTags: Tag[] = $derived.by(() => {
+    const tagCounts = new Map<string, number>();
+    for (const v of fishVoices) {
+      for (const t of v.tags) {
+        tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+      }
+    }
+    const sorted = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+    return sorted.map(([tag]) => ({
+      key: tag,
+      label: tag,
+      group: 'Tags',
+    }));
+  });
+
+  // Reactive chain: fishVoices → voiceFiltered → voiceSorted → voicePaginated
+  const voiceFiltered = $derived.by(() => {
+    let result = fishVoices;
+
+    if (hideCelebrities) {
+      result = result.filter(v => !isCelebrityVoice(v));
+    }
+
+    if (voiceSearch) {
+      const q = voiceSearch.toLowerCase();
+      result = result.filter(v =>
+        v.title.toLowerCase().includes(q)
+          || v.description.toLowerCase().includes(q)
+          || v.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+
+    if (activeVoiceTags.length > 0) {
+      result = result.filter(v =>
+        activeVoiceTags.every(tag => v.tags.includes(tag))
+      );
+    }
+
+    return result;
+  });
+
+  const voiceSorted = $derived.by(() => {
+    const arr = [...voiceFiltered];
+    arr.sort((a, b) => {
+      const aVal = (a as Record<string, unknown>)[voiceSortKey];
+      const bVal = (b as Record<string, unknown>)[voiceSortKey];
+      let cmp = 0;
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        cmp = aVal - bVal;
+      } else if (typeof aVal === 'string' && typeof bVal === 'string') {
+        cmp = aVal.localeCompare(bVal);
+      } else {
+        cmp = String(aVal ?? '').localeCompare(String(bVal ?? ''));
+      }
+      return voiceSortDirection === 'asc' ? cmp : -cmp;
+    });
+    return arr;
+  });
+
+  const voicePaginated = $derived(
+    voiceSorted.slice((voicePage - 1) * voicePageSize, voicePage * voicePageSize)
   );
 
+  // ─── Derived: Pinned voices for generative tab ─────────────────────
+  const pinnedVoices = $derived(fishVoices.filter(v => pinnedVoiceIds.has(v.id)));
+
+  function togglePinnedVoice(id: string) {
+    const next = new Set(pinnedVoiceIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    pinnedVoiceIds = next;
+  }
+
   // ─── State: Generative TTS ─────────────────────────────────────────
+  let genReferenceId: string | null = $state(null);
   let voicesSubTab: 'library' | 'generative' = $state('library');
   let genText = $state('(excited) Oh nice, you just pulled off a triple kill! (laughing) Ha ha, they had no idea what hit them!');
   let genTemperature = $state(0.7);
@@ -281,6 +401,12 @@
     searchQuery;
     activeTags;
     page = 1;
+  });
+
+  $effect(() => {
+    voiceSearch;
+    activeVoiceTags;
+    voicePage = 1;
   });
 
   // ─── Data Loading ─────────────────────────────────────────────────
@@ -618,7 +744,7 @@
   async function handleSyncVoices() {
     syncingVoices = true;
     try {
-      await syncFishVoices();
+      await syncFishVoices({ page_count: 10 });
       fishVoices = await getFishVoices();
       voicesLoaded = true;
     } catch (e) {
@@ -667,6 +793,7 @@
     try {
       const audioData = await generativeTts({
         text: genText,
+        reference_id: genReferenceId,
         temperature: genTemperature,
         top_p: genTopP,
         repetition_penalty: genRepPenalty,
@@ -1208,7 +1335,20 @@
               {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
             </Button>
             {#if fishVoices.length > 0}
-              <Badge variant="default" text="{filteredVoices.length} voice{filteredVoices.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
+              <Badge variant="default" text="{voiceFiltered.length} voice{voiceFiltered.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
+            {/if}
+            <button
+              class="celebrity-toggle"
+              class:active={hideCelebrities}
+              onclick={() => { hideCelebrities = !hideCelebrities; voicePage = 1; }}
+              data-testid="celebrity-toggle-btn"
+            >
+              {hideCelebrities ? 'Show All' : 'Hide Celebrities'}
+            </button>
+            {#if hideCelebrities && celebrityCount > 0}
+              <span class="celebrity-badge" data-testid="celebrity-count-badge">
+                Hiding {celebrityCount} celebrity voice{celebrityCount !== 1 ? 's' : ''}
+              </span>
             {/if}
           </div>
           <div class="voices-search">
@@ -1222,66 +1362,86 @@
           </div>
         </div>
 
+        {#if voiceFilterTags.length > 0}
+          <div class="voice-tag-filter">
+            <TagFilter
+              tags={voiceFilterTags}
+              active={activeVoiceTags}
+              onchange={(tags) => activeVoiceTags = tags}
+            />
+          </div>
+        {/if}
+
         {#if loadingVoices}
           <p class="muted">Loading voices...</p>
         {:else if fishVoices.length === 0}
           <div class="voices-empty">
-            <p class="muted">No voices synced. Click <strong>Sync from Fish Audio</strong> to fetch the top voices.</p>
+            <p>No voices synced. Click <strong>Sync from Fish Audio</strong> to fetch the top voices.</p>
           </div>
         {:else}
-          <div class="voices-table-wrapper">
-            <table class="voices-table" data-testid="voices-table">
-              <thead>
-                <tr>
-                  <th class="col-play">Play</th>
-                  <th class="col-name">Name</th>
-                  <th class="col-tags">Tags</th>
-                  <th class="col-pop">Popularity</th>
-                  <th class="col-likes">Likes</th>
-                  <th class="col-author">Author</th>
-                  <th class="col-desc">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each filteredVoices as voice (voice.id)}
-                  <tr data-testid="voice-row-{voice.id}">
-                    <td class="col-play">
-                      {#if voice.sample_url}
-                        <button
-                          class="play-btn"
-                          class:playing={playingVoiceId === voice.id}
-                          onclick={() => playVoiceSample(voice)}
-                          data-testid="play-voice-{voice.id}"
-                          title={playingVoiceId === voice.id ? 'Stop' : 'Play sample'}
-                        >
-                          {playingVoiceId === voice.id ? '⏹' : '▶'}
-                        </button>
-                      {:else}
-                        <span class="no-sample" title="No sample available">—</span>
-                      {/if}
-                    </td>
-                    <td class="col-name">{voice.title}</td>
-                    <td class="col-tags">
-                      <div class="tag-pills">
-                        {#each voice.tags.slice(0, 3) as tag}
-                          <span class="tag-pill">{tag}</span>
-                        {/each}
-                        {#if voice.tags.length > 3}
-                          <span class="tag-pill tag-more">+{voice.tags.length - 3}</span>
-                        {/if}
-                      </div>
-                    </td>
-                    <td class="col-pop">{formatNumber(voice.task_count)}</td>
-                    <td class="col-likes">{formatNumber(voice.like_count)}</td>
-                    <td class="col-author">{voice.author_name ?? '—'}</td>
-                    <td class="col-desc" title={voice.description}>
-                      {voice.description.length > 60 ? voice.description.slice(0, 60) + '...' : voice.description || '—'}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={voiceColumns}
+            rows={voicePaginated}
+            sortKey={voiceSortKey}
+            sortDirection={voiceSortDirection}
+            onsort={(key, dir) => { voiceSortKey = key; voiceSortDirection = dir; }}
+          >
+            {#snippet cell({ row, column })}
+              {#if column.key === 'pin'}
+                <input
+                  type="checkbox"
+                  class="voice-pin-checkbox"
+                  checked={pinnedVoiceIds.has(row.id)}
+                  onchange={() => togglePinnedVoice(row.id)}
+                  title={pinnedVoiceIds.has(row.id) ? 'Remove from generative testing' : 'Add to generative testing'}
+                  data-testid="pin-voice-{row.id}"
+                />
+              {:else if column.key === 'play'}
+                {#if row.sample_url}
+                  <button
+                    class="play-btn"
+                    class:playing={playingVoiceId === row.id}
+                    onclick={() => playVoiceSample(row)}
+                    data-testid="play-voice-{row.id}"
+                    title={playingVoiceId === row.id ? 'Stop' : 'Play sample'}
+                  >
+                    {playingVoiceId === row.id ? '\u23F9' : '\u25B6'}
+                  </button>
+                {:else}
+                  <span class="no-sample" title="No sample available">{'\u2014'}</span>
+                {/if}
+              {:else if column.key === 'title'}
+                <span class="cell-name">{row.title}</span>
+              {:else if column.key === 'tags'}
+                <div class="tag-pills">
+                  {#each row.tags.slice(0, 3) as tag}
+                    <span class="tag-pill">{tag}</span>
+                  {/each}
+                  {#if row.tags.length > 3}
+                    <span class="tag-pill tag-more">+{row.tags.length - 3}</span>
+                  {/if}
+                </div>
+              {:else if column.key === 'task_count'}
+                <span class="cell-number">{formatNumber(row.task_count)}</span>
+              {:else if column.key === 'like_count'}
+                <span class="cell-number">{formatNumber(row.like_count)}</span>
+              {:else if column.key === 'author_name'}
+                <span class="cell-muted">{row.author_name ?? '\u2014'}</span>
+              {:else if column.key === 'description'}
+                <span class="cell-muted" title={row.description}>
+                  {row.description.length > 60 ? row.description.slice(0, 60) + '...' : row.description || '\u2014'}
+                </span>
+              {/if}
+            {/snippet}
+          </DataTable>
+
+          <Pagination
+            total={voiceFiltered.length}
+            page={voicePage}
+            pageSize={voicePageSize}
+            onpagechange={(p) => voicePage = p}
+            onpagesizechange={(s) => { voicePageSize = s; voicePage = 1; }}
+          />
         {/if}
 
       {:else}
@@ -1293,9 +1453,28 @@
               <div class="cfg-card">
                 <div class="cfg-header">
                   <h3 class="cfg-title">Test Generative TTS</h3>
-                  <p class="cfg-desc">Fish Audio S1 without a reference voice — use emotion markers to control delivery</p>
+                  <p class="cfg-desc">Fish Audio S1 with emotion markers — pin voices in the Library tab to test them here</p>
                 </div>
                 <div class="cfg-body">
+                  <!-- Voice selector -->
+                  <div class="gen-voice-picker" data-testid="gen-voice-picker">
+                    <label class="gen-voice-label">Reference Voice</label>
+                    <select
+                      class="gen-voice-select"
+                      value={genReferenceId ?? ''}
+                      onchange={(e) => { genReferenceId = (e.target as HTMLSelectElement).value || null; }}
+                      data-testid="gen-voice-select"
+                    >
+                      <option value="">None (default voice)</option>
+                      {#each pinnedVoices as v}
+                        <option value={v.id}>{v.title}</option>
+                      {/each}
+                    </select>
+                    {#if pinnedVoices.length === 0}
+                      <span class="gen-voice-hint">Check voices in the Library tab to add them here</span>
+                    {/if}
+                  </div>
+
                   <!-- Preset buttons -->
                   <div class="gen-presets">
                     {#each presetTexts as preset}
@@ -1398,7 +1577,7 @@
                       <li>Stack multiple: <code>(nervous)(hurried)</code></li>
                       <li>Pair effects with sounds: <code>(laughing) Ha ha ha!</code></li>
                       <li>Higher <strong>temperature</strong> = more expressive</li>
-                      <li>No reference_id = Fish Audio's default voice</li>
+                      <li>No reference voice = Fish Audio's default voice</li>
                       <li>The LLM can embed these tags in responses at runtime</li>
                     </ul>
                   </div>
@@ -1437,7 +1616,7 @@
 
 <style>
   .admin-page {
-    padding: 20px 28px 48px;
+    padding: var(--space-5) var(--space-7) var(--space-12);
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -1454,15 +1633,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: var(--space-4);
     flex-shrink: 0;
   }
 
   .page-header h1 {
     font-family: 'Michroma', sans-serif;
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     font-weight: 400;
-    color: #c0c8d4;
+    color: var(--color-heading);
     letter-spacing: 1px;
     margin: 0;
   }
@@ -1470,7 +1649,7 @@
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .header-actions.hidden-actions {
@@ -1481,7 +1660,7 @@
   .generate-inline {
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .muted { color: var(--color-text-muted); }
@@ -1489,13 +1668,13 @@
   /* ─── Top Tabs ─── */
   .top-tabs {
     display: flex;
-    gap: 2px;
-    margin-bottom: 16px;
+    gap: var(--space-0-5);
+    margin-bottom: var(--space-4);
     flex-shrink: 0;
     background: rgba(10, 22, 42, 0.4);
     border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 3px;
+    border-radius: var(--radius-lg);
+    padding: var(--space-1);
     max-width: 540px;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -1503,23 +1682,23 @@
 
   .top-tab {
     flex: 1;
-    padding: 8px 16px;
+    padding: var(--space-2) var(--space-4);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--font-base);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
     white-space: nowrap;
   }
 
   .top-tab:hover { color: var(--color-text-secondary); }
 
   .top-tab.active {
-    background: rgba(59, 151, 151, 0.2);
+    background: var(--teal-a20);
     color: var(--color-teal);
   }
 
@@ -1527,8 +1706,8 @@
   .toolbar {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: var(--space-2-5);
+    margin-bottom: var(--space-3-5);
     flex-shrink: 0;
   }
 
@@ -1538,15 +1717,15 @@
 
   .search-input {
     width: 100%;
-    padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: var(--input-padding);
+    border: 1px solid var(--input-border);
+    border-radius: var(--input-radius);
+    background: var(--input-bg);
     color: var(--color-text-primary);
     font-family: inherit;
-    font-size: 0.9375rem;
+    font-size: var(--input-font-size);
     outline: none;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-base), background var(--transition-base);
   }
 
   .search-input::placeholder {
@@ -1554,14 +1733,14 @@
   }
 
   .search-input:focus {
-    border-color: var(--color-teal);
-    background: rgba(59, 151, 151, 0.05);
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
   }
 
   /* ─── Content Area ─── */
   .content-area {
     display: flex;
-    gap: 16px;
+    gap: var(--space-4);
     flex: 1;
     min-height: 0;
   }
@@ -1583,16 +1762,16 @@
     flex-direction: column;
     min-height: 0;
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    animation: slideIn 0.2s ease;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-xl);
+    animation: slideIn var(--transition-slow) ease;
     overflow: hidden;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 var(--white-a3),
+      0 1px 3px var(--black-a40),
+      0 4px 12px var(--black-a20);
   }
 
   @keyframes slideIn {
@@ -1604,13 +1783,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 18px;
+    padding: var(--space-3-5) 18px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
 
   .detail-header h2 {
-    font-size: 1.0625rem;
+    font-size: var(--font-lg);
     font-weight: 700;
     color: var(--color-text-primary);
     margin: 0;
@@ -1622,9 +1801,9 @@
     color: var(--color-text-muted);
     font-size: 1.4rem;
     cursor: pointer;
-    padding: 0 4px;
+    padding: 0 var(--space-1);
     line-height: 1;
-    transition: color 0.15s;
+    transition: color var(--transition-base);
   }
 
   .close-btn:hover {
@@ -1634,7 +1813,7 @@
   .detail-content {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: var(--space-4);
   }
 
   /* ─── Table Cells ─── */
@@ -1645,7 +1824,7 @@
 
   .cell-muted {
     color: var(--color-text-muted);
-    font-size: 0.875rem;
+    font-size: var(--font-base);
   }
 
   .cell-sprite {
@@ -1655,26 +1834,26 @@
   }
 
   .status-badge {
-    padding: 3px 10px;
-    border-radius: 10px;
+    padding: var(--space-1) var(--space-2-5);
+    border-radius: var(--radius-xl);
     border: 1px solid transparent;
     font-family: inherit;
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.03em;
     cursor: pointer;
-    transition: all 0.12s;
+    transition: all var(--transition-fast);
   }
 
   .status-badge.active {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     color: var(--color-teal);
-    border-color: rgba(59, 151, 151, 0.3);
+    border-color: var(--teal-a30);
   }
 
   .status-badge:not(.active) {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--white-a4);
     color: var(--color-text-muted);
     border-color: var(--glass-border);
   }
@@ -1689,7 +1868,7 @@
     font-size: 1rem;
     cursor: pointer;
     color: var(--color-text-muted);
-    transition: color 0.12s;
+    transition: color var(--transition-fast);
     padding: 0;
   }
 
@@ -1712,84 +1891,84 @@
   }
 
   .delete-btn:hover {
-    color: #f87171;
+    color: var(--color-error);
   }
 
   /* ─── Config Tab ─── */
   .cfg {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--space-5);
   }
 
   .cfg-row-2col {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 20px;
+    gap: var(--space-5);
   }
 
   .cfg-card {
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-xl);
     overflow: hidden;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 var(--white-a3),
+      0 1px 3px var(--black-a40),
+      0 4px 12px var(--black-a20);
   }
 
   .cfg-header {
-    padding: 20px 24px 0;
+    padding: var(--space-5) var(--space-6) 0;
   }
 
   .cfg-header-row {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .cfg-title {
-    font-size: 1rem;
+    font-size: var(--font-lg);
     font-weight: 700;
     color: var(--color-text-primary);
-    margin: 0 0 4px;
+    margin: 0 0 var(--space-1);
   }
 
   .cfg-desc {
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     color: var(--color-text-muted);
     margin: 0;
     line-height: 1.4;
   }
 
   .cfg-body {
-    padding: 16px 24px 24px;
+    padding: var(--space-4) var(--space-6) var(--space-6);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-3-5);
   }
 
   .cfg-pair {
     display: flex;
     align-items: flex-end;
-    gap: 24px;
+    gap: var(--space-6);
   }
 
   /* ─── Drop Rate Rows ─── */
   .drop-rate-row {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: var(--space-3-5);
     height: 36px;
   }
 
   .rarity-label {
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     text-transform: capitalize;
     min-width: 90px;
   }
@@ -1806,7 +1985,7 @@
   }
 
   .drop-value {
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     color: var(--color-text-muted);
     min-width: 52px;
     text-align: right;
@@ -1815,32 +1994,32 @@
 
   .json-editor {
     width: 100%;
-    padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
+    padding: var(--input-padding);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--input-radius);
     color: var(--color-text-primary);
     font-family: 'Courier New', monospace;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-base), background var(--transition-base);
     line-height: 1.5;
   }
 
-  .json-editor:focus { border-color: var(--color-teal); background: rgba(59, 151, 151, 0.05); }
+  .json-editor:focus { border-color: var(--input-focus-border); background: var(--input-focus-bg); }
 
   .cfg-save {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
-  .error { color: #f87171; font-size: 0.8125rem; margin-top: 4px; }
+  .error { color: var(--color-error); font-size: var(--font-sm); margin-top: var(--space-1); }
 
-  .save-msg { font-size: 0.875rem; color: var(--color-teal); }
-  .save-msg.error { color: #f87171; }
+  .save-msg { font-size: var(--font-base); color: var(--color-teal); }
+  .save-msg.error { color: var(--color-error); }
 
   @media (max-width: 800px) {
     .cfg-row-2col { grid-template-columns: 1fr; }
@@ -1850,28 +2029,28 @@
   .pipeline {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .step-fields {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-2-5);
   }
 
   .step-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .traits-section {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-1-5);
   }
 
   .traits-label {
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-secondary);
   }
@@ -1884,7 +2063,7 @@
   }
 
   .info-label {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     font-weight: 600;
     text-transform: uppercase;
     color: var(--color-text-muted);
@@ -1892,7 +2071,7 @@
   }
 
   .info-value {
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
     font-style: italic;
   }
@@ -1915,11 +2094,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 8px auto;
+    margin: var(--space-2) auto;
     border: 1px dashed var(--glass-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     color: var(--color-text-muted);
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
   }
 
   /* ─── Step 3: Voice ─── */
@@ -1931,7 +2110,7 @@
   }
 
   .voice-label {
-    font-size: 0.9375rem;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--color-text-secondary);
   }
@@ -1957,24 +2136,24 @@
   }
 
   .voice-option {
-    padding: 4px 12px;
+    padding: var(--space-1) var(--space-3);
     border: 1px solid var(--glass-border);
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
   }
 
   .voice-option:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--white-a4);
     color: var(--color-text-secondary);
   }
 
   .voice-option.active {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     color: var(--color-teal);
     border-color: var(--color-teal);
   }
@@ -1982,22 +2161,22 @@
   /* ─── Step 4: Preview ─── */
   .preview-step {
     background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-xl);
     overflow: hidden;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.2);
+      inset 0 1px 0 var(--white-a3),
+      0 1px 3px var(--black-a40),
+      0 4px 12px var(--black-a20);
   }
 
   .preview-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
+    gap: var(--space-2-5);
+    padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -2007,22 +2186,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-full);
+    background: var(--white-a6);
     color: var(--color-text-secondary);
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     font-weight: 700;
     flex-shrink: 0;
   }
 
   .step-title {
-    font-size: 0.9375rem;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--color-text-primary);
   }
 
   .preview-content {
-    padding: 20px;
+    padding: var(--space-5);
     display: flex;
     justify-content: center;
   }
@@ -2031,8 +2210,8 @@
   .toggle-deleted {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.8125rem;
+    gap: var(--space-1-5);
+    font-size: var(--font-sm);
     color: var(--color-text-muted);
     cursor: pointer;
     white-space: nowrap;
@@ -2045,22 +2224,22 @@
 
   /* ─── Deleted Characters Section ─── */
   .deleted-section {
-    margin-top: 16px;
-    padding: 16px;
+    margin-top: var(--space-4);
+    padding: var(--space-4);
     background: rgba(10, 22, 42, 0.5);
     border: 1px solid rgba(255, 80, 80, 0.15);
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
   }
 
   .deleted-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-3);
   }
 
   .deleted-header h3 {
-    font-size: 0.9375rem;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--color-text-secondary);
     margin: 0;
@@ -2075,15 +2254,15 @@
   .deleted-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 6px;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--white-a2);
+    border-radius: var(--radius-md);
   }
 
   .deleted-name {
     flex: 1;
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
   }
 
@@ -2131,6 +2310,35 @@
     gap: 12px;
   }
 
+  .celebrity-toggle {
+    padding: var(--space-1-5) var(--space-3-5);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-glass-border);
+    background: var(--color-glass-bg);
+    color: var(--color-text-secondary);
+    font-size: var(--font-base);
+    cursor: pointer;
+    transition: all var(--transition-base) ease;
+    white-space: nowrap;
+  }
+
+  .celebrity-toggle:hover {
+    border-color: var(--color-teal);
+    color: var(--color-text-primary);
+  }
+
+  .celebrity-toggle.active {
+    border-color: var(--color-teal);
+    background: rgba(var(--color-teal-rgb, 0, 209, 178), 0.12);
+    color: var(--color-teal);
+  }
+
+  .celebrity-badge {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
   .voices-search {
     max-width: 300px;
     flex: 1;
@@ -2139,90 +2347,47 @@
   .voices-empty {
     padding: 48px 24px;
     text-align: center;
-  }
-
-  .voices-table-wrapper {
-    flex: 1;
-    overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    background: rgba(10, 22, 42, 0.4);
-  }
-
-  .voices-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.875rem;
-  }
-
-  .voices-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    background: rgba(10, 22, 42, 0.95);
-    backdrop-filter: blur(8px);
-  }
-
-  .voices-table th {
-    padding: 10px 14px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 0.8rem;
     color: var(--color-text-secondary);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    white-space: nowrap;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
-  .voices-table td {
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    color: var(--color-text-primary);
+  .voice-tag-filter {
+    margin-bottom: 14px;
   }
 
-  .voices-table tbody tr:hover {
-    background: rgba(59, 151, 151, 0.06);
+  .cell-number {
+    font-variant-numeric: tabular-nums;
   }
-
-  .col-play { width: 48px; text-align: center; }
-  .col-name { min-width: 140px; }
-  .col-tags { min-width: 160px; }
-  .col-pop { width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
-  .col-likes { width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
-  .col-author { min-width: 100px; }
-  .col-desc { min-width: 160px; }
 
   .play-btn {
     width: 32px;
     height: 32px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--white-a10);
+    border-radius: var(--radius-md);
+    background: var(--white-a4);
     color: var(--color-text-secondary);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: var(--font-base);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
   }
 
   .play-btn:hover {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     border-color: var(--color-teal);
     color: var(--color-teal);
   }
 
   .play-btn.playing {
-    background: rgba(59, 151, 151, 0.2);
+    background: var(--teal-a20);
     border-color: var(--color-teal);
     color: var(--color-teal);
   }
 
   .no-sample {
     color: var(--color-text-muted);
-    font-size: 0.85rem;
+    font-size: 0.875rem;
   }
 
   .tag-pills {
@@ -2232,51 +2397,51 @@
   }
 
   .tag-pill {
-    padding: 3px 9px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.06);
+    padding: var(--space-1) 9px;
+    border-radius: var(--radius-sm);
+    background: var(--white-a6);
     color: var(--color-text-secondary);
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     white-space: nowrap;
   }
 
   .tag-more {
-    background: rgba(59, 151, 151, 0.1);
+    background: var(--teal-a10);
     color: var(--color-teal);
   }
 
   /* ─── Sub-tabs ─── */
   .sub-tabs {
     display: flex;
-    gap: 2px;
-    margin-bottom: 14px;
+    gap: var(--space-0-5);
+    margin-bottom: var(--space-3-5);
     flex-shrink: 0;
     background: rgba(10, 22, 42, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    padding: 2px;
+    border: 1px solid var(--white-a5);
+    border-radius: var(--radius-md);
+    padding: var(--space-0-5);
     max-width: 280px;
   }
 
   .sub-tab {
     flex: 1;
-    padding: 7px 16px;
+    padding: 7px var(--space-4);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.85rem;
+    font-size: var(--font-base);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
     white-space: nowrap;
   }
 
   .sub-tab:hover { color: var(--color-text-secondary); }
 
   .sub-tab.active {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     color: var(--color-teal);
   }
 
@@ -2297,6 +2462,64 @@
     min-width: 0;
   }
 
+  .gen-voice-picker {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3) var(--space-3-5);
+    background: rgba(10, 22, 42, 0.5);
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-xl);
+    flex-wrap: wrap;
+  }
+
+  .gen-voice-label {
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+
+  .gen-voice-select {
+    flex: 1;
+    max-width: 360px;
+    padding: var(--input-padding);
+    border-radius: var(--input-radius);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: var(--input-font-size);
+    outline: none;
+    transition: border-color var(--transition-base), background var(--transition-base);
+    cursor: pointer;
+  }
+
+  .gen-voice-select:focus {
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
+  }
+
+  .gen-voice-select option {
+    background: #0a162a;
+    color: var(--color-text-primary);
+    padding: 8px;
+  }
+
+  .gen-voice-hint {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  .voice-pin-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-teal);
+    cursor: pointer;
+  }
+
   .gen-presets {
     display: flex;
     flex-wrap: wrap;
@@ -2305,40 +2528,40 @@
   }
 
   .gen-preset-btn {
-    padding: 5px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: 5px var(--space-3);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-sm);
+    background: var(--white-a4);
     color: var(--color-text-secondary);
     font-family: inherit;
-    font-size: 0.8rem;
+    font-size: var(--font-base);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
   }
 
   .gen-preset-btn:hover {
-    background: rgba(59, 151, 151, 0.1);
+    background: var(--teal-a10);
     border-color: var(--color-teal);
     color: var(--color-teal);
   }
 
   .gen-textarea {
     width: 100%;
-    padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
+    padding: var(--input-padding);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: var(--input-radius);
     color: var(--color-text-primary);
     font-family: inherit;
-    font-size: 0.875rem;
+    font-size: var(--font-base);
     resize: vertical;
     outline: none;
-    transition: border-color 0.15s;
+    transition: border-color var(--transition-base);
     line-height: 1.5;
-    margin-bottom: 12px;
+    margin-bottom: var(--space-3);
   }
 
-  .gen-textarea:focus { border-color: var(--color-teal); }
+  .gen-textarea:focus { border-color: var(--input-focus-border); }
   .gen-textarea::placeholder { color: var(--color-text-muted); }
 
   .gen-tag-group {
@@ -2347,7 +2570,7 @@
 
   .gen-tag-label {
     display: block;
-    font-size: 0.8rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--color-text-secondary);
     margin-bottom: 5px;
@@ -2362,21 +2585,21 @@
   }
 
   .gen-tag-btn {
-    padding: 3px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.03);
+    padding: var(--space-1) var(--space-2-5);
+    border: 1px solid var(--white-a6);
+    border-radius: var(--radius-xs);
+    background: var(--white-a3);
     color: var(--color-text-secondary);
     font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
+    font-size: var(--font-base);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
   }
 
   .gen-tag-btn:hover {
-    background: rgba(59, 151, 151, 0.1);
+    background: var(--teal-a10);
     color: var(--color-teal);
-    border-color: rgba(59, 151, 151, 0.3);
+    border-color: var(--teal-a30);
   }
 
   .gen-controls {
@@ -2389,7 +2612,7 @@
   .gen-slider label {
     display: flex;
     justify-content: space-between;
-    font-size: 0.85rem;
+    font-size: var(--font-md);
     color: var(--color-text-secondary);
     margin-bottom: 4px;
   }
@@ -2423,7 +2646,7 @@
   .gen-ref-section:last-child { margin-bottom: 0; }
 
   .gen-ref-section h4 {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-text-secondary);
     text-transform: uppercase;
@@ -2433,11 +2656,11 @@
 
   .gen-ref-code {
     display: block;
-    padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: 4px;
+    padding: var(--space-1-5) var(--space-2-5);
+    background: var(--white-a4);
+    border-radius: var(--radius-sm);
     font-family: 'Courier New', monospace;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--color-teal);
     margin-bottom: 4px;
   }
@@ -2446,20 +2669,20 @@
     margin: 0;
     padding-left: 18px;
     line-height: 1.7;
-    font-size: 0.85rem;
+    font-size: 0.875rem;
   }
 
   .gen-ref-list code {
-    background: rgba(255, 255, 255, 0.04);
-    padding: 2px 5px;
-    border-radius: 3px;
+    background: var(--white-a4);
+    padding: var(--space-0-5) 5px;
+    border-radius: var(--radius-xs);
     font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
+    font-size: 0.8125rem;
     color: var(--color-teal);
   }
 
   .gen-ref-all-tags {
-    font-size: 0.8rem;
+    font-size: 0.8125rem;
     line-height: 1.6;
     color: var(--color-text-muted);
     margin-bottom: 6px;

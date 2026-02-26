@@ -460,7 +460,7 @@
     justify-content: center;
     height: 100%;
     width: 100%;
-    gap: 16px;
+    gap: var(--space-4);
     overflow: hidden;
   }
 
@@ -601,6 +601,7 @@
     font-family: inherit;
   }
 
+
   .pack-wrapper:disabled {
     cursor: default;
   }
@@ -627,7 +628,7 @@
     border-radius: 30px;
     background: radial-gradient(ellipse, rgba(253, 181, 206, 0.25), transparent 70%);
     opacity: 0.5;
-    transition: opacity 0.15s, transform 0.15s;
+    transition: opacity var(--transition-base), transform var(--transition-base);
     z-index: -1;
     filter: blur(12px);
   }
@@ -718,8 +719,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    padding: 20px;
+    gap: var(--space-0-5);
+    padding: var(--space-5);
   }
 
   .pack-top-accent {
@@ -761,7 +762,7 @@
     width: 60%;
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(253, 181, 206, 0.35), transparent);
-    margin: 8px 0;
+    margin: var(--space-2) 0;
   }
 
   .pack-subtitle {
@@ -773,11 +774,11 @@
   }
 
   .pack-card-count {
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     letter-spacing: 4px;
     color: rgba(255, 255, 255, 0.45);
     font-weight: 600;
-    margin-top: 2px;
+    margin-top: var(--space-0-5);
   }
 
   .pack-bottom-accent {
@@ -831,8 +832,8 @@
   }
 
   .open-hint {
-    margin-top: 20px;
-    font-size: 0.95rem;
+    margin-top: var(--space-5);
+    font-size: var(--font-md);
     color: rgba(255, 255, 255, 0.55);
     letter-spacing: 2px;
     animation: hintPulse 2.5s ease-in-out infinite;
@@ -957,10 +958,10 @@
      ══════════════════════════════════════════ */
   .cards-container {
     display: flex;
-    gap: 20px;
+    gap: var(--space-5);
     justify-content: center;
     align-items: center;
-    padding: 20px;
+    padding: var(--space-5);
   }
 
   .card-slot {
@@ -1000,7 +1001,7 @@
     transform: translateY(10px);
     transition: opacity 0.4s ease, transform 0.4s ease;
     pointer-events: none;
-    margin-top: 8px;
+    margin-top: var(--space-2);
   }
 
   .bottom-actions.visible {
@@ -1010,12 +1011,12 @@
   }
 
   .action-btn {
-    padding: 12px 36px;
+    padding: var(--space-3) var(--space-9);
     border: 2px solid rgba(253, 181, 206, 0.3);
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     background: linear-gradient(135deg, rgba(253, 181, 206, 0.1), rgba(176, 106, 255, 0.08));
     color: var(--color-pink, #FDB5CE);
-    font-size: 1rem;
+    font-size: var(--font-lg);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);

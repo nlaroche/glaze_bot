@@ -36,6 +36,164 @@
   --glow-rare: 0 0 12px rgba(59, 151, 151, 0.4);
   --glow-epic: 0 0 16px rgba(176, 106, 255, 0.5), 0 0 32px rgba(176, 106, 255, 0.2);
   --glow-legendary: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.3), 0 0 60px rgba(255, 215, 0, 0.1);
+
+  /* ─── Typography ─── */
+  --font-micro: 0.55rem;
+  --font-brand-sm: 0.65rem;
+  --font-2xs: 0.625rem;
+  --font-xs: 0.75rem;
+  --font-brand-md: 0.8rem;
+  --font-sm: 0.8125rem;
+  --font-base: 0.875rem;
+  --font-md: 0.9375rem;
+  --font-lg: 1rem;
+  --font-xl: 1.1rem;
+  --font-2xl: 1.25rem;
+  --font-3xl: 1.5rem;
+  --font-4xl: 2rem;
+
+  /* ─── Spacing (4px grid) ─── */
+  --space-0: 0;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ─── Border Radius ─── */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-pill: 30px;
+  --radius-full: 50%;
+
+  /* ─── Overlay Scales ─── */
+  /* White */
+  --white-a2: rgba(255, 255, 255, 0.02);
+  --white-a3: rgba(255, 255, 255, 0.03);
+  --white-a4: rgba(255, 255, 255, 0.04);
+  --white-a5: rgba(255, 255, 255, 0.05);
+  --white-a6: rgba(255, 255, 255, 0.06);
+  --white-a8: rgba(255, 255, 255, 0.08);
+  --white-a10: rgba(255, 255, 255, 0.10);
+  --white-a12: rgba(255, 255, 255, 0.12);
+  --white-a15: rgba(255, 255, 255, 0.15);
+  --white-a20: rgba(255, 255, 255, 0.20);
+  --white-a25: rgba(255, 255, 255, 0.25);
+
+  /* Black */
+  --black-a10: rgba(0, 0, 0, 0.10);
+  --black-a15: rgba(0, 0, 0, 0.15);
+  --black-a20: rgba(0, 0, 0, 0.20);
+  --black-a25: rgba(0, 0, 0, 0.25);
+  --black-a30: rgba(0, 0, 0, 0.30);
+  --black-a40: rgba(0, 0, 0, 0.40);
+  --black-a50: rgba(0, 0, 0, 0.50);
+
+  /* Teal */
+  --teal-a5: rgba(59, 151, 151, 0.05);
+  --teal-a8: rgba(59, 151, 151, 0.08);
+  --teal-a10: rgba(59, 151, 151, 0.10);
+  --teal-a12: rgba(59, 151, 151, 0.12);
+  --teal-a15: rgba(59, 151, 151, 0.15);
+  --teal-a20: rgba(59, 151, 151, 0.20);
+  --teal-a25: rgba(59, 151, 151, 0.25);
+  --teal-a30: rgba(59, 151, 151, 0.30);
+  --teal-a40: rgba(59, 151, 151, 0.40);
+  --teal-a50: rgba(59, 151, 151, 0.50);
+
+  /* Navy */
+  --navy-a10: rgba(10, 14, 24, 0.10);
+  --navy-a20: rgba(10, 14, 24, 0.20);
+  --navy-a30: rgba(10, 14, 24, 0.30);
+  --navy-a40: rgba(10, 14, 24, 0.40);
+  --navy-a50: rgba(10, 14, 24, 0.50);
+  --navy-a60: rgba(10, 14, 24, 0.60);
+  --navy-a70: rgba(10, 14, 24, 0.70);
+  --navy-a80: rgba(10, 14, 24, 0.80);
+
+  /* Error */
+  --error-a12: rgba(248, 113, 113, 0.12);
+  --error-a15: rgba(248, 113, 113, 0.15);
+  --error-a20: rgba(248, 113, 113, 0.20);
+
+  /* Epic */
+  --epic-a8: rgba(176, 106, 255, 0.08);
+  --epic-a10: rgba(176, 106, 255, 0.10);
+  --epic-a12: rgba(176, 106, 255, 0.12);
+  --epic-a15: rgba(176, 106, 255, 0.15);
+  --epic-a20: rgba(176, 106, 255, 0.20);
+  --epic-a30: rgba(176, 106, 255, 0.30);
+
+  /* Gold */
+  --gold-a15: rgba(255, 215, 0, 0.15);
+  --gold-a20: rgba(255, 215, 0, 0.20);
+  --gold-a25: rgba(255, 215, 0, 0.25);
+  --gold-a35: rgba(255, 215, 0, 0.35);
+
+  /* ─── Semantic Colors ─── */
+  --color-error: #f87171;
+  --color-error-soft: #fca5a5;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-info: #5bcece;
+  --color-heading: #c0c8d4;
+  --color-start: #5bca7a;
+  --color-stop: #ff6b6b;
+  --color-light-teal: #5bcece;
+
+  /* ─── Composite: Panel ─── */
+  --panel-bg: rgba(255, 255, 255, 0.02);
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --panel-radius: 12px;
+  --panel-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+
+  /* ─── Composite: Input ─── */
+  --input-bg: rgba(255, 255, 255, 0.04);
+  --input-border: rgba(255, 255, 255, 0.08);
+  --input-focus-border: rgba(59, 151, 151, 0.4);
+  --input-focus-bg: rgba(59, 151, 151, 0.05);
+  --input-padding: 10px 14px;
+  --input-radius: 8px;
+  --input-font-size: 0.9375rem;
+
+  /* ─── Composite: Buttons ─── */
+  --btn-primary-bg: linear-gradient(135deg, rgba(59, 151, 151, 0.25), rgba(59, 151, 151, 0.15));
+  --btn-primary-bg-hover: linear-gradient(135deg, rgba(59, 151, 151, 0.35), rgba(59, 151, 151, 0.25));
+  --btn-primary-border: rgba(59, 151, 151, 0.3);
+  --btn-primary-text: #5bcece;
+
+  --btn-danger-bg: linear-gradient(135deg, rgba(248, 113, 113, 0.2), rgba(248, 113, 113, 0.1));
+  --btn-danger-bg-hover: linear-gradient(135deg, rgba(248, 113, 113, 0.3), rgba(248, 113, 113, 0.2));
+  --btn-danger-border: rgba(248, 113, 113, 0.3);
+  --btn-danger-text: #f87171;
+
+  --btn-secondary-bg-hover-from: rgba(255, 255, 255, 0.08);
+  --btn-secondary-bg-hover-to: rgba(255, 255, 255, 0.04);
+
+  /* ─── Composite: Rarity Backgrounds ─── */
+  --rarity-common-bg: rgba(160, 174, 192, 0.08);
+  --rarity-rare-bg: rgba(59, 151, 151, 0.1);
+  --rarity-epic-bg: rgba(176, 106, 255, 0.1);
+  --rarity-legendary-bg: rgba(255, 215, 0, 0.1);
+
+  /* ─── Transitions ─── */
+  --transition-fast: 0.12s;
+  --transition-base: 0.15s;
+  --transition-slow: 0.2s;
 }
 
 /* Reset */

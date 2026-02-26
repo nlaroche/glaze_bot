@@ -109,45 +109,45 @@
 <style>
   .card-row {
     position: relative;
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
     overflow: hidden;
     min-height: 56px;
     background: rgba(10, 14, 24, 0.9);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform var(--transition-slow) ease, box-shadow var(--transition-slow) ease;
     /* Bevel border like the cards */
     border: 1.5px solid;
     border-color:
-      rgba(255, 255, 255, 0.12)
-      rgba(255, 255, 255, 0.06)
-      rgba(0, 0, 0, 0.25)
-      rgba(255, 255, 255, 0.06);
+      var(--white-a12)
+      var(--white-a6)
+      var(--black-a25)
+      var(--white-a6);
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      0 1px 3px var(--black-a30),
+      inset 0 1px 0 var(--white-a5);
   }
 
   .card-row.rarity-rare {
     border-color:
-      rgba(59, 151, 151, 0.25)
-      rgba(59, 151, 151, 0.12)
-      rgba(0, 0, 0, 0.3)
-      rgba(59, 151, 151, 0.12);
+      var(--teal-a25)
+      var(--teal-a12)
+      var(--black-a30)
+      var(--teal-a12);
   }
 
   .card-row.rarity-epic {
     border-color:
-      rgba(176, 106, 255, 0.25)
-      rgba(176, 106, 255, 0.12)
-      rgba(0, 0, 0, 0.3)
-      rgba(176, 106, 255, 0.12);
+      var(--epic-a30)
+      var(--epic-a12)
+      var(--black-a30)
+      var(--epic-a12);
   }
 
   .card-row.rarity-legendary {
     border-color:
-      rgba(255, 215, 0, 0.3)
-      rgba(255, 215, 0, 0.15)
-      rgba(0, 0, 0, 0.3)
-      rgba(255, 215, 0, 0.15);
+      var(--gold-a25)
+      var(--gold-a15)
+      var(--black-a30)
+      var(--gold-a15);
   }
 
   .card-row.clickable {
@@ -158,30 +158,30 @@
   .card-row:hover {
     transform: translateY(-2px);
     box-shadow:
-      0 4px 12px rgba(0, 0, 0, 0.4),
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 4px 12px var(--black-a40),
+      0 2px 4px var(--black-a30),
+      inset 0 1px 0 var(--white-a6);
   }
 
   .card-row.rarity-rare:hover {
     box-shadow:
-      0 4px 14px rgba(59, 151, 151, 0.15),
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 4px 14px var(--teal-a15),
+      0 2px 4px var(--black-a30),
+      inset 0 1px 0 var(--white-a6);
   }
 
   .card-row.rarity-epic:hover {
     box-shadow:
-      0 4px 14px rgba(176, 106, 255, 0.15),
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 4px 14px var(--epic-a15),
+      0 2px 4px var(--black-a30),
+      inset 0 1px 0 var(--white-a6);
   }
 
   .card-row.rarity-legendary:hover {
     box-shadow:
-      0 4px 14px rgba(255, 215, 0, 0.15),
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 4px 14px var(--gold-a15),
+      0 2px 4px var(--black-a30),
+      inset 0 1px 0 var(--white-a6);
   }
 
   .card-row.dragging {
@@ -228,8 +228,8 @@
     z-index: 2;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 10px;
+    gap: var(--space-2-5);
+    padding: var(--space-1-5) var(--space-2-5);
   }
 
   .avatar-ring {
@@ -237,12 +237,12 @@
     height: 44px;
     flex-shrink: 0;
     border-radius: 50%;
-    border: 2px solid var(--ring-color, rgba(255,255,255,0.1));
+    border: 2px solid var(--ring-color, var(--white-a10));
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.4);
+    background: var(--black-a40);
   }
 
   .avatar-img {
@@ -269,11 +269,11 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-0-5);
   }
 
   .name {
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-primary, #e2e8f0);
     white-space: nowrap;
@@ -283,7 +283,7 @@
   }
 
   .desc {
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     color: var(--color-text-secondary, #b0b8c8);
     white-space: nowrap;
     overflow: hidden;
@@ -296,17 +296,17 @@
     flex-shrink: 0;
     width: 28px;
     height: 28px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a8);
+    background: var(--black-a30);
     color: var(--color-text-muted, #5a6474);
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s, color 0.15s;
-    padding: 0;
+    transition: background var(--transition-base), color var(--transition-base);
+    padding: var(--space-0);
     line-height: 1;
   }
 

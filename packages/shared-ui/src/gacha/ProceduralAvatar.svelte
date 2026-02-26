@@ -97,7 +97,7 @@
 
 <style>
   .avatar {
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     overflow: hidden;
     border: 2px solid;
     flex-shrink: 0;

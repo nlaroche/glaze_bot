@@ -103,13 +103,13 @@
   .collection {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-4);
     height: 100%;
   }
 
   .controls {
     display: flex;
-    gap: 12px;
+    gap: var(--space-3);
     align-items: center;
     flex-wrap: wrap;
   }
@@ -117,12 +117,12 @@
   .search {
     flex: 1;
     min-width: 200px;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.05);
+    padding: var(--space-2) var(--space-3);
+    background: var(--white-a5);
     border: 1px solid var(--glass-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     color: var(--color-text-primary);
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-family: inherit;
     outline: none;
   }
@@ -137,16 +137,16 @@
 
   .filters {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .filter-select {
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.05);
+    padding: var(--space-2) var(--space-3);
+    background: var(--white-a5);
     border: 1px solid var(--glass-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     color: var(--color-text-primary);
-    font-size: 0.85rem;
+    font-size: var(--font-sm);
     font-family: inherit;
     outline: none;
     cursor: pointer;
@@ -159,15 +159,15 @@
   .status {
     text-align: center;
     color: var(--color-text-muted);
-    padding: 40px;
+    padding: var(--space-10);
   }
 
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    gap: var(--space-4);
     overflow-y: auto;
-    padding: 4px;
+    padding: var(--space-1);
     justify-items: center;
   }
 </style>

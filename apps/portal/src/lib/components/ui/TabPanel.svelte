@@ -22,6 +22,6 @@
   .tab-panel {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--space-5);
   }
 </style>

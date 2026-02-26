@@ -257,18 +257,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: var(--space-4);
     padding: 44px 40px 36px;
     border-radius: 16px;
     background: rgba(8, 14, 28, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--white-a8);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     min-width: 360px;
     max-width: 400px;
     box-shadow:
-      0 0 60px rgba(59, 151, 151, 0.06),
-      0 8px 32px rgba(0, 0, 0, 0.4);
+      0 0 60px var(--teal-a5),
+      0 8px 32px var(--black-a40);
   }
 
   /* ---- Brand ---- */
@@ -276,8 +276,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
+    gap: var(--space-1-5);
+    margin-bottom: var(--space-2);
   }
 
   .title {
@@ -291,7 +291,7 @@
 
   .tagline {
     font-family: 'Michroma', sans-serif;
-    font-size: 0.55rem;
+    font-size: var(--font-micro);
     font-weight: 400;
     color: var(--color-text-muted);
     letter-spacing: 1.5px;
@@ -302,15 +302,15 @@
   .google-btn {
     width: 100%;
     padding: 11px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-lg);
+    background: var(--white-a4);
     color: var(--color-text-primary);
     font-family: 'Satoshi', sans-serif;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--transition-base), border-color var(--transition-base);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -318,7 +318,7 @@
   }
 
   .google-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--white-a8);
     border-color: rgba(255, 255, 255, 0.14);
   }
 
@@ -331,9 +331,9 @@
     display: flex;
     align-items: center;
     width: 100%;
-    gap: 12px;
+    gap: var(--space-3);
     color: var(--color-text-muted);
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
   }
 
   .divider::before,
@@ -341,48 +341,48 @@
     content: '';
     flex: 1;
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--white-a6);
   }
 
   /* ---- Email form ---- */
   .email-form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-2-5);
     width: 100%;
   }
 
   input {
     width: 100%;
-    padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: var(--input-padding);
+    border: 1px solid var(--input-border);
+    border-radius: var(--input-radius);
+    background: var(--input-bg);
     color: var(--color-text-primary);
     font-family: 'Satoshi', sans-serif;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     outline: none;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-base), background var(--transition-base);
   }
 
   input:focus {
-    border-color: var(--color-teal);
-    background: rgba(59, 151, 151, 0.05);
+    border-color: var(--input-focus-border);
+    background: var(--input-focus-bg);
   }
 
   input::placeholder { color: var(--color-text-muted); }
 
   .send-btn {
-    padding: 10px;
+    padding: var(--space-2-5);
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--color-teal);
     color: white;
     font-family: 'Satoshi', sans-serif;
-    font-size: 0.9rem;
+    font-size: var(--font-base);
     font-weight: 700;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: opacity var(--transition-base);
   }
 
   .send-btn:hover:not(:disabled) { opacity: 0.85; }
@@ -393,7 +393,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     width: 100%;
   }
 
@@ -403,15 +403,15 @@
   }
 
   .sent-msg {
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     font-weight: 600;
     color: var(--color-text-primary);
   }
 
   .sent-detail {
     color: var(--color-text-secondary);
-    font-size: 0.85rem;
-    margin-bottom: 8px;
+    font-size: var(--font-base);
+    margin-bottom: var(--space-2);
     text-align: center;
   }
 
@@ -420,18 +420,18 @@
     border: none;
     color: var(--color-text-muted);
     font-family: 'Satoshi', sans-serif;
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     cursor: pointer;
     text-decoration: underline;
-    transition: color 0.15s;
+    transition: color var(--transition-base);
   }
 
   .back-btn:hover { color: var(--color-text-secondary); }
 
   /* ---- Error ---- */
   .error {
-    color: #f87171;
-    font-size: 0.85rem;
+    color: var(--color-error);
+    font-size: var(--font-base);
     text-align: center;
   }
 </style>

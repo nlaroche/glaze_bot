@@ -86,9 +86,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 10px 14px;
-    font-size: 0.8125rem;
+    gap: var(--space-3);
+    padding: var(--space-2-5) var(--space-3-5);
+    font-size: var(--font-sm);
     color: var(--color-text-muted);
     flex-wrap: wrap;
   }
@@ -100,7 +100,7 @@
   .pagination-controls {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-0-5);
   }
 
   .page-btn {
@@ -110,25 +110,25 @@
     align-items: center;
     justify-content: center;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.12s;
+    transition: all var(--transition-fast);
   }
 
   .page-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--white-a6);
     color: var(--color-text-secondary);
   }
 
   .page-btn.active {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     color: var(--color-teal);
-    border-color: rgba(59, 151, 151, 0.3);
+    border-color: var(--teal-a30);
   }
 
   .page-btn:disabled {
@@ -137,18 +137,18 @@
   }
 
   .page-ellipsis {
-    padding: 0 4px;
+    padding: 0 var(--space-1);
     color: var(--color-text-muted);
   }
 
   .page-size-select {
-    padding: 6px 10px;
+    padding: var(--space-1-5) var(--space-2-5);
     border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    background: var(--black-a30);
     color: var(--color-text-secondary);
     font-family: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--font-sm);
     cursor: pointer;
     outline: none;
   }

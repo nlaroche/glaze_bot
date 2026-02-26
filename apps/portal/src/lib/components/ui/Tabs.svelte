@@ -40,19 +40,19 @@
     display: flex;
     gap: 0;
     border-bottom: 1px solid var(--glass-border);
-    margin-bottom: 20px;
+    margin-bottom: var(--space-5);
   }
   .tab-trigger {
-    padding: 10px 20px;
+    padding: var(--space-2-5) var(--space-5);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.85rem;
+    font-size: var(--font-base);
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-base);
   }
   .tab-trigger:hover { color: var(--color-text-secondary); }
   .tab-trigger.active {
