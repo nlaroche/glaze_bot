@@ -38,6 +38,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${FISH_AUDIO_API_KEY}`,
+        model: "s1",
       },
       body: JSON.stringify({
         reference_id: voice_id,

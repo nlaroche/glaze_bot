@@ -57,11 +57,16 @@ Deno.serve(async (req: Request) => {
 
     if (!pixelRes.ok) {
       const errText = await pixelRes.text();
+      console.error(`[generate-character-image] PixelLab ${pixelRes.status}: ${errText}`);
       return errorResponse(`PixelLab API error: ${errText}`, 502);
     }
 
-    const imageData = await pixelRes.arrayBuffer();
-    const imageBytes = new Uint8Array(imageData);
+    // PixelLab returns JSON with base64-encoded image
+    const pixelData = await pixelRes.json();
+    const base64Str: string = pixelData.image?.base64 ?? "";
+    // Strip data URI prefix if present (e.g. "data:image/png;base64,...")
+    const raw = base64Str.includes(",") ? base64Str.split(",")[1] : base64Str;
+    const imageBytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
 
     const serviceClient = getServiceClient();
 
@@ -72,7 +77,7 @@ Deno.serve(async (req: Request) => {
     // Build step 2 metadata
     const step2Metadata = {
       request: pixelLabRequest,
-      response: { status: pixelRes.status, size: imageData.byteLength },
+      response: { status: pixelRes.status, size: imageBytes.byteLength },
       storage: { provider: "r2", key: r2Key },
       timestamp: new Date().toISOString(),
     };

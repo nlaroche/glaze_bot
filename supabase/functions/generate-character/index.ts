@@ -107,9 +107,13 @@ async function generateSprite(
 
     if (!pixelRes.ok) return null;
 
-    const imageData = new Uint8Array(await pixelRes.arrayBuffer());
+    // PixelLab returns JSON with base64-encoded image
+    const pixelData = await pixelRes.json();
+    const base64Str: string = pixelData.image?.base64 ?? "";
+    const raw = base64Str.includes(",") ? base64Str.split(",")[1] : base64Str;
+    const imageBytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
     const r2Key = characterPortraitKey(characterId);
-    return await uploadToPublicBucket(r2Key, imageData, "image/png");
+    return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
   } catch {
     return null;
   }
@@ -280,6 +284,7 @@ Deno.serve(async (req: Request) => {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${FISH_AUDIO_API_KEY}`,
+            model: "s1",
           },
           body: JSON.stringify({
             reference_id: voiceId,
