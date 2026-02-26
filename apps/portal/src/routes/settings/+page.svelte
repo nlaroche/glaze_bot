@@ -4452,10 +4452,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     gap: var(--space-2);
   }
   .prompt-layer-badge {
-    font-size: 0.65rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.05em;
-    padding: 2px 8px;
+    padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
     text-transform: uppercase;
   }
@@ -4463,7 +4463,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   .prompt-layer-badge.user { background: rgba(72, 187, 120, 0.15); color: #48bb78; }
   .prompt-layer-badge.params { background: rgba(237, 137, 54, 0.15); color: #ed8936; }
   .prompt-layer-title {
-    font-size: var(--font-sm);
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-primary);
   }
@@ -4487,22 +4487,22 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   .prompt-block[data-source="runtime"] { border-left: 3px solid #48bb78; }
   .prompt-block-label {
     display: block;
-    font-size: var(--font-sm);
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-primary);
   }
   .prompt-block-desc {
     display: block;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
-    margin-top: 2px;
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-1);
   }
   .prompt-flow-arrow {
     text-align: center;
-    color: var(--color-text-muted);
-    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    font-size: var(--font-base);
     font-weight: 600;
-    padding: 2px 0;
+    padding: var(--space-1) 0;
     margin-left: var(--space-3);
   }
   .prompt-flow-divider {
@@ -4517,11 +4517,11 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     margin-left: var(--space-3);
   }
   .prompt-param {
-    font-size: 0.75rem;
+    font-size: var(--font-sm);
     font-family: var(--font-mono, monospace);
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     background: rgba(255, 255, 255, 0.04);
-    padding: 2px 8px;
+    padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
     border: 1px solid var(--white-a6);
   }
