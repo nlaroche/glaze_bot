@@ -1,11 +1,46 @@
 <script lang="ts">
-  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, clearDebugLog } from '$lib/stores/debug.svelte';
-  import type { DebugEntry } from '$lib/stores/debug.svelte';
+  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
+  import type { DebugEntry, FrameCapture } from '$lib/stores/debug.svelte';
 
   const debug = getDebugStore();
 
   let autoScroll = $state(true);
   let logContainer: HTMLDivElement | undefined = $state();
+  let expandedEntryId = $state<number | null>(null);
+  let lightboxFrame = $state<FrameCapture | null>(null);
+
+  // Vertical split between event log (top) and frames (bottom) in the right column
+  let logSplitPercent = $state(60);
+  let vDragging = $state(false);
+  let rightColEl: HTMLDivElement | undefined = $state();
+
+  function startVResize(e: PointerEvent) {
+    if (!rightColEl) return;
+    vDragging = true;
+    const startY = e.clientY;
+    const startPercent = logSplitPercent;
+    const colRect = rightColEl.getBoundingClientRect();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    function onMove(ev: PointerEvent) {
+      const delta = ev.clientY - startY;
+      const pctDelta = (delta / colRect.height) * 100;
+      logSplitPercent = Math.max(20, Math.min(80, startPercent + pctDelta));
+    }
+
+    function onUp() {
+      vDragging = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text);
+  }
 
   // Resizable divider
   let rightWidth = $state(480);
@@ -204,37 +239,129 @@
     <div class="resize-grip"></div>
   </div>
 
-  <!-- Right column: Event Log -->
-  <div class="log-col" style="width: {rightWidth}px; min-width: {rightWidth}px;">
-    <div class="log-header">
-      <h2>Event Log</h2>
-      <div class="log-controls">
-        <label class="checkbox-row">
-          <input type="checkbox" bind:checked={autoScroll} />
-          <span>Auto-scroll</span>
-        </label>
-        <button class="clear-btn" onclick={clearDebugLog}>Clear</button>
+  <!-- Right column: Event Log (top) + Frames (bottom) -->
+  <div class="log-col" style="width: {rightWidth}px; min-width: {rightWidth}px;" bind:this={rightColEl}>
+    <!-- Event Log panel -->
+    <div class="log-panel" style="height: {logSplitPercent}%;">
+      <div class="log-header">
+        <h2>Event Log</h2>
+        <div class="log-controls">
+          <label class="checkbox-row">
+            <input type="checkbox" bind:checked={autoScroll} />
+            <span>Auto-scroll</span>
+          </label>
+          <button class="clear-btn" onclick={clearDebugLog}>Clear</button>
+        </div>
+      </div>
+
+      <div class="log-container" bind:this={logContainer}>
+        {#if debug.entries.length === 0}
+          <div class="log-empty">
+            <p>No events yet.</p>
+            <p class="log-empty-hint">Start commentary to see debug output.</p>
+          </div>
+        {:else}
+          {#each debug.entries as entry (entry.id)}
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="log-entry"
+              class:error-entry={entry.type === 'error'}
+              class:expandable={entry.type === 'error'}
+              class:expanded={expandedEntryId === entry.id}
+              onclick={() => {
+                if (entry.type === 'error') {
+                  expandedEntryId = expandedEntryId === entry.id ? null : entry.id;
+                }
+              }}
+            >
+              <span class="log-time">{formatTime(entry.timestamp)}</span>
+              <span class="log-badge" style="color: {entryColor(entry.type)}">{entryLabel(entry.type)}</span>
+              <span class="log-text">{summarize(entry)}</span>
+            </div>
+            {#if expandedEntryId === entry.id && entry.type === 'error'}
+              <div class="log-entry-expanded">
+                <pre class="expanded-text" style="user-select: text;">{JSON.stringify(entry.data, null, 2)}</pre>
+                <button class="copy-btn" onclick={() => copyText(JSON.stringify(entry.data, null, 2))}>Copy</button>
+              </div>
+            {/if}
+          {/each}
+        {/if}
       </div>
     </div>
 
-    <div class="log-container" bind:this={logContainer}>
-      {#if debug.entries.length === 0}
-        <div class="log-empty">
-          <p>No events yet.</p>
-          <p class="log-empty-hint">Start commentary to see debug output.</p>
+    <!-- Vertical resize handle -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="v-resize-handle"
+      class:v-resize-active={vDragging}
+      onpointerdown={startVResize}
+    >
+      <div class="v-resize-grip"></div>
+    </div>
+
+    <!-- Frames panel -->
+    <div class="frames-panel" style="height: calc({100 - logSplitPercent}% - 8px);">
+      <div class="log-header">
+        <h2>Frames ({debug.recentFrames.length})</h2>
+        <div class="log-controls">
+          <button class="clear-btn" onclick={clearFrames}>Clear</button>
         </div>
-      {:else}
-        {#each debug.entries as entry (entry.id)}
-          <div class="log-entry" class:error-entry={entry.type === 'error'}>
-            <span class="log-time">{formatTime(entry.timestamp)}</span>
-            <span class="log-badge" style="color: {entryColor(entry.type)}">{entryLabel(entry.type)}</span>
-            <span class="log-text">{summarize(entry)}</span>
+      </div>
+
+      <div class="frames-container">
+        {#if debug.recentFrames.length === 0}
+          <div class="log-empty">
+            <p>No frames captured yet.</p>
+            <p class="log-empty-hint">Start commentary to see captured screenshots.</p>
           </div>
-        {/each}
-      {/if}
+        {:else}
+          <div class="frames-list">
+            {#each debug.recentFrames.slice(-20) as frame (frame.id)}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="frame-card" onclick={() => { lightboxFrame = frame; }}>
+                <img
+                  class="frame-thumb"
+                  src={frame.b64}
+                  alt="Frame {frame.id}"
+                />
+                <div class="frame-info">
+                  <span class="frame-time">{formatTime(frame.timestamp)}</span>
+                  {#if frame.aiResponse}
+                    <span class="frame-response">{frame.aiResponse.slice(0, 120)}{frame.aiResponse.length > 120 ? '...' : ''}</span>
+                  {:else}
+                    <span class="frame-no-response">No response</span>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
 </div>
+
+<!-- Lightbox -->
+{#if lightboxFrame}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="lightbox-backdrop" onclick={() => { lightboxFrame = null; }}>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="lightbox-content" onclick={(e) => e.stopPropagation()}>
+      <img src={lightboxFrame.b64} alt="Frame {lightboxFrame.id}" class="lightbox-img" />
+      <div class="lightbox-meta">
+        <span class="lightbox-time">{formatTime(lightboxFrame.timestamp)}</span>
+        {#if lightboxFrame.aiResponse}
+          <p class="lightbox-response" style="user-select: text;">{lightboxFrame.aiResponse}</p>
+        {/if}
+      </div>
+      <button class="lightbox-close" onclick={() => { lightboxFrame = null; }}>&times;</button>
+    </div>
+  </div>
+{/if}
 
 <style>
   .settings-layout {
@@ -424,7 +551,7 @@
     height: 48px;
   }
 
-  /* ── Right column: Event Log ── */
+  /* ── Right column ── */
   .log-col {
     flex-shrink: 0;
     display: flex;
@@ -434,11 +561,18 @@
     border-left: 1px solid var(--white-a6);
   }
 
+  .log-panel,
+  .frames-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .log-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--space-4) var(--space-4) var(--space-3);
+    padding: var(--space-3) var(--space-4) var(--space-2);
     flex-shrink: 0;
     border-bottom: 1px solid var(--white-a6);
   }
@@ -488,6 +622,38 @@
     background: var(--error-a15);
     color: var(--color-error);
     border-color: var(--error-a20);
+  }
+
+  /* ── Vertical resize handle ── */
+  .v-resize-handle {
+    height: 8px;
+    flex-shrink: 0;
+    cursor: row-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 2;
+    transition: background var(--transition-base);
+  }
+
+  .v-resize-handle:hover,
+  .v-resize-active {
+    background: var(--teal-a10);
+  }
+
+  .v-resize-grip {
+    width: 32px;
+    height: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--white-a10);
+    transition: background var(--transition-base), width var(--transition-base);
+  }
+
+  .v-resize-handle:hover .v-resize-grip,
+  .v-resize-active .v-resize-grip {
+    background: var(--teal-a40);
+    width: 48px;
   }
 
   /* ── Log entries ── */
@@ -558,10 +724,205 @@
 
   .log-text {
     color: var(--color-text-secondary);
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .expanded .log-text {
+    white-space: normal;
+    word-break: break-all;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .expandable {
+    cursor: pointer;
+  }
+
+  .log-entry-expanded {
+    padding: var(--space-2) var(--space-3);
+    background: var(--error-a12);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    margin-top: -2px;
+    margin-bottom: var(--space-1);
+    position: relative;
+  }
+
+  .expanded-text {
+    margin: 0;
+    font-size: var(--font-xs);
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: var(--space-1-5);
+    right: var(--space-2);
+    padding: 2px var(--space-2);
+    border: 1px solid var(--white-a10);
+    border-radius: var(--radius-sm);
+    background: var(--white-a6);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--font-2xs);
+    font-weight: 500;
+    transition: background var(--transition-base), color var(--transition-base);
+  }
+
+  .copy-btn:hover {
+    background: var(--white-a15);
+    color: var(--color-text-primary);
+  }
+
+  /* ── Frames ── */
+  .frames-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2);
+  }
+
+  .frames-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .frame-card {
+    display: flex;
+    gap: var(--space-2-5);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a3);
+    overflow: hidden;
+    cursor: pointer;
+    padding: var(--space-2);
+    transition: border-color var(--transition-base), background var(--transition-base);
+    align-items: flex-start;
+  }
+
+  .frame-card:hover {
+    border-color: var(--white-a15);
+    background: var(--white-a6);
+  }
+
+  .frame-thumb {
+    width: 120px;
+    flex-shrink: 0;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    border-radius: var(--radius-md);
+  }
+
+  .frame-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .frame-time {
+    font-size: var(--font-2xs);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .frame-response {
+    font-size: var(--font-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
+  .frame-no-response {
+    font-size: var(--font-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
+
+  /* ── Lightbox ── */
+  .lightbox-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6);
+  }
+
+  .lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+  }
+
+  .lightbox-img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+  }
+
+  .lightbox-meta {
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .lightbox-time {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lightbox-response {
+    font-size: var(--font-base);
+    color: var(--color-text-primary);
+    line-height: 1.5;
+    margin: 0;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    border: none;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    font-size: var(--font-xl);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-base);
+  }
+
+  .lightbox-close:hover {
+    background: rgba(0, 0, 0, 0.8);
   }
 </style>

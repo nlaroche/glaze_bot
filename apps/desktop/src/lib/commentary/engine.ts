@@ -6,6 +6,8 @@ import {
   markStarted,
   markStopped,
   resetDebugStats,
+  captureFrame,
+  setFrameResponse,
 } from '../stores/debug.svelte';
 
 const MAX_HISTORY = 10; // 10 turns = 20 messages
@@ -48,6 +50,8 @@ export class CommentaryEngine {
   private sourceId = '';
   private party: GachaCharacter[] = [];
   private speaking = false;
+  private consecutiveErrors = 0;
+  private static readonly MAX_BACKOFF_MS = 60_000;
 
   /** Callback fired when a new chat message is produced */
   onChatMessage: ((entry: ChatLogEntry) => void) | null = null;
@@ -73,6 +77,7 @@ export class CommentaryEngine {
     this.histories.clear();
     this.lastSpokeTime = 0;
     this.speaking = false;
+    this.consecutiveErrors = 0;
     resetDebugStats();
     markStarted();
     logDebug('info', 'Commentary engine started');
@@ -108,7 +113,10 @@ export class CommentaryEngine {
 
   private scheduleNext() {
     if (!this.running || this.paused) return;
-    this.loopTimer = setTimeout(() => this.tick(), POLL_INTERVAL_MS);
+    const backoff = this.consecutiveErrors > 0
+      ? Math.min(POLL_INTERVAL_MS * Math.pow(2, this.consecutiveErrors), CommentaryEngine.MAX_BACKOFF_MS)
+      : POLL_INTERVAL_MS;
+    this.loopTimer = setTimeout(() => this.tick(), backoff);
   }
 
   private async tick() {
@@ -116,9 +124,18 @@ export class CommentaryEngine {
 
     try {
       await this.doOneCycle();
+      this.consecutiveErrors = 0;
     } catch (err) {
+      this.consecutiveErrors++;
+      const backoff = Math.min(
+        POLL_INTERVAL_MS * Math.pow(2, this.consecutiveErrors),
+        CommentaryEngine.MAX_BACKOFF_MS,
+      );
       logDebug('error', {
         message: err instanceof Error ? err.message : String(err),
+      });
+      logDebug('info', {
+        message: `Backing off ${(backoff / 1000).toFixed(0)}s after ${this.consecutiveErrors} consecutive error(s)`,
       });
     }
 
@@ -140,18 +157,24 @@ export class CommentaryEngine {
       return;
     }
 
-    // Capture frame
+    // Capture frame (grab_frame returns a data URI: "data:image/jpeg;base64,...")
+    let frameDataUri: string;
     let frameB64: string;
+    let frameId: number;
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      frameB64 = await invoke<string>('grab_frame', { sourceId: this.sourceId });
+      frameDataUri = await invoke<string>('grab_frame', { sourceId: this.sourceId });
+      // Strip data URI prefix — API expects raw base64
+      frameB64 = frameDataUri.replace(/^data:image\/[a-z]+;base64,/, '');
       logDebug('frame', { size: frameB64.length });
+      // Store the full data URI for display in debug frames
+      frameId = captureFrame(frameDataUri);
     } catch (err) {
       logDebug('error', {
         step: 'grab_frame',
         message: err instanceof Error ? err.message : String(err),
       });
-      return;
+      throw err;
     }
 
     // Pick a random character
@@ -207,6 +230,14 @@ export class CommentaryEngine {
           status: commentaryRes.status,
           message: errText,
         });
+        this.consecutiveErrors++;
+        const backoff = Math.min(
+          POLL_INTERVAL_MS * Math.pow(2, this.consecutiveErrors),
+          CommentaryEngine.MAX_BACKOFF_MS,
+        );
+        logDebug('info', {
+          message: `Backing off ${(backoff / 1000).toFixed(0)}s after ${this.consecutiveErrors} consecutive error(s)`,
+        });
         this.speaking = false;
         return;
       }
@@ -218,6 +249,9 @@ export class CommentaryEngine {
         usage: commentaryData.usage,
       });
 
+      // Reset consecutive errors on successful LLM response
+      this.consecutiveErrors = 0;
+
       if (!commentaryData.text) {
         // [SILENCE] — character chose not to speak
         this.speaking = false;
@@ -225,6 +259,7 @@ export class CommentaryEngine {
       }
 
       const responseText: string = commentaryData.text;
+      setFrameResponse(frameId, responseText);
 
       // Update history
       this.appendHistory(character.id, responseText);

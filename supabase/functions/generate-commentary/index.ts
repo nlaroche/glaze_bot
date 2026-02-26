@@ -139,7 +139,10 @@ Deno.serve(async (req: Request) => {
     }
     textParts.push(`[Style hint: ${nudge}]`);
     textParts.push(
-      "If nothing interesting is happening, respond with exactly [SILENCE].",
+      "/no_think",
+    );
+    textParts.push(
+      "CRITICAL: Keep your response to 1-2 short sentences MAX (under 40 words). Be punchy and reactive, not descriptive or analytical. If nothing interesting is happening, respond with exactly [SILENCE].",
     );
 
     // Build multimodal user content (OpenAI-compatible format)
@@ -203,8 +206,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const apiData = await apiRes.json();
-    const reply =
-      apiData.choices?.[0]?.message?.content?.trim() ?? "";
+    // Strip any <think>...</think> blocks that qwen3 thinking mode may produce
+    let reply = (apiData.choices?.[0]?.message?.content?.trim() ?? "")
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .trim();
     const inputTokens = apiData.usage?.prompt_tokens ?? 0;
     const outputTokens = apiData.usage?.completion_tokens ?? 0;
 

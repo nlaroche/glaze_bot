@@ -4,20 +4,27 @@
   import type { GachaCharacter } from '@glazebot/shared-types';
   import { getCollection } from '@glazebot/supabase-client';
   import { getAuthState } from '$lib/stores/auth.svelte';
-  import { CommentaryEngine, type ChatLogEntry } from '$lib/commentary/engine';
+  import {
+    getSessionStore,
+    setPartySlot,
+    setActiveShare,
+    setRunning,
+    setPaused,
+    setOverlayOn,
+    clearChatLog,
+    getActiveParty,
+  } from '$lib/stores/session.svelte';
 
   const auth = getAuthState();
+  const session = getSessionStore();
 
-  // Character data from Supabase
+  // Character data from Supabase (cheap to re-fetch, not session-critical)
   let allCharacters = $state<GachaCharacter[]>([]);
   let loadingChars = $state(true);
 
-  // Party state (3 slots)
-  let partySlots = $state<(GachaCharacter | null)[]>([null, null, null]);
-
   // Collection = all characters not in party
   let collection = $derived(
-    allCharacters.filter((c) => !partySlots.some((s) => s?.id === c.id))
+    allCharacters.filter((c) => !session.partySlots.some((s) => s?.id === c.id))
   );
 
   let searchQuery = $state('');
@@ -46,15 +53,15 @@
   }
 
   function removeFromParty(index: number) {
-    partySlots[index] = null;
-    if (overlayOn) emitPartyToOverlay();
+    setPartySlot(index, null);
+    if (session.overlayOn) emitPartyToOverlay();
   }
 
   function addToParty(char: GachaCharacter) {
-    const emptyIndex = partySlots.findIndex((s) => s === null);
+    const emptyIndex = session.partySlots.findIndex((s) => s === null);
     if (emptyIndex !== -1) {
-      partySlots[emptyIndex] = char;
-      if (overlayOn) emitPartyToOverlay();
+      setPartySlot(emptyIndex, char);
+      if (session.overlayOn) emitPartyToOverlay();
     }
   }
 
@@ -74,13 +81,13 @@
     const char = findCharById(charId);
     if (!char) return;
 
-    const oldSlot = partySlots.findIndex((s) => s?.id === charId);
-    if (oldSlot !== -1) partySlots[oldSlot] = null;
+    const oldSlot = session.partySlots.findIndex((s) => s?.id === charId);
+    if (oldSlot !== -1) setPartySlot(oldSlot, null);
 
-    const displaced = partySlots[slotIndex];
-    partySlots[slotIndex] = char;
+    const displaced = session.partySlots[slotIndex];
+    setPartySlot(slotIndex, char);
     if (displaced && oldSlot !== -1) {
-      partySlots[oldSlot] = displaced;
+      setPartySlot(oldSlot, displaced);
     }
   }
 
@@ -89,23 +96,16 @@
     dragOverCollection = false;
     const charId = e.dataTransfer?.getData('text/plain');
     if (!charId) return;
-    const slotIndex = partySlots.findIndex((s) => s?.id === charId);
-    if (slotIndex !== -1) partySlots[slotIndex] = null;
+    const slotIndex = session.partySlots.findIndex((s) => s?.id === charId);
+    if (slotIndex !== -1) setPartySlot(slotIndex, null);
   }
 
-  // Commentary engine
-  const engine = new CommentaryEngine();
-  let isRunning = $state(false);
-  let isPaused = $state(false);
-  let overlayOn = $state(false);
-
-  // Chat log
-  let chatLog = $state<ChatLogEntry[]>([]);
+  // Chat log element for auto-scroll
   let chatLogEl: HTMLDivElement | undefined = $state();
 
   // Auto-scroll chat log
   $effect(() => {
-    void chatLog.length;
+    void session.chatLog.length;
     if (chatLogEl) {
       requestAnimationFrame(() => {
         chatLogEl!.scrollTop = chatLogEl!.scrollHeight;
@@ -113,25 +113,9 @@
     }
   });
 
-  // Wire up engine callbacks
-  engine.onChatMessage = (entry) => {
-    chatLog = [...chatLog, entry];
-  };
-
-  engine.onOverlayMessage = async (msg) => {
-    if (!overlayOn) return;
-    try {
-      const { emitTo } = await import('@tauri-apps/api/event');
-      await emitTo('overlay', 'chat-message', msg);
-    } catch (e) {
-      console.error('Failed to emit to overlay:', e);
-    }
-  };
-
-  // Screen sharing state
+  // Screen sharing state (local UI state — picker doesn't need to survive navigation)
   let pickerOpen = $state(false);
   let pickerInitialTab = $state<'screen' | 'app'>('screen');
-  let activeShare = $state<CaptureSource | null>(null);
   let captureSources = $state<CaptureSource[]>([]);
   let loadingSources = $state(false);
 
@@ -156,17 +140,17 @@
   }
 
   function handleSourceSelect(source: CaptureSource) {
-    activeShare = source;
+    setActiveShare(source);
     pickerOpen = false;
   }
 
   async function stopSharing() {
-    if (isRunning) {
+    if (session.isRunning) {
       handleStop();
     }
     // Auto-hide overlay when share stops — overlay only makes sense over a shared screen
-    if (overlayOn) {
-      overlayOn = false;
+    if (session.overlayOn) {
+      setOverlayOn(false);
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('hide_overlay');
@@ -174,49 +158,49 @@
         console.error('Failed to hide overlay:', e);
       }
     }
-    activeShare = null;
+    setActiveShare(null);
   }
 
   // Commentary controls
-  let canStart = $derived(!!activeShare && partySlots.some((s) => s !== null) && !isRunning);
+  let canStart = $derived(!!session.activeShare && session.partySlots.some((s) => s !== null) && !session.isRunning);
 
   async function handleStart() {
-    if (!activeShare) return;
-    const party = partySlots.filter((s): s is GachaCharacter => s !== null);
+    if (!session.activeShare) return;
+    const party = getActiveParty();
     if (party.length === 0) return;
 
-    isRunning = true;
-    isPaused = false;
-    chatLog = [];
-    await engine.start(activeShare.id, party);
+    setRunning(true);
+    setPaused(false);
+    clearChatLog();
+    await session.engine.start(session.activeShare.id, party);
   }
 
   function handlePauseResume() {
-    if (isPaused) {
-      isPaused = false;
-      engine.resume();
+    if (session.isPaused) {
+      setPaused(false);
+      session.engine.resume();
     } else {
-      isPaused = true;
-      engine.pause();
+      setPaused(true);
+      session.engine.pause();
     }
   }
 
   function handleStop() {
-    isRunning = false;
-    isPaused = false;
-    engine.stop();
+    setRunning(false);
+    setPaused(false);
+    session.engine.stop();
   }
 
   // Keep engine party in sync
   $effect(() => {
-    const party = partySlots.filter((s): s is GachaCharacter => s !== null);
-    engine.updateParty(party);
+    const party = session.partySlots.filter((s): s is GachaCharacter => s !== null);
+    session.engine.updateParty(party);
   });
 
   async function emitPartyToOverlay() {
     try {
       const { emitTo } = await import('@tauri-apps/api/event');
-      const activeMembers = partySlots
+      const activeMembers = session.partySlots
         .filter((s): s is GachaCharacter => s !== null)
         .map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, image: c.avatar_url }));
       await emitTo('overlay', 'party-updated', { members: activeMembers });
@@ -226,10 +210,10 @@
   }
 
   async function toggleOverlay() {
-    overlayOn = !overlayOn;
+    setOverlayOn(!session.overlayOn);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      if (overlayOn) {
+      if (session.overlayOn) {
         await invoke('show_overlay');
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
         const webview = getCurrentWebview();
@@ -278,7 +262,7 @@
       <h2>Chat History</h2>
     </div>
     <div class="chat-log" bind:this={chatLogEl}>
-      {#if chatLog.length === 0}
+      {#if session.chatLog.length === 0}
         <div class="chat-empty">
           {#if !auth.isAuthenticated}
             <p>Sign in to start commentary.</p>
@@ -286,16 +270,16 @@
             <p>Loading characters...</p>
           {:else if allCharacters.length === 0}
             <p>No characters yet. Open some booster packs first!</p>
-          {:else if !activeShare}
+          {:else if !session.activeShare}
             <p>Select a screen or app to capture.</p>
-          {:else if !partySlots.some((s) => s !== null)}
+          {:else if !session.partySlots.some((s) => s !== null)}
             <p>Add at least one character to your party.</p>
           {:else}
             <p>Hit Start to begin commentary.</p>
           {/if}
         </div>
       {:else}
-        {#each chatLog as msg (msg.id)}
+        {#each session.chatLog as msg (msg.id)}
           <div class="chat-msg">
             <div class="msg-avatar" style="border-color: {rarityNameColor[msg.rarity]}">
               {#if msg.image}
@@ -321,10 +305,10 @@
       <!-- Capture group / Active share -->
       <div class="ctrl-group">
         <span class="ctrl-label">Capture</span>
-        {#if activeShare}
+        {#if session.activeShare}
           <div class="share-inline">
             <div class="share-pulse"></div>
-            <span class="share-name" title={activeShare.name}>{activeShare.name}</span>
+            <span class="share-name" title={session.activeShare.name}>{session.activeShare.name}</span>
             <button class="share-x" onclick={stopSharing} title="Stop sharing">&times;</button>
           </div>
         {:else}
@@ -347,12 +331,12 @@
       <div class="ctrl-group">
         <span class="ctrl-label">Commentary</span>
         <div class="ctrl-group-buttons">
-          <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>
+          <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
             Start
           </button>
-          <button class="ctrl-btn" disabled={!isRunning} onclick={handlePauseResume}>
-            {#if isPaused}
+          <button class="ctrl-btn" disabled={!session.isRunning} onclick={handlePauseResume}>
+            {#if session.isPaused}
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
               Resume
             {:else}
@@ -360,7 +344,7 @@
               Pause
             {/if}
           </button>
-          <button class="ctrl-btn stop" disabled={!isRunning} onclick={handleStop}>
+          <button class="ctrl-btn stop" disabled={!session.isRunning} onclick={handleStop}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
             Stop
           </button>
@@ -374,12 +358,12 @@
         <span class="ctrl-label">Overlay</span>
         <button
           class="toggle"
-          class:toggle-on={overlayOn}
-          class:toggle-disabled={!activeShare}
+          class:toggle-on={session.overlayOn}
+          class:toggle-disabled={!session.activeShare}
           onclick={toggleOverlay}
-          disabled={!activeShare}
-          aria-pressed={overlayOn}
-          title={activeShare ? '' : 'Start a screen share first'}
+          disabled={!session.activeShare}
+          aria-pressed={session.overlayOn}
+          title={session.activeShare ? '' : 'Start a screen share first'}
         >
           <span class="toggle-knob"></span>
         </button>
@@ -398,7 +382,7 @@
         </div>
       </div>
       <div class="party-slots">
-        {#each partySlots as slot, i}
+        {#each session.partySlots as slot, i}
           <div
             class="drop-zone"
             class:drop-active={dragOverPartySlot === i}
@@ -630,6 +614,8 @@
     font-size: var(--font-md);
     color: var(--color-text-primary, #d0d6e0);
     line-height: 1.45;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   /* ── Inline share indicator ── */

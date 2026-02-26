@@ -14,10 +14,20 @@ export interface DebugEntry {
   data: unknown;
 }
 
+export interface FrameCapture {
+  id: number;
+  timestamp: Date;
+  b64: string;
+  aiResponse?: string;
+}
+
 const MAX_ENTRIES = 100;
+const MAX_FRAME_AGE_MS = 5 * 60 * 1000; // 5 minutes
 let nextId = 1;
+let nextFrameId = 1;
 
 let entries = $state<DebugEntry[]>([]);
+let recentFrames = $state<FrameCapture[]>([]);
 let commentaryGap = $state(30);
 let gameHint = $state('');
 let customSystemInstructions = $state('');
@@ -30,6 +40,7 @@ let startedAt = $state<Date | null>(null);
 export function getDebugStore() {
   return {
     get entries() { return entries; },
+    get recentFrames() { return recentFrames; },
     get commentaryGap() { return commentaryGap; },
     get gameHint() { return gameHint; },
     get customSystemInstructions() { return customSystemInstructions; },
@@ -92,4 +103,26 @@ export function markStarted() {
 
 export function markStopped() {
   startedAt = null;
+}
+
+/** Record a captured frame. Returns the frame ID for later attaching an AI response. */
+export function captureFrame(b64: string): number {
+  const id = nextFrameId++;
+  const now = new Date();
+  recentFrames = [
+    ...recentFrames.filter((f) => now.getTime() - f.timestamp.getTime() < MAX_FRAME_AGE_MS),
+    { id, timestamp: now, b64 },
+  ];
+  return id;
+}
+
+/** Attach an AI response to a previously captured frame. */
+export function setFrameResponse(id: number, response: string) {
+  recentFrames = recentFrames.map((f) =>
+    f.id === id ? { ...f, aiResponse: response } : f,
+  );
+}
+
+export function clearFrames() {
+  recentFrames = [];
 }
