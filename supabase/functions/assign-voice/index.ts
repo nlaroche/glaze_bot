@@ -104,8 +104,12 @@ Deno.serve(async (req: Request) => {
           const r2Key = characterTaglineKey(character_id);
           taglineUrl = await uploadToPublicBucket(r2Key, audioData, "audio/mpeg");
           ttsInfo = { tagline_tts: { size: audioData.byteLength, key: r2Key } };
+        } else {
+          const errText = await ttsRes.text().catch(() => "");
+          console.error(`[assign-voice] TTS returned ${ttsRes.status}: ${errText}`);
         }
-      } catch {
+      } catch (ttsErr) {
+        console.error("[assign-voice] TTS/R2 upload failed:", ttsErr);
         // TTS failure is non-fatal — voice is still assigned
       }
     }
@@ -143,6 +147,7 @@ Deno.serve(async (req: Request) => {
       voices,
     });
   } catch (err) {
+    console.error("[assign-voice]", err);
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }

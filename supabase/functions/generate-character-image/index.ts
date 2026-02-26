@@ -40,14 +40,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const pixelLabRequest = {
-      prompt,
-      width: 128,
-      height: 128,
-      noBackground: true,
+      description: prompt,
+      image_size: { width: 128, height: 128 },
+      no_background: true,
     };
 
     // Call PixelLab API
-    const pixelRes = await fetch("https://api.pixellab.ai/v1/create-image-pixflux", {
+    const pixelRes = await fetch("https://api.pixellab.ai/v1/generate-image-pixflux", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -102,6 +101,7 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse({ avatar_url: avatarUrl });
   } catch (err) {
+    console.error("[generate-character-image]", err);
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }

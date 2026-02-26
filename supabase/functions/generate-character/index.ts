@@ -96,13 +96,13 @@ async function generateSprite(
 
   try {
     const prompt = buildSpritePrompt(description, rarity);
-    const pixelRes = await fetch("https://api.pixellab.ai/v1/create-image-pixflux", {
+    const pixelRes = await fetch("https://api.pixellab.ai/v1/generate-image-pixflux", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${PIXELLAB_API_KEY}`,
       },
-      body: JSON.stringify({ prompt, width: 128, height: 128, noBackground: true }),
+      body: JSON.stringify({ description: prompt, image_size: { width: 128, height: 128 }, no_background: true }),
     });
 
     if (!pixelRes.ok) return null;
@@ -297,8 +297,8 @@ Deno.serve(async (req: Request) => {
           updateFields.tagline_url = taglineUrl;
           inserted.tagline_url = taglineUrl;
         }
-      } catch {
-        // TTS failure is non-fatal
+      } catch (ttsErr) {
+        console.error("[generate-character] TTS/R2 upload failed:", ttsErr);
       }
     }
 
@@ -311,6 +311,7 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse(inserted);
   } catch (err) {
+    console.error("[generate-character]", err);
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }

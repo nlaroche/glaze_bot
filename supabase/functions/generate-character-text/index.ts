@@ -188,6 +188,7 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse(inserted);
   } catch (err) {
+    console.error("[generate-character-text]", err);
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }

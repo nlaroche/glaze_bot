@@ -47,8 +47,8 @@ Deno.serve(async (req: Request) => {
             .delete()
             .eq("id", row.id);
           if (!delErr) purged++;
-        } catch {
-          // Continue with remaining characters
+        } catch (purgeErr) {
+          console.error(`[purge-character-media] Failed to purge ${row.id}:`, purgeErr);
         }
       }
 
@@ -73,6 +73,7 @@ Deno.serve(async (req: Request) => {
 
     return errorResponse("Provide character_id or purge_all_deleted", 400);
   } catch (err) {
+    console.error("[purge-character-media]", err);
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }
