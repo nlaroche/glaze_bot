@@ -36,5 +36,6 @@ export {
   setDefaultCharacter,
   syncFishVoices,
   getFishVoices,
+  generativeTts,
 } from "./gacha.js";
 export type { FishVoice } from "./gacha.js";

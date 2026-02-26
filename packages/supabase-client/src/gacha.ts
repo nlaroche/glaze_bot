@@ -372,3 +372,26 @@ export async function getFishVoices(): Promise<FishVoice[]> {
   if (error) throw error;
   return data as FishVoice[];
 }
+
+/** Generate TTS audio with Fish Audio S1 — supports emotion markers and no-reference generative mode */
+export async function generativeTts(opts: {
+  text: string;
+  reference_id?: string | null;
+  temperature?: number;
+  top_p?: number;
+  repetition_penalty?: number;
+  speed?: number;
+}): Promise<ArrayBuffer> {
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase.functions.invoke("generative-tts", {
+    body: opts,
+  });
+
+  if (error) {
+    throw new Error(error.message ?? "Generative TTS failed");
+  }
+
+  if (data instanceof ArrayBuffer) return data;
+  if (data instanceof Blob) return await data.arrayBuffer();
+  throw new Error("Unexpected response format from generative-tts");
+}

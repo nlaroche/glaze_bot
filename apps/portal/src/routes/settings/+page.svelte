@@ -16,6 +16,7 @@
     setDefaultCharacter,
     syncFishVoices,
     getFishVoices,
+    generativeTts,
   } from '@glazebot/supabase-client';
   import type { FishVoice } from '@glazebot/supabase-client';
   import { CharacterCard } from '@glazebot/shared-ui';
@@ -126,6 +127,33 @@
         })
       : fishVoices
   );
+
+  // ─── State: Generative TTS ─────────────────────────────────────────
+  let voicesSubTab: 'library' | 'generative' = $state('library');
+  let genText = $state('(excited) Oh nice, you just pulled off a triple kill! (laughing) Ha ha, they had no idea what hit them!');
+  let genTemperature = $state(0.7);
+  let genTopP = $state(0.7);
+  let genSpeed = $state(1.0);
+  let genRepPenalty = $state(1.2);
+  let genLoading = $state(false);
+  let genAudio: HTMLAudioElement | null = $state(null);
+  let genPlaying = $state(false);
+  let genError = $state('');
+
+  const emotionTags = [
+    { category: 'Emotions', tags: ['happy', 'sad', 'angry', 'excited', 'calm', 'nervous', 'confident', 'surprised', 'sarcastic', 'curious', 'scared', 'frustrated'] },
+    { category: 'Tone', tags: ['whispering', 'shouting', 'screaming', 'soft', 'hurried'] },
+    { category: 'Effects', tags: ['laughing', 'chuckling', 'sobbing', 'sighing', 'gasping', 'yawning'] },
+  ];
+
+  const presetTexts = [
+    { label: 'Excited Commentary', text: '(excited) Oh nice, you just pulled off a triple kill! (laughing) Ha ha, they had no idea what hit them!' },
+    { label: 'Sarcastic Roast', text: '(sarcastic) Oh wow, walking straight into that turret again. (sighing) Brilliant strategy, truly.' },
+    { label: 'Nervous Callout', text: '(nervous) Uh oh, there\'s someone behind you... (hurried) Turn around turn around turn around!' },
+    { label: 'Calm Analysis', text: '(calm) Alright, so the enemy team is grouping up at mid. I\'d suggest flanking from the left side.' },
+    { label: 'Hype Moment', text: '(shouting) LETS GOOO! (excited) That was absolutely insane, I can\'t believe you clutched that!' },
+    { label: 'Deadpan', text: '(calm)(soft) You died. Again. To the same guy. For the fourth time. Impressive consistency.' },
+  ];
 
   // ─── Constants ────────────────────────────────────────────────────
   const modelOptions = [
@@ -629,6 +657,45 @@
     return n.toString();
   }
 
+  async function handleGenerateTts() {
+    if (!genText.trim()) return;
+    genLoading = true;
+    genError = '';
+    genPlaying = false;
+    if (genAudio) { genAudio.pause(); genAudio = null; }
+
+    try {
+      const audioData = await generativeTts({
+        text: genText,
+        temperature: genTemperature,
+        top_p: genTopP,
+        repetition_penalty: genRepPenalty,
+        speed: genSpeed,
+      });
+      const blob = new Blob([audioData], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.onended = () => { genPlaying = false; };
+      audio.onerror = () => { genPlaying = false; URL.revokeObjectURL(url); };
+      audio.play();
+      genAudio = audio;
+      genPlaying = true;
+    } catch (e) {
+      genError = e instanceof Error ? e.message : 'TTS generation failed';
+    } finally {
+      genLoading = false;
+    }
+  }
+
+  function stopGenAudio() {
+    if (genAudio) { genAudio.pause(); genAudio = null; }
+    genPlaying = false;
+  }
+
+  function insertEmotionTag(tag: string) {
+    genText = genText + ` (${tag})`;
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────
   function formatDate(iso: string): string {
     const d = new Date(iso);
@@ -1112,92 +1179,245 @@
   <!-- ═══ TAB: VOICES ═══ -->
   {:else if activeTab === 'voices'}
     <div class="voices-tab" data-testid="voices-panel">
-      <!-- Top bar -->
-      <div class="voices-toolbar">
-        <div class="voices-toolbar-left">
-          <Button
-            variant="primary"
-            loading={syncingVoices}
-            onclick={handleSyncVoices}
-            testid="sync-voices-btn"
-          >
-            {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
-          </Button>
-          {#if fishVoices.length > 0}
-            <Badge variant="default" text="{filteredVoices.length} voice{filteredVoices.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
-          {/if}
-        </div>
-        <div class="voices-search">
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search voices..."
-            bind:value={voiceSearch}
-            data-testid="voice-search-input"
-          />
-        </div>
+      <!-- Sub-tabs -->
+      <div class="sub-tabs">
+        <button
+          class="sub-tab"
+          class:active={voicesSubTab === 'library'}
+          onclick={() => voicesSubTab = 'library'}
+          data-testid="subtab-library"
+        >Voice Library</button>
+        <button
+          class="sub-tab"
+          class:active={voicesSubTab === 'generative'}
+          onclick={() => voicesSubTab = 'generative'}
+          data-testid="subtab-generative"
+        >Generative</button>
       </div>
 
-      <!-- Content -->
-      {#if loadingVoices}
-        <p class="muted">Loading voices...</p>
-      {:else if fishVoices.length === 0}
-        <div class="voices-empty">
-          <p class="muted">No voices synced. Click <strong>Sync from Fish Audio</strong> to fetch the top voices.</p>
+      {#if voicesSubTab === 'library'}
+        <!-- ─── Library Sub-tab ─── -->
+        <div class="voices-toolbar">
+          <div class="voices-toolbar-left">
+            <Button
+              variant="primary"
+              loading={syncingVoices}
+              onclick={handleSyncVoices}
+              testid="sync-voices-btn"
+            >
+              {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
+            </Button>
+            {#if fishVoices.length > 0}
+              <Badge variant="default" text="{filteredVoices.length} voice{filteredVoices.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
+            {/if}
+          </div>
+          <div class="voices-search">
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search voices..."
+              bind:value={voiceSearch}
+              data-testid="voice-search-input"
+            />
+          </div>
         </div>
-      {:else}
-        <div class="voices-table-wrapper">
-          <table class="voices-table" data-testid="voices-table">
-            <thead>
-              <tr>
-                <th class="col-play">Play</th>
-                <th class="col-name">Name</th>
-                <th class="col-tags">Tags</th>
-                <th class="col-pop">Popularity</th>
-                <th class="col-likes">Likes</th>
-                <th class="col-author">Author</th>
-                <th class="col-desc">Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each filteredVoices as voice (voice.id)}
-                <tr data-testid="voice-row-{voice.id}">
-                  <td class="col-play">
-                    {#if voice.sample_url}
-                      <button
-                        class="play-btn"
-                        class:playing={playingVoiceId === voice.id}
-                        onclick={() => playVoiceSample(voice)}
-                        data-testid="play-voice-{voice.id}"
-                        title={playingVoiceId === voice.id ? 'Stop' : 'Play sample'}
-                      >
-                        {playingVoiceId === voice.id ? '⏹' : '▶'}
-                      </button>
-                    {:else}
-                      <span class="no-sample" title="No sample available">—</span>
-                    {/if}
-                  </td>
-                  <td class="col-name">{voice.title}</td>
-                  <td class="col-tags">
-                    <div class="tag-pills">
-                      {#each voice.tags.slice(0, 3) as tag}
-                        <span class="tag-pill">{tag}</span>
-                      {/each}
-                      {#if voice.tags.length > 3}
-                        <span class="tag-pill tag-more">+{voice.tags.length - 3}</span>
-                      {/if}
-                    </div>
-                  </td>
-                  <td class="col-pop">{formatNumber(voice.task_count)}</td>
-                  <td class="col-likes">{formatNumber(voice.like_count)}</td>
-                  <td class="col-author">{voice.author_name ?? '—'}</td>
-                  <td class="col-desc" title={voice.description}>
-                    {voice.description.length > 60 ? voice.description.slice(0, 60) + '...' : voice.description || '—'}
-                  </td>
+
+        {#if loadingVoices}
+          <p class="muted">Loading voices...</p>
+        {:else if fishVoices.length === 0}
+          <div class="voices-empty">
+            <p class="muted">No voices synced. Click <strong>Sync from Fish Audio</strong> to fetch the top voices.</p>
+          </div>
+        {:else}
+          <div class="voices-table-wrapper">
+            <table class="voices-table" data-testid="voices-table">
+              <thead>
+                <tr>
+                  <th class="col-play">Play</th>
+                  <th class="col-name">Name</th>
+                  <th class="col-tags">Tags</th>
+                  <th class="col-pop">Popularity</th>
+                  <th class="col-likes">Likes</th>
+                  <th class="col-author">Author</th>
+                  <th class="col-desc">Description</th>
                 </tr>
-              {/each}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {#each filteredVoices as voice (voice.id)}
+                  <tr data-testid="voice-row-{voice.id}">
+                    <td class="col-play">
+                      {#if voice.sample_url}
+                        <button
+                          class="play-btn"
+                          class:playing={playingVoiceId === voice.id}
+                          onclick={() => playVoiceSample(voice)}
+                          data-testid="play-voice-{voice.id}"
+                          title={playingVoiceId === voice.id ? 'Stop' : 'Play sample'}
+                        >
+                          {playingVoiceId === voice.id ? '⏹' : '▶'}
+                        </button>
+                      {:else}
+                        <span class="no-sample" title="No sample available">—</span>
+                      {/if}
+                    </td>
+                    <td class="col-name">{voice.title}</td>
+                    <td class="col-tags">
+                      <div class="tag-pills">
+                        {#each voice.tags.slice(0, 3) as tag}
+                          <span class="tag-pill">{tag}</span>
+                        {/each}
+                        {#if voice.tags.length > 3}
+                          <span class="tag-pill tag-more">+{voice.tags.length - 3}</span>
+                        {/if}
+                      </div>
+                    </td>
+                    <td class="col-pop">{formatNumber(voice.task_count)}</td>
+                    <td class="col-likes">{formatNumber(voice.like_count)}</td>
+                    <td class="col-author">{voice.author_name ?? '—'}</td>
+                    <td class="col-desc" title={voice.description}>
+                      {voice.description.length > 60 ? voice.description.slice(0, 60) + '...' : voice.description || '—'}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {/if}
+
+      {:else}
+        <!-- ─── Generative Sub-tab ─── -->
+        <div class="gen-section" data-testid="generative-panel">
+          <div class="gen-layout">
+            <!-- Left: text input + controls -->
+            <div class="gen-left">
+              <div class="cfg-card">
+                <div class="cfg-header">
+                  <h3 class="cfg-title">Test Generative TTS</h3>
+                  <p class="cfg-desc">Fish Audio S1 without a reference voice — use emotion markers to control delivery</p>
+                </div>
+                <div class="cfg-body">
+                  <!-- Preset buttons -->
+                  <div class="gen-presets">
+                    {#each presetTexts as preset}
+                      <button
+                        class="gen-preset-btn"
+                        onclick={() => genText = preset.text}
+                        data-testid="preset-{preset.label.toLowerCase().replace(/ /g, '-')}"
+                      >{preset.label}</button>
+                    {/each}
+                  </div>
+
+                  <!-- Text input -->
+                  <textarea
+                    class="gen-textarea"
+                    bind:value={genText}
+                    rows="4"
+                    placeholder="Type text with emotion markers like (excited) or (sarcastic)..."
+                    data-testid="gen-text-input"
+                  ></textarea>
+
+                  <!-- Emotion tag buttons -->
+                  {#each emotionTags as group}
+                    <div class="gen-tag-group">
+                      <span class="gen-tag-label">{group.category}</span>
+                      <div class="gen-tag-btns">
+                        {#each group.tags as tag}
+                          <button
+                            class="gen-tag-btn"
+                            onclick={() => insertEmotionTag(tag)}
+                            title="Insert ({tag}) at cursor"
+                          >({tag})</button>
+                        {/each}
+                      </div>
+                    </div>
+                  {/each}
+
+                  <!-- Controls row -->
+                  <div class="gen-controls">
+                    <div class="gen-slider">
+                      <label>Temperature <span class="gen-val">{genTemperature.toFixed(2)}</span></label>
+                      <input type="range" bind:value={genTemperature} min={0} max={1} step={0.05} data-testid="gen-temperature" />
+                    </div>
+                    <div class="gen-slider">
+                      <label>Top P <span class="gen-val">{genTopP.toFixed(2)}</span></label>
+                      <input type="range" bind:value={genTopP} min={0} max={1} step={0.05} data-testid="gen-top-p" />
+                    </div>
+                    <div class="gen-slider">
+                      <label>Speed <span class="gen-val">{genSpeed.toFixed(1)}x</span></label>
+                      <input type="range" bind:value={genSpeed} min={0.5} max={2} step={0.1} data-testid="gen-speed" />
+                    </div>
+                    <div class="gen-slider">
+                      <label>Rep. Penalty <span class="gen-val">{genRepPenalty.toFixed(1)}</span></label>
+                      <input type="range" bind:value={genRepPenalty} min={1} max={2} step={0.1} data-testid="gen-rep-penalty" />
+                    </div>
+                  </div>
+
+                  <!-- Generate + Stop buttons -->
+                  <div class="gen-actions">
+                    <Button
+                      variant="primary"
+                      loading={genLoading}
+                      onclick={handleGenerateTts}
+                      testid="gen-speak-btn"
+                    >
+                      {genLoading ? 'Generating...' : 'Generate & Play'}
+                    </Button>
+                    {#if genPlaying}
+                      <Button
+                        variant="secondary"
+                        onclick={stopGenAudio}
+                        testid="gen-stop-btn"
+                      >Stop</Button>
+                    {/if}
+                  </div>
+
+                  {#if genError}
+                    <p class="error" data-testid="gen-error">{genError}</p>
+                  {/if}
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: reference card -->
+            <div class="gen-right">
+              <div class="cfg-card">
+                <div class="cfg-header">
+                  <h3 class="cfg-title">Emotion Markers Reference</h3>
+                  <p class="cfg-desc">Place tags at the start of a sentence to control delivery</p>
+                </div>
+                <div class="cfg-body gen-ref-body">
+                  <div class="gen-ref-section">
+                    <h4>Syntax</h4>
+                    <code class="gen-ref-code">(excited) Wow, nice play!</code>
+                    <code class="gen-ref-code">(sarcastic)(soft) Oh great, another death.</code>
+                  </div>
+                  <div class="gen-ref-section">
+                    <h4>Tips for GlazeBot</h4>
+                    <ul class="gen-ref-list">
+                      <li>Tags go at the <strong>start</strong> of each sentence</li>
+                      <li>Stack multiple: <code>(nervous)(hurried)</code></li>
+                      <li>Pair effects with sounds: <code>(laughing) Ha ha ha!</code></li>
+                      <li>Higher <strong>temperature</strong> = more expressive</li>
+                      <li>No reference_id = Fish Audio's default voice</li>
+                      <li>The LLM can embed these tags in responses at runtime</li>
+                    </ul>
+                  </div>
+                  <div class="gen-ref-section">
+                    <h4>All Supported Tags</h4>
+                    <div class="gen-ref-all-tags">
+                      <span class="gen-ref-cat">Emotions:</span> happy, sad, angry, excited, calm, nervous, confident, surprised, sarcastic, curious, scared, frustrated, worried, upset, depressed, proud, grateful, embarrassed, disgusted, moved
+                    </div>
+                    <div class="gen-ref-all-tags">
+                      <span class="gen-ref-cat">Tone:</span> whispering, shouting, screaming, soft, hurried
+                    </div>
+                    <div class="gen-ref-all-tags">
+                      <span class="gen-ref-cat">Effects:</span> laughing, chuckling, sobbing, sighing, gasping, yawning, groaning, panting, crying loudly
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       {/if}
     </div>
@@ -2020,5 +2240,234 @@
   .tag-more {
     background: rgba(59, 151, 151, 0.1);
     color: var(--color-teal);
+  }
+
+  /* ─── Sub-tabs ─── */
+  .sub-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
+    background: rgba(10, 22, 42, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 2px;
+    max-width: 280px;
+  }
+
+  .sub-tab {
+    flex: 1;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--color-text-muted);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .sub-tab:hover { color: var(--color-text-secondary); }
+
+  .sub-tab.active {
+    background: rgba(59, 151, 151, 0.15);
+    color: var(--color-teal);
+  }
+
+  /* ─── Generative Section ─── */
+  .gen-section {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .gen-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 16px;
+  }
+
+  .gen-left, .gen-right {
+    min-width: 0;
+  }
+
+  .gen-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .gen-preset-btn {
+    padding: 4px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-muted);
+    font-family: inherit;
+    font-size: 0.6875rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .gen-preset-btn:hover {
+    background: rgba(59, 151, 151, 0.1);
+    border-color: var(--color-teal);
+    color: var(--color-teal);
+  }
+
+  .gen-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    font-family: inherit;
+    font-size: 0.875rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .gen-textarea:focus { border-color: var(--color-teal); }
+  .gen-textarea::placeholder { color: var(--color-text-muted); }
+
+  .gen-tag-group {
+    margin-bottom: 8px;
+  }
+
+  .gen-tag-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .gen-tag-btns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .gen-tag-btn {
+    padding: 2px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--color-text-muted);
+    font-family: 'Courier New', monospace;
+    font-size: 0.625rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .gen-tag-btn:hover {
+    background: rgba(59, 151, 151, 0.1);
+    color: var(--color-teal);
+    border-color: rgba(59, 151, 151, 0.3);
+  }
+
+  .gen-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 20px;
+    margin: 14px 0;
+  }
+
+  .gen-slider label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+
+  .gen-val {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .gen-slider input[type="range"] {
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .gen-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ─── Reference Card ─── */
+  .gen-ref-body {
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+  }
+
+  .gen-ref-section {
+    margin-bottom: 14px;
+  }
+
+  .gen-ref-section:last-child { margin-bottom: 0; }
+
+  .gen-ref-section h4 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 6px;
+  }
+
+  .gen-ref-code {
+    display: block;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75rem;
+    color: var(--color-teal);
+    margin-bottom: 4px;
+  }
+
+  .gen-ref-list {
+    margin: 0;
+    padding-left: 18px;
+    line-height: 1.7;
+    font-size: 0.75rem;
+  }
+
+  .gen-ref-list code {
+    background: rgba(255, 255, 255, 0.04);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.6875rem;
+    color: var(--color-teal);
+  }
+
+  .gen-ref-all-tags {
+    font-size: 0.6875rem;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .gen-ref-cat {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  @media (max-width: 900px) {
+    .gen-layout { grid-template-columns: 1fr; }
   }
 </style>
