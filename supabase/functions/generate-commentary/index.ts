@@ -39,6 +39,8 @@ const DEFAULT_MAX_TOKENS = 80;
 const DEFAULT_TEMPERATURE = 0.9;
 const DEFAULT_PRESENCE_PENALTY = 1.5;
 const DEFAULT_FREQUENCY_PENALTY = 0.8;
+const DEFAULT_RESPONSE_INSTRUCTION =
+  "1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]";
 
 interface Personality {
   energy: number;
@@ -142,6 +144,8 @@ Deno.serve(async (req: Request) => {
       (commentary.presencePenalty as number) ?? DEFAULT_PRESENCE_PENALTY;
     const frequencyPenalty =
       (commentary.frequencyPenalty as number) ?? DEFAULT_FREQUENCY_PENALTY;
+    const responseInstruction =
+      (commentary.responseInstruction as string) ?? DEFAULT_RESPONSE_INSTRUCTION;
 
     // Build full system prompt: character persona + commentary instructions
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
@@ -166,9 +170,7 @@ Deno.serve(async (req: Request) => {
     }
     textParts.push(`[${nudge}]`);
     textParts.push("/no_think");
-    textParts.push(
-      "1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]",
-    );
+    textParts.push(responseInstruction);
 
     // Build multimodal user content (OpenAI-compatible format)
     const userContent: Array<Record<string, unknown>> = [

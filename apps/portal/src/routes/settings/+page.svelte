@@ -117,6 +117,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let commentaryPresencePenalty = $state(1.5);
   let commentaryFrequencyPenalty = $state(0.8);
   let commentaryStyleNudgesText = $state(DEFAULT_COMMENTARY_NUDGES.join('\n'));
+  let commentaryResponseInstruction = $state('1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]');
 
   // ─── State: Token Pools ───────────────────────────────────────────
   interface TokenPoolEntry { value: string; weight: number; }
@@ -1005,6 +1006,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     commentaryFrequencyPenalty = (c?.frequencyPenalty as number) ?? 0.8;
     const nudgesArr = (c?.styleNudges as string[]) ?? DEFAULT_COMMENTARY_NUDGES;
     commentaryStyleNudgesText = nudgesArr.join('\n');
+    commentaryResponseInstruction = (c?.responseInstruction as string) ?? '1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]';
   }
 
   function syncToConfig() {
@@ -1025,6 +1027,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         presencePenalty: commentaryPresencePenalty,
         frequencyPenalty: commentaryFrequencyPenalty,
         styleNudges: commentaryStyleNudgesText.split('\n').map(s => s.trim()).filter(Boolean),
+        responseInstruction: commentaryResponseInstruction,
       },
     };
     rawJson = JSON.stringify(config, null, 2);
@@ -1820,6 +1823,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
             <p class="cfg-desc">Model parameters for the live commentary edge function</p>
           </div>
           <div class="cfg-body">
+            <TextInput label="Response Instruction" bind:value={commentaryResponseInstruction} placeholder="1-2 sentences max, under 30 words..." onchange={syncToConfig} testid="config-commentary-response-instruction" />
             <NumberInput label="Max Tokens" bind:value={commentaryMaxTokens} min={10} max={500} onchange={syncToConfig} testid="config-commentary-max-tokens" />
             <SliderInput label="Temperature" bind:value={commentaryTemperature} min={0.1} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-temperature" />
             <SliderInput label="Presence Penalty" bind:value={commentaryPresencePenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-presence-penalty" />
