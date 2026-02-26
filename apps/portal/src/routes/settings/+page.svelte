@@ -1853,6 +1853,85 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
           </div>
         </div>
 
+        <!-- Commentary Prompt Assembly Preview -->
+        <div class="cfg-card" data-testid="prompt-assembly-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">How Commentary Prompts Are Assembled</h3>
+            <p class="cfg-desc">This is the exact structure sent to the LLM on every commentary call</p>
+          </div>
+          <div class="cfg-body">
+            <div class="prompt-flow">
+              <div class="prompt-layer">
+                <div class="prompt-layer-header">
+                  <span class="prompt-layer-badge system">SYSTEM</span>
+                  <span class="prompt-layer-title">System Message</span>
+                </div>
+                <div class="prompt-layer-stack">
+                  <div class="prompt-block" data-source="db">
+                    <span class="prompt-block-label">Character system_prompt</span>
+                    <span class="prompt-block-desc">Stored per-character in DB — the personality and voice</span>
+                  </div>
+                  <div class="prompt-flow-arrow">+</div>
+                  <div class="prompt-block" data-source="config">
+                    <span class="prompt-block-label">Commentary Directive</span>
+                    <span class="prompt-block-desc">Your directive above — tells the LLM HOW to commentate</span>
+                  </div>
+                  <div class="prompt-flow-arrow">+</div>
+                  <div class="prompt-block" data-source="auto">
+                    <span class="prompt-block-label">Personality Modifier</span>
+                    <span class="prompt-block-desc">Auto-generated from character trait values (energy, humor, etc.)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prompt-flow-divider"></div>
+
+              <div class="prompt-layer">
+                <div class="prompt-layer-header">
+                  <span class="prompt-layer-badge user">USER</span>
+                  <span class="prompt-layer-title">User Message (per frame)</span>
+                </div>
+                <div class="prompt-layer-stack">
+                  <div class="prompt-block" data-source="runtime">
+                    <span class="prompt-block-label">Screenshot</span>
+                    <span class="prompt-block-desc">Current game frame sent as base64 image</span>
+                  </div>
+                  <div class="prompt-flow-arrow">+</div>
+                  <div class="prompt-block" data-source="runtime">
+                    <span class="prompt-block-label">Context</span>
+                    <span class="prompt-block-desc">Game hint, player speech, co-caster reactions (if any)</span>
+                  </div>
+                  <div class="prompt-flow-arrow">+</div>
+                  <div class="prompt-block" data-source="config">
+                    <span class="prompt-block-label">Random Style Nudge</span>
+                    <span class="prompt-block-desc">One nudge picked at random from your list above</span>
+                  </div>
+                  <div class="prompt-flow-arrow">+</div>
+                  <div class="prompt-block" data-source="config">
+                    <span class="prompt-block-label">Response Instruction</span>
+                    <span class="prompt-block-desc">Length/format constraint — "{commentaryResponseInstruction.slice(0, 50)}..."</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="prompt-flow-divider"></div>
+
+              <div class="prompt-layer">
+                <div class="prompt-layer-header">
+                  <span class="prompt-layer-badge params">PARAMS</span>
+                  <span class="prompt-layer-title">API Parameters</span>
+                </div>
+                <div class="prompt-params">
+                  <span class="prompt-param">max_tokens: {commentaryMaxTokens}</span>
+                  <span class="prompt-param">temperature: {commentaryTemperature}</span>
+                  <span class="prompt-param">presence_penalty: {commentaryPresencePenalty}</span>
+                  <span class="prompt-param">frequency_penalty: {commentaryFrequencyPenalty}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Row 3: Raw JSON full width -->
         <div class="cfg-card">
           <div class="cfg-header">
@@ -4356,4 +4435,94 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     color: var(--color-teal);
   }
 
+  /* Prompt Assembly Preview */
+  .prompt-flow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .prompt-layer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .prompt-layer-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .prompt-layer-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    text-transform: uppercase;
+  }
+  .prompt-layer-badge.system { background: rgba(99, 179, 237, 0.15); color: #63b3ed; }
+  .prompt-layer-badge.user { background: rgba(72, 187, 120, 0.15); color: #48bb78; }
+  .prompt-layer-badge.params { background: rgba(237, 137, 54, 0.15); color: #ed8936; }
+  .prompt-layer-title {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  .prompt-layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-left: var(--space-3);
+    border-left: 2px solid var(--white-a6);
+    padding-left: var(--space-3);
+  }
+  .prompt-block {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--white-a6);
+  }
+  .prompt-block[data-source="config"] { border-left: 3px solid var(--color-teal); }
+  .prompt-block[data-source="db"] { border-left: 3px solid #63b3ed; }
+  .prompt-block[data-source="auto"] { border-left: 3px solid #b794f4; }
+  .prompt-block[data-source="runtime"] { border-left: 3px solid #48bb78; }
+  .prompt-block-label {
+    display: block;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  .prompt-block-desc {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+  .prompt-flow-arrow {
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    padding: 2px 0;
+    margin-left: var(--space-3);
+  }
+  .prompt-flow-divider {
+    height: 1px;
+    background: var(--white-a6);
+    margin: var(--space-1) 0;
+  }
+  .prompt-params {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-left: var(--space-3);
+  }
+  .prompt-param {
+    font-size: 0.75rem;
+    font-family: var(--font-mono, monospace);
+    color: var(--color-text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--white-a6);
+  }
 </style>
