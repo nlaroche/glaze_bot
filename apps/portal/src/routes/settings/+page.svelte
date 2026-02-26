@@ -2152,7 +2152,7 @@
   .voices-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
   }
 
   .voices-table thead {
@@ -2164,18 +2164,21 @@
   }
 
   .voices-table th {
-    padding: 10px 12px;
+    padding: 10px 14px;
     text-align: left;
     font-weight: 600;
-    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .voices-table td {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-    color: var(--color-text-secondary);
+    color: var(--color-text-primary);
   }
 
   .voices-table tbody tr:hover {
@@ -2191,14 +2194,14 @@
   .col-desc { min-width: 160px; }
 
   .play-btn {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.04);
     color: var(--color-text-secondary);
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2219,7 +2222,7 @@
 
   .no-sample {
     color: var(--color-text-muted);
-    font-size: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .tag-pills {
@@ -2229,11 +2232,11 @@
   }
 
   .tag-pill {
-    padding: 2px 8px;
+    padding: 3px 9px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.06);
-    color: var(--color-text-muted);
-    font-size: 0.6875rem;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
     white-space: nowrap;
   }
 
@@ -2257,13 +2260,13 @@
 
   .sub-tab {
     flex: 1;
-    padding: 6px 14px;
+    padding: 7px 16px;
     border: none;
     border-radius: 4px;
     background: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s;
@@ -2302,13 +2305,13 @@
   }
 
   .gen-preset-btn {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-family: inherit;
-    font-size: 0.6875rem;
+    font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -2344,10 +2347,10 @@
 
   .gen-tag-label {
     display: block;
-    font-size: 0.6875rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    color: var(--color-text-muted);
-    margin-bottom: 4px;
+    color: var(--color-text-secondary);
+    margin-bottom: 5px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -2359,13 +2362,13 @@
   }
 
   .gen-tag-btn {
-    padding: 2px 7px;
+    padding: 3px 8px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.03);
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-family: 'Courier New', monospace;
-    font-size: 0.625rem;
+    font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -2386,8 +2389,8 @@
   .gen-slider label {
     display: flex;
     justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
     margin-bottom: 4px;
   }
 
@@ -2409,8 +2412,8 @@
 
   /* ─── Reference Card ─── */
   .gen-ref-body {
-    font-size: 0.8125rem;
-    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    color: var(--color-text-primary);
   }
 
   .gen-ref-section {
@@ -2420,9 +2423,9 @@
   .gen-ref-section:last-child { margin-bottom: 0; }
 
   .gen-ref-section h4 {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin: 0 0 6px;
@@ -2430,11 +2433,11 @@
 
   .gen-ref-code {
     display: block;
-    padding: 4px 8px;
+    padding: 6px 10px;
     background: rgba(255, 255, 255, 0.04);
     border-radius: 4px;
     font-family: 'Courier New', monospace;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     color: var(--color-teal);
     margin-bottom: 4px;
   }
@@ -2443,20 +2446,20 @@
     margin: 0;
     padding-left: 18px;
     line-height: 1.7;
-    font-size: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .gen-ref-list code {
     background: rgba(255, 255, 255, 0.04);
-    padding: 1px 4px;
+    padding: 2px 5px;
     border-radius: 3px;
     font-family: 'Courier New', monospace;
-    font-size: 0.6875rem;
+    font-size: 0.8rem;
     color: var(--color-teal);
   }
 
   .gen-ref-all-tags {
-    font-size: 0.6875rem;
+    font-size: 0.8rem;
     line-height: 1.6;
     color: var(--color-text-muted);
     margin-bottom: 6px;
