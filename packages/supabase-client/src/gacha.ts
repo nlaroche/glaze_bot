@@ -247,19 +247,7 @@ export async function previewVoice(
   voiceId: string,
   text: string,
 ): Promise<ArrayBuffer> {
-  const supabase = createSupabaseClient();
-  const { data, error } = await supabase.functions.invoke("preview-voice", {
-    body: { voice_id: voiceId, text },
-  });
-
-  if (error) {
-    throw new Error(error.message ?? "Voice preview failed");
-  }
-
-  // The response is audio data as an ArrayBuffer
-  if (data instanceof ArrayBuffer) return data;
-  if (data instanceof Blob) return await data.arrayBuffer();
-  throw new Error("Unexpected response format from preview-voice");
+  return callAudioEdgeFunction("preview-voice", { voice_id: voiceId, text });
 }
 
 /** Update character fields (admin — direct DB update) */
@@ -360,6 +348,29 @@ export async function setDefaultCharacter(
     .single();
   if (error) throw error;
   return data as unknown as GachaCharacter;
+}
+
+// ─── Audio Edge Function Helper ────────────────────────────────────
+
+/**
+ * Call an edge function that returns audio data.
+ * Edge functions must return Content-Type: application/octet-stream
+ * so supabase-js parses the response as a Blob (not text).
+ */
+async function callAudioEdgeFunction(
+  name: string,
+  body: Record<string, unknown>,
+): Promise<ArrayBuffer> {
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase.functions.invoke(name, { body });
+
+  if (error) {
+    throw new Error(error.message ?? `${name} failed`);
+  }
+
+  if (data instanceof ArrayBuffer) return data;
+  if (data instanceof Blob) return await data.arrayBuffer();
+  throw new Error(`Unexpected response format from ${name}`);
 }
 
 // ─── Fish Audio Voices ─────────────────────────────────────────────
@@ -497,22 +508,5 @@ export async function generativeTts(opts: {
   repetition_penalty?: number;
   speed?: number;
 }): Promise<ArrayBuffer> {
-  const supabase = createSupabaseClient();
-  const { data, error } = await supabase.functions.invoke("generative-tts", {
-    body: opts,
-  });
-
-  if (error) {
-    throw new Error(error.message ?? "Generative TTS failed");
-  }
-
-  if (data instanceof ArrayBuffer) return data;
-  if (data instanceof Blob) return await data.arrayBuffer();
-  // Supabase functions-js may return a string for unrecognized content types (e.g. audio/mpeg)
-  if (typeof data === "string" && data.length > 0) {
-    const bytes = new Uint8Array(data.length);
-    for (let i = 0; i < data.length; i++) bytes[i] = data.charCodeAt(i);
-    return bytes.buffer;
-  }
-  throw new Error("Unexpected response format from generative-tts");
+  return callAudioEdgeFunction("generative-tts", opts as Record<string, unknown>);
 }

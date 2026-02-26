@@ -59,7 +59,7 @@ Deno.serve(async (req: Request) => {
       status: 200,
       headers: {
         ...corsHeaders,
-        "Content-Type": "audio/mpeg",
+        "Content-Type": "application/octet-stream",
         "Content-Length": String(audioData.byteLength),
       },
     });

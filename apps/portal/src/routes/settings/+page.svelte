@@ -1019,6 +1019,7 @@
     editBackstory = character.backstory ?? '';
     editTagline = character.tagline ?? '';
     editSystemPrompt = character.system_prompt ?? '';
+    voiceTestText = character.tagline || character.description?.slice(0, 120) || 'Hey there! Ready to watch some games?';
     editPersonality = {
       energy: (character.personality as Record<string, number>)?.energy ?? 50,
       positivity: (character.personality as Record<string, number>)?.positivity ?? 50,
@@ -2278,9 +2279,10 @@
               <!-- Voice preview -->
               {#if workingCharacter.voice_id}
                 <div class="voice-test">
-                  <TextInput
+                  <TextArea
                     label="Test text"
                     bind:value={voiceTestText}
+                    rows={2}
                     testid="voice-test-text"
                   />
                   <Button
@@ -3307,8 +3309,14 @@
 
   .voice-test {
     display: flex;
-    gap: 8px;
+    gap: var(--space-3);
     align-items: flex-end;
+    width: 100%;
+  }
+
+  .voice-test :global(.field) {
+    flex: 1;
+    min-width: 0;
   }
 
   .voice-list {
