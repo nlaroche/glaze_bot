@@ -2,76 +2,22 @@
   import { CharacterCardRow, ContextMenu, CardViewer, ScreenPicker } from '@glazebot/shared-ui';
   import type { CaptureSource } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
+  import { getCollection } from '@glazebot/supabase-client';
+  import { getAuthState } from '$lib/stores/auth.svelte';
+  import { CommentaryEngine, type ChatLogEntry } from '$lib/commentary/engine';
 
-  // Demo characters
-  const demoCharacters: GachaCharacter[] = [
-    {
-      id: 'demo-common',
-      user_id: 'demo',
-      name: 'Snapjaw',
-      description: '"The mic was already on when I sat down. I haven\'t left since."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 35, positivity: 60, formality: 30, talkativeness: 45, attitude: 40, humor: 55 },
-      rarity: 'common',
-      avatar_seed: 'demo-common-rex',
-      created_at: '',
-    },
-    {
-      id: 'demo-rare',
-      user_id: 'demo',
-      name: 'Chad Worthington III',
-      description: '"I didn\'t choose the analyst desk. The analyst desk chose me, and then I sued it."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 45, positivity: 70, formality: 65, talkativeness: 55, attitude: 30, humor: 40 },
-      rarity: 'rare',
-      avatar_seed: 'demo-rare-sage',
-      created_at: '',
-    },
-    {
-      id: 'demo-epic',
-      user_id: 'demo',
-      name: 'Blobsworth',
-      description: '"They gave me a desk. I gave them content. We are not the same."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 90, positivity: 80, formality: 20, talkativeness: 85, attitude: 60, humor: 75 },
-      rarity: 'epic',
-      avatar_seed: 'demo-epic-neon',
-      created_at: '',
-    },
-    {
-      id: 'demo-legendary',
-      user_id: 'demo',
-      name: 'Grug the Famished',
-      description: '"First I finish the pasta. Then I finish the game. Then I finish you."',
-      backstory: '',
-      system_prompt: '',
-      personality: { energy: 70, positivity: 40, formality: 50, talkativeness: 75, attitude: 85, humor: 90 },
-      rarity: 'legendary',
-      avatar_seed: 'demo-legendary-vex',
-      created_at: '',
-    },
-  ];
+  const auth = getAuthState();
 
-  const demoImages: Record<string, string> = {
-    'demo-common': '/testCharacter1.png',
-    'demo-rare': '/testCharacter2.png',
-    'demo-epic': '/testCharacter3.png',
-    'demo-legendary': '/testCharacter4.png',
-  };
+  // Character data from Supabase
+  let allCharacters = $state<GachaCharacter[]>([]);
+  let loadingChars = $state(true);
 
   // Party state (3 slots)
-  let partySlots = $state<(GachaCharacter | null)[]>([
-    demoCharacters[0],
-    demoCharacters[2],
-    null,
-  ]);
+  let partySlots = $state<(GachaCharacter | null)[]>([null, null, null]);
 
-  // Collection = all demo characters not in party
+  // Collection = all characters not in party
   let collection = $derived(
-    demoCharacters.filter((c) => !partySlots.some((s) => s?.id === c.id))
+    allCharacters.filter((c) => !partySlots.some((s) => s?.id === c.id))
   );
 
   let searchQuery = $state('');
@@ -80,6 +26,24 @@
       ? collection.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : collection
   );
+
+  // Load characters from Supabase when authenticated
+  $effect(() => {
+    if (auth.isAuthenticated && !auth.loading) {
+      loadCharacters();
+    }
+  });
+
+  async function loadCharacters() {
+    loadingChars = true;
+    try {
+      allCharacters = await getCollection();
+    } catch (e) {
+      console.error('Failed to load characters:', e);
+      allCharacters = [];
+    }
+    loadingChars = false;
+  }
 
   function removeFromParty(index: number) {
     partySlots[index] = null;
@@ -99,7 +63,7 @@
   let dragOverCollection = $state(false);
 
   function findCharById(id: string): GachaCharacter | undefined {
-    return demoCharacters.find((c) => c.id === id);
+    return allCharacters.find((c) => c.id === id);
   }
 
   function handlePartySlotDrop(e: DragEvent, slotIndex: number) {
@@ -110,11 +74,9 @@
     const char = findCharById(charId);
     if (!char) return;
 
-    // If dragged from another party slot, remove from old slot
     const oldSlot = partySlots.findIndex((s) => s?.id === charId);
     if (oldSlot !== -1) partySlots[oldSlot] = null;
 
-    // If dropping onto an occupied slot, swap
     const displaced = partySlots[slotIndex];
     partySlots[slotIndex] = char;
     if (displaced && oldSlot !== -1) {
@@ -127,15 +89,44 @@
     dragOverCollection = false;
     const charId = e.dataTransfer?.getData('text/plain');
     if (!charId) return;
-    // Remove from party if it was there
     const slotIndex = partySlots.findIndex((s) => s?.id === charId);
     if (slotIndex !== -1) partySlots[slotIndex] = null;
   }
 
-  // Commentary state
+  // Commentary engine
+  const engine = new CommentaryEngine();
   let isRunning = $state(false);
   let isPaused = $state(false);
   let overlayOn = $state(false);
+
+  // Chat log
+  let chatLog = $state<ChatLogEntry[]>([]);
+  let chatLogEl: HTMLDivElement | undefined = $state();
+
+  // Auto-scroll chat log
+  $effect(() => {
+    void chatLog.length;
+    if (chatLogEl) {
+      requestAnimationFrame(() => {
+        chatLogEl!.scrollTop = chatLogEl!.scrollHeight;
+      });
+    }
+  });
+
+  // Wire up engine callbacks
+  engine.onChatMessage = (entry) => {
+    chatLog = [...chatLog, entry];
+  };
+
+  engine.onOverlayMessage = async (msg) => {
+    if (!overlayOn) return;
+    try {
+      const { emitTo } = await import('@tauri-apps/api/event');
+      await emitTo('overlay', 'chat-message', msg);
+    } catch (e) {
+      console.error('Failed to emit to overlay:', e);
+    }
+  };
 
   // Screen sharing state
   let pickerOpen = $state(false);
@@ -169,41 +160,69 @@
     pickerOpen = false;
   }
 
-  function stopSharing() {
+  async function stopSharing() {
+    if (isRunning) {
+      handleStop();
+    }
+    // Auto-hide overlay when share stops — overlay only makes sense over a shared screen
+    if (overlayOn) {
+      overlayOn = false;
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('hide_overlay');
+      } catch (e) {
+        console.error('Failed to hide overlay:', e);
+      }
+    }
     activeShare = null;
   }
 
-  let overlayDemoTimer: ReturnType<typeof setTimeout> | null = null;
+  // Commentary controls
+  let canStart = $derived(!!activeShare && partySlots.some((s) => s !== null) && !isRunning);
+
+  async function handleStart() {
+    if (!activeShare) return;
+    const party = partySlots.filter((s): s is GachaCharacter => s !== null);
+    if (party.length === 0) return;
+
+    isRunning = true;
+    isPaused = false;
+    chatLog = [];
+    await engine.start(activeShare.id, party);
+  }
+
+  function handlePauseResume() {
+    if (isPaused) {
+      isPaused = false;
+      engine.resume();
+    } else {
+      isPaused = true;
+      engine.pause();
+    }
+  }
+
+  function handleStop() {
+    isRunning = false;
+    isPaused = false;
+    engine.stop();
+  }
+
+  // Keep engine party in sync
+  $effect(() => {
+    const party = partySlots.filter((s): s is GachaCharacter => s !== null);
+    engine.updateParty(party);
+  });
 
   async function emitPartyToOverlay() {
     try {
       const { emitTo } = await import('@tauri-apps/api/event');
       const activeMembers = partySlots
         .filter((s): s is GachaCharacter => s !== null)
-        .map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, image: demoImages[c.id] }));
+        .map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, image: c.avatar_url }));
       await emitTo('overlay', 'party-updated', { members: activeMembers });
     } catch (e) {
       console.error('Failed to emit party:', e);
     }
-  }
-
-  async function startOverlayDemo() {
-    const { emitTo } = await import('@tauri-apps/api/event');
-    let idx = 0;
-    function next() {
-      if (!overlayOn) return;
-      const msg = chatLog[idx % chatLog.length];
-      const image = demoImages[msg.characterId];
-      emitTo('overlay', 'chat-message', {
-        name: msg.name,
-        rarity: msg.rarity,
-        text: msg.text,
-        image,
-      });
-      idx++;
-      overlayDemoTimer = setTimeout(next, 4500 + Math.random() * 2000);
-    }
-    overlayDemoTimer = setTimeout(next, 1500);
   }
 
   async function toggleOverlay() {
@@ -212,7 +231,6 @@
       const { invoke } = await import('@tauri-apps/api/core');
       if (overlayOn) {
         await invoke('show_overlay');
-        // Wait for overlay to signal it's ready
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
         const webview = getCurrentWebview();
         await new Promise<void>((resolve) => {
@@ -222,39 +240,17 @@
           }, 5000);
           webview.listen('overlay-ready', () => {
             clearTimeout(timeout);
-            console.log('[main] Overlay ready signal received');
             resolve();
           });
         });
         await emitPartyToOverlay();
-        startOverlayDemo();
       } else {
         await invoke('hide_overlay');
-        if (overlayDemoTimer) clearTimeout(overlayDemoTimer);
       }
     } catch (e) {
       console.error('Overlay toggle failed:', e);
     }
   }
-
-  // Placeholder chat messages
-  interface ChatMessage {
-    id: string;
-    characterId: string;
-    name: string;
-    rarity: string;
-    text: string;
-    time: string;
-  }
-
-  const chatLog: ChatMessage[] = [
-    { id: '1', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'Waiting for game capture to start...', time: '12:00' },
-    { id: '2', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: '*adjusts desk lamp* The anticipation is killing me.', time: '12:00' },
-    { id: '3', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'I see a desktop. Riveting content so far.', time: '12:01' },
-    { id: '4', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: 'Oh come on, this is clearly the calm before the storm. I can FEEL it.', time: '12:01' },
-    { id: '5', characterId: 'demo-common', name: 'Snapjaw', rarity: 'common', text: 'You said that about the screensaver too.', time: '12:02' },
-    { id: '6', characterId: 'demo-epic', name: 'Blobsworth', rarity: 'epic', text: 'And I was RIGHT. That was a top-tier screensaver.', time: '12:02' },
-  ];
 
   // Context menu state
   let contextMenu = $state<{ x: number; y: number; character: GachaCharacter; inPartySlot?: number } | null>(null);
@@ -281,25 +277,43 @@
     <div class="chat-section-header">
       <h2>Chat History</h2>
     </div>
-    <div class="chat-log">
-      {#each chatLog as msg (msg.id)}
-        <div class="chat-msg">
-          <div class="msg-avatar" style="border-color: {rarityNameColor[msg.rarity]}">
-            {#if demoImages[msg.characterId]}
-              <img src={demoImages[msg.characterId]} alt="" />
-            {:else}
-              <span class="msg-avatar-fallback">{msg.name[0]}</span>
-            {/if}
-          </div>
-          <div class="msg-body">
-            <div class="msg-header">
-              <span class="msg-name" style="color: {rarityNameColor[msg.rarity]}">{msg.name}</span>
-              <span class="msg-time">{msg.time}</span>
-            </div>
-            <p class="msg-text">{msg.text}</p>
-          </div>
+    <div class="chat-log" bind:this={chatLogEl}>
+      {#if chatLog.length === 0}
+        <div class="chat-empty">
+          {#if !auth.isAuthenticated}
+            <p>Sign in to start commentary.</p>
+          {:else if loadingChars}
+            <p>Loading characters...</p>
+          {:else if allCharacters.length === 0}
+            <p>No characters yet. Open some booster packs first!</p>
+          {:else if !activeShare}
+            <p>Select a screen or app to capture.</p>
+          {:else if !partySlots.some((s) => s !== null)}
+            <p>Add at least one character to your party.</p>
+          {:else}
+            <p>Hit Start to begin commentary.</p>
+          {/if}
         </div>
-      {/each}
+      {:else}
+        {#each chatLog as msg (msg.id)}
+          <div class="chat-msg">
+            <div class="msg-avatar" style="border-color: {rarityNameColor[msg.rarity]}">
+              {#if msg.image}
+                <img src={msg.image} alt="" />
+              {:else}
+                <span class="msg-avatar-fallback">{msg.name[0]}</span>
+              {/if}
+            </div>
+            <div class="msg-body">
+              <div class="msg-header">
+                <span class="msg-name" style="color: {rarityNameColor[msg.rarity]}">{msg.name}</span>
+                <span class="msg-time">{msg.time}</span>
+              </div>
+              <p class="msg-text">{msg.text}</p>
+            </div>
+          </div>
+        {/each}
+      {/if}
     </div>
 
     <!-- Controls Bar -->
@@ -333,11 +347,11 @@
       <div class="ctrl-group">
         <span class="ctrl-label">Commentary</span>
         <div class="ctrl-group-buttons">
-          <button class="ctrl-btn start" disabled={isRunning} onclick={() => { isRunning = true; isPaused = false; }}>
+          <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
             Start
           </button>
-          <button class="ctrl-btn" disabled={!isRunning} onclick={() => { isPaused = !isPaused; }}>
+          <button class="ctrl-btn" disabled={!isRunning} onclick={handlePauseResume}>
             {#if isPaused}
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
               Resume
@@ -346,7 +360,7 @@
               Pause
             {/if}
           </button>
-          <button class="ctrl-btn stop" disabled={!isRunning} onclick={() => { isRunning = false; isPaused = false; }}>
+          <button class="ctrl-btn stop" disabled={!isRunning} onclick={handleStop}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
             Stop
           </button>
@@ -355,10 +369,18 @@
 
       <div class="ctrl-divider"></div>
 
-      <!-- Overlay toggle -->
+      <!-- Overlay toggle — only available when screenshare is active -->
       <div class="ctrl-group">
         <span class="ctrl-label">Overlay</span>
-        <button class="toggle" class:toggle-on={overlayOn} onclick={toggleOverlay} aria-pressed={overlayOn}>
+        <button
+          class="toggle"
+          class:toggle-on={overlayOn}
+          class:toggle-disabled={!activeShare}
+          onclick={toggleOverlay}
+          disabled={!activeShare}
+          aria-pressed={overlayOn}
+          title={activeShare ? '' : 'Start a screen share first'}
+        >
           <span class="toggle-knob"></span>
         </button>
       </div>
@@ -387,7 +409,7 @@
             {#if slot}
               <CharacterCardRow
                 character={slot}
-                image={demoImages[slot.id]}
+                image={slot.avatar_url}
                 draggable={true}
                 onremove={() => removeFromParty(i)}
                 oncontextmenu={(e) => openContextMenu(e, slot, i)}
@@ -422,19 +444,29 @@
         ondragleave={() => { dragOverCollection = false; }}
         ondrop={handleCollectionDrop}
       >
-        {#each filteredCollection as char (char.id)}
-          <CharacterCardRow
-            character={char}
-            image={demoImages[char.id]}
-            draggable={true}
-            onclick={() => addToParty(char)}
-            oncontextmenu={(e) => openContextMenu(e, char)}
-          />
+        {#if loadingChars}
+          <p class="empty-msg">Loading characters...</p>
         {:else}
-          <p class="empty-msg">
-            {searchQuery ? 'No matches found.' : 'All characters are in your party!'}
-          </p>
-        {/each}
+          {#each filteredCollection as char (char.id)}
+            <CharacterCardRow
+              character={char}
+              image={char.avatar_url}
+              draggable={true}
+              onclick={() => addToParty(char)}
+              oncontextmenu={(e) => openContextMenu(e, char)}
+            />
+          {:else}
+            <p class="empty-msg">
+              {#if allCharacters.length === 0}
+                No characters yet.
+              {:else if searchQuery}
+                No matches found.
+              {:else}
+                All characters are in your party!
+              {/if}
+            </p>
+          {/each}
+        {/if}
       </div>
     </div>
   </aside>
@@ -467,7 +499,7 @@
 
 <CardViewer
   character={viewerCharacter}
-  image={viewerCharacter ? demoImages[viewerCharacter.id] : undefined}
+  image={viewerCharacter?.avatar_url}
   onclose={() => { viewerCharacter = null; }}
 />
 
@@ -498,12 +530,12 @@
   }
 
   .chat-section-header {
-    padding: 14px 20px 8px;
+    padding: var(--space-3-5) var(--space-5) var(--space-2);
     flex-shrink: 0;
   }
 
   .chat-section-header h2 {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 1.5px;
     color: var(--color-text-muted, #6B7788);
@@ -515,36 +547,48 @@
   .chat-log {
     flex: 1;
     overflow-y: auto;
-    padding: 0 20px 12px;
+    padding: 0 var(--space-5) var(--space-3);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-0-5);
+  }
+
+  .chat-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chat-empty p {
+    color: var(--color-text-muted, #6B7788);
+    font-size: var(--font-base);
   }
 
   .chat-msg {
     display: flex;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 6px;
+    gap: var(--space-2-5);
+    padding: var(--space-2) var(--space-2-5);
+    border-radius: var(--radius-md);
     transition: background 0.1s;
   }
 
   .chat-msg:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--white-a3);
   }
 
   .msg-avatar {
     width: 36px;
     height: 36px;
     flex-shrink: 0;
-    border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.1);
+    border-radius: var(--radius-full);
+    border: 2px solid var(--white-a10);
     overflow: hidden;
-    background: rgba(0,0,0,0.3);
+    background: var(--black-a30);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 2px;
+    margin-top: var(--space-0-5);
   }
 
   .msg-avatar img {
@@ -555,7 +599,7 @@
   }
 
   .msg-avatar-fallback {
-    font-size: 0.85rem;
+    font-size: var(--font-base);
     color: var(--color-text-muted, #6B7788);
     font-weight: 600;
   }
@@ -568,43 +612,43 @@
   .msg-header {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .msg-name {
-    font-size: 0.92rem;
+    font-size: var(--font-md);
     font-weight: 600;
   }
 
   .msg-time {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     color: var(--color-text-muted, #6b7688);
   }
 
   .msg-text {
     margin: 3px 0 0;
-    font-size: 0.92rem;
+    font-size: var(--font-md);
     color: var(--color-text-primary, #d0d6e0);
     line-height: 1.45;
   }
 
-  /* ── Inline share indicator (replaces capture buttons) ── */
+  /* ── Inline share indicator ── */
   .share-inline {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border-radius: 6px;
-    background: rgba(59, 151, 151, 0.08);
-    border: 1px solid rgba(59, 151, 151, 0.2);
+    gap: var(--space-1-5);
+    padding: 5px var(--space-2-5);
+    border-radius: var(--radius-md);
+    background: var(--teal-a8);
+    border: 1px solid var(--teal-a20);
     max-width: 180px;
   }
 
   .share-pulse {
     width: 7px;
     height: 7px;
-    border-radius: 50%;
-    background: #3B9797;
+    border-radius: var(--radius-full);
+    background: var(--color-teal);
     box-shadow: 0 0 5px rgba(59, 151, 151, 0.6);
     animation: pulse 2s ease-in-out infinite;
     flex-shrink: 0;
@@ -617,8 +661,8 @@
 
   .share-name {
     flex: 1;
-    font-size: 0.72rem;
-    color: #5bcece;
+    font-size: var(--font-xs);
+    color: var(--color-light-teal);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -627,11 +671,11 @@
   .share-x {
     width: 18px;
     height: 18px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     border: none;
     background: rgba(255, 80, 80, 0.15);
-    color: #ff6b6b;
-    font-size: 0.9rem;
+    color: var(--color-stop);
+    font-size: var(--font-base);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -639,7 +683,7 @@
     padding: 0;
     line-height: 1;
     flex-shrink: 0;
-    transition: background 0.15s;
+    transition: background var(--transition-base);
   }
 
   .share-x:hover {
@@ -649,12 +693,12 @@
   /* ── Controls bar ── */
   .controls-bar {
     flex-shrink: 0;
-    padding: 10px 20px 14px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: var(--space-2-5) var(--space-5) var(--space-3-5);
+    border-top: 1px solid var(--white-a6);
     display: flex;
     align-items: flex-end;
-    gap: 16px;
-    background: rgba(0, 0, 0, 0.15);
+    gap: var(--space-4);
+    background: var(--black-a15);
   }
 
   .ctrl-group {
@@ -664,7 +708,7 @@
   }
 
   .ctrl-label {
-    font-size: 0.6rem;
+    font-size: var(--font-micro);
     text-transform: uppercase;
     letter-spacing: 1.2px;
     color: var(--color-text-muted, #6B7788);
@@ -673,13 +717,13 @@
 
   .ctrl-group-buttons {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .ctrl-divider {
     width: 1px;
     height: 36px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--white-a8);
     flex-shrink: 0;
     align-self: flex-end;
   }
@@ -687,20 +731,20 @@
   .ctrl-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    gap: var(--space-1-5);
+    padding: var(--space-1-5) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a4);
     color: var(--color-text-secondary, #8a94a6);
-    font-size: 0.75rem;
+    font-size: var(--font-xs);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
     white-space: nowrap;
   }
 
   .ctrl-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--white-a8);
     color: var(--color-text-primary, #e2e8f0);
   }
 
@@ -711,16 +755,16 @@
 
   .ctrl-btn.capture {
     color: var(--rarity-rare, #3B9797);
-    border-color: rgba(59, 151, 151, 0.2);
+    border-color: var(--teal-a20);
   }
 
   .ctrl-btn.capture:hover:not(:disabled) {
-    background: rgba(59, 151, 151, 0.1);
+    background: var(--teal-a10);
     border-color: rgba(59, 151, 151, 0.35);
   }
 
   .ctrl-btn.start {
-    color: #5bca7a;
+    color: var(--color-start);
     border-color: rgba(91, 202, 122, 0.2);
   }
 
@@ -730,7 +774,7 @@
   }
 
   .ctrl-btn.stop {
-    color: #ff6b6b;
+    color: var(--color-stop);
     border-color: rgba(255, 107, 107, 0.2);
   }
 
@@ -745,11 +789,11 @@
     width: 40px;
     height: 22px;
     border-radius: 11px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--white-a10);
+    background: var(--white-a6);
     cursor: pointer;
     padding: 0;
-    transition: background 0.2s, border-color 0.2s;
+    transition: background var(--transition-slow), border-color var(--transition-slow);
   }
 
   .toggle-knob {
@@ -758,9 +802,9 @@
     left: 2px;
     width: 16px;
     height: 16px;
-    border-radius: 50%;
+    border-radius: var(--radius-full);
     background: var(--color-text-muted, #6B7788);
-    transition: transform 0.2s, background 0.2s;
+    transition: transform var(--transition-slow), background var(--transition-slow);
   }
 
   .toggle.toggle-on {
@@ -773,30 +817,35 @@
     background: var(--rarity-epic, #B06AFF);
   }
 
+  .toggle.toggle-disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
   /* ── Right panel ── */
   .right-panel {
     width: 280px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(0, 0, 0, 0.1);
+    border-left: 1px solid var(--white-a6);
+    background: var(--black-a10);
     overflow: hidden;
   }
 
   .panel-section {
-    padding: 14px 12px;
+    padding: var(--space-3-5) var(--space-3);
   }
 
   .panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: var(--space-2-5);
   }
 
   .panel-header h2 {
-    font-size: 0.72rem;
+    font-size: var(--font-xs);
     text-transform: uppercase;
     letter-spacing: 1.5px;
     color: var(--color-text-muted, #6B7788);
@@ -806,80 +855,80 @@
 
   .party-actions {
     display: flex;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .small-btn {
-    padding: 3px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    padding: 3px var(--space-2);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a4);
     color: var(--color-text-muted, #6B7788);
-    font-size: 0.65rem;
+    font-size: var(--font-brand-sm);
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background var(--transition-base);
   }
 
   .small-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--white-a8);
     color: var(--color-text-secondary, #8a94a6);
   }
 
   .party-slots {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-1-5);
   }
 
   .drop-zone {
-    border-radius: 10px;
+    border-radius: var(--radius-xl);
     border: 1.5px solid transparent;
-    transition: border-color 0.15s, background 0.15s;
+    transition: border-color var(--transition-base), background var(--transition-base);
   }
 
   .drop-zone.drop-active {
-    border-color: rgba(59, 151, 151, 0.5);
-    background: rgba(59, 151, 151, 0.05);
+    border-color: var(--teal-a50);
+    background: var(--teal-a5);
   }
 
   .empty-slot {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px dashed rgba(255, 255, 255, 0.1);
+    gap: var(--space-2-5);
+    padding: var(--space-2-5);
+    border-radius: var(--radius-lg);
+    border: 1px dashed var(--white-a10);
     background: transparent;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background var(--transition-base), border-color var(--transition-base);
     min-height: 56px;
     color: var(--color-text-muted, #6B7788);
   }
 
   .drop-zone.drop-active .empty-slot {
-    border-color: rgba(59, 151, 151, 0.4);
-    background: rgba(59, 151, 151, 0.05);
+    border-color: var(--teal-a40);
+    background: var(--teal-a5);
   }
 
   .plus {
     width: 28px;
     height: 28px;
-    border-radius: 50%;
-    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-full);
+    border: 1px dashed var(--white-a15);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
+    font-size: var(--font-lg);
     flex-shrink: 0;
   }
 
   .empty-label {
-    font-size: 0.78rem;
+    font-size: var(--font-brand-md);
   }
 
   .panel-divider {
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-    margin: 0 12px;
+    background: var(--white-a6);
+    margin: 0 var(--space-3);
   }
 
   .collection-section {
@@ -891,16 +940,16 @@
 
   .search-input {
     width: 100%;
-    padding: 6px 10px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    padding: var(--space-1-5) var(--space-2-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a4);
     color: var(--color-text-primary, #e2e8f0);
-    font-size: 0.78rem;
+    font-size: var(--font-brand-md);
     outline: none;
-    margin-bottom: 8px;
+    margin-bottom: var(--space-2);
     box-sizing: border-box;
-    transition: border-color 0.15s;
+    transition: border-color var(--transition-base);
   }
 
   .search-input::placeholder {
@@ -908,7 +957,7 @@
   }
 
   .search-input:focus {
-    border-color: rgba(255, 255, 255, 0.2);
+    border-color: var(--white-a20);
   }
 
   .collection-list {
@@ -916,23 +965,22 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    border-radius: 8px;
+    gap: var(--space-1);
+    border-radius: var(--radius-lg);
     border: 1.5px solid transparent;
-    transition: border-color 0.15s, background 0.15s;
-    padding: 2px;
+    transition: border-color var(--transition-base), background var(--transition-base);
+    padding: var(--space-0-5);
   }
 
   .collection-list.drop-active {
-    border-color: rgba(59, 151, 151, 0.4);
+    border-color: var(--teal-a40);
     background: rgba(59, 151, 151, 0.03);
   }
 
-  /* Dim collection items — they're not active party members */
   .collection-list :global(.card-row) {
     opacity: 0.5;
     filter: brightness(0.8);
-    transition: opacity 0.2s, filter 0.2s, transform 0.2s, box-shadow 0.2s;
+    transition: opacity var(--transition-slow), filter var(--transition-slow), transform var(--transition-slow), box-shadow var(--transition-slow);
   }
 
   .collection-list :global(.card-row:hover) {
@@ -941,10 +989,10 @@
   }
 
   .empty-msg {
-    font-size: 0.78rem;
+    font-size: var(--font-brand-md);
     color: var(--color-text-muted, #6B7788);
     text-align: center;
-    padding: 16px 0;
+    padding: var(--space-4) 0;
     margin: 0;
   }
 </style>

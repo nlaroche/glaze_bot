@@ -1,364 +1,255 @@
 <script lang="ts">
-  import { getGachaConfig, updateGachaConfig } from '@glazebot/supabase-client';
-  import { CharacterCard } from '@glazebot/shared-ui';
-  import type { GachaCharacter, CharacterRarity } from '@glazebot/shared-types';
-  import { getSupabaseUrl, getSession } from '@glazebot/supabase-client';
+  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, clearDebugLog } from '$lib/stores/debug.svelte';
+  import type { DebugEntry } from '$lib/stores/debug.svelte';
 
-  let config: Record<string, unknown> = $state({});
-  let rawJson: string = $state('');
-  let loading: boolean = $state(true);
-  let saving: boolean = $state(false);
-  let saveMsg: string = $state('');
-  let jsonError: string = $state('');
+  const debug = getDebugStore();
 
-  // Test generation
-  let testRarity: CharacterRarity = $state('common');
-  let testLoading: boolean = $state(false);
-  let testResult: string = $state('');
-  let testCharacter: GachaCharacter | null = $state(null);
+  let autoScroll = $state(true);
+  let logContainer: HTMLDivElement | undefined = $state();
 
-  // Inline editor fields
-  let dropRates = $state({ common: 0.6, rare: 0.25, epic: 0.12, legendary: 0.03 });
-  let baseTemperature = $state(0.9);
-  let model = $state('qwen-plus');
-  let packsPerDay = $state(3);
-  let cardsPerPack = $state(3);
-
-  // Expandable sections
-  let showPrompt = $state(false);
-  let showGuidance = $state(false);
-
+  // Auto-scroll when new entries arrive
   $effect(() => {
-    loadConfig();
+    void debug.entries.length;
+    if (autoScroll && logContainer) {
+      requestAnimationFrame(() => {
+        logContainer!.scrollTop = logContainer!.scrollHeight;
+      });
+    }
   });
 
-  async function loadConfig() {
-    loading = true;
-    try {
-      const row = await getGachaConfig();
-      config = (row?.config as Record<string, unknown>) ?? {};
-      rawJson = JSON.stringify(config, null, 2);
-      syncFromConfig();
-    } catch {
-      // Default
-    } finally {
-      loading = false;
+  function formatTime(date: Date): string {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function uptimeStr(): string {
+    if (!debug.startedAt) return '--';
+    const ms = Date.now() - debug.startedAt.getTime();
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    if (h > 0) return `${h}h ${m % 60}m`;
+    if (m > 0) return `${m}m ${s % 60}s`;
+    return `${s}s`;
+  }
+
+  function entryLabel(type: string): string {
+    switch (type) {
+      case 'frame': return 'FRAME';
+      case 'llm-request': return 'LLM REQ';
+      case 'llm-response': return 'LLM RES';
+      case 'tts-request': return 'TTS REQ';
+      case 'tts-response': return 'TTS RES';
+      case 'error': return 'ERROR';
+      case 'info': return 'INFO';
+      default: return type.toUpperCase();
     }
   }
 
-  function syncFromConfig() {
-    const dr = config.dropRates as Record<string, number> | undefined;
-    if (dr) dropRates = { common: dr.common ?? 0.6, rare: dr.rare ?? 0.25, epic: dr.epic ?? 0.12, legendary: dr.legendary ?? 0.03 };
-    baseTemperature = (config.baseTemperature as number) ?? 0.9;
-    model = (config.model as string) ?? 'qwen-plus';
-    packsPerDay = (config.packsPerDay as number) ?? 3;
-    cardsPerPack = (config.cardsPerPack as number) ?? 3;
-  }
-
-  function syncToConfig() {
-    config = {
-      ...config,
-      dropRates: { ...dropRates },
-      baseTemperature,
-      model,
-      packsPerDay,
-      cardsPerPack,
-    };
-    rawJson = JSON.stringify(config, null, 2);
-  }
-
-  function onJsonEdit() {
-    jsonError = '';
-    try {
-      config = JSON.parse(rawJson);
-      syncFromConfig();
-    } catch (e) {
-      jsonError = e instanceof Error ? e.message : 'Invalid JSON';
+  function entryColor(type: string): string {
+    switch (type) {
+      case 'frame': return '#6B7788';
+      case 'llm-request': return '#3B9797';
+      case 'llm-response': return '#5bca7a';
+      case 'tts-request': return '#B06AFF';
+      case 'tts-response': return '#d4a0ff';
+      case 'error': return '#ff6b6b';
+      case 'info': return '#8a94a6';
+      default: return '#8a94a6';
     }
   }
 
-  async function saveConfig() {
-    saving = true;
-    saveMsg = '';
-    try {
-      syncToConfig();
-      await updateGachaConfig(config);
-      saveMsg = 'Saved!';
-      setTimeout(() => saveMsg = '', 2000);
-    } catch (e) {
-      saveMsg = e instanceof Error ? e.message : 'Save failed';
-    } finally {
-      saving = false;
+  function summarize(entry: DebugEntry): string {
+    const d = entry.data as Record<string, unknown> | undefined;
+    if (!d) return '';
+    switch (entry.type) {
+      case 'frame':
+        return `Captured ${((d.size as number) / 1024).toFixed(0)}KB`;
+      case 'llm-request':
+        return d.reactionTo
+          ? `${d.character} reacting to ${d.reactionTo}`
+          : `${d.character} (history: ${d.historyLength})`;
+      case 'llm-response':
+        return d.text
+          ? `${d.character}: "${(d.text as string).slice(0, 80)}${(d.text as string).length > 80 ? '...' : ''}"`
+          : `${d.character}: [SILENCE]`;
+      case 'tts-request':
+        return `${d.character} → ${(d.voiceId as string)?.slice(0, 8)}... (${d.textLength} chars)`;
+      case 'tts-response':
+        return `${d.character}: ${((d.audioSize as number) / 1024).toFixed(0)}KB audio`;
+      case 'error':
+        return `${d.step ? `[${d.step}] ` : ''}${d.message}`;
+      case 'info':
+        return typeof d === 'string' ? d : JSON.stringify(d);
+      default:
+        return JSON.stringify(d);
     }
   }
-
-  async function resetDefaults() {
-    const defaults = {
-      packsPerDay: 3,
-      cardsPerPack: 3,
-      dropRates: { common: 0.60, rare: 0.25, epic: 0.12, legendary: 0.03 },
-      traitRanges: {
-        common: { min: 25, max: 75 },
-        rare: { min: 15, max: 85 },
-        epic: { min: 5, max: 95 },
-        legendary: { min: 0, max: 100 },
-      },
-      promptQuality: {
-        common: { maxTokens: 800, tempBoost: 0.0 },
-        rare: { maxTokens: 1000, tempBoost: 0.1 },
-        epic: { maxTokens: 1200, tempBoost: 0.15 },
-        legendary: { maxTokens: 1600, tempBoost: 0.2 },
-      },
-      generationPrompt: config.generationPrompt ?? '',
-      rarityGuidance: config.rarityGuidance ?? {},
-      baseTemperature: 0.9,
-      model: 'qwen-plus',
-    };
-    config = defaults;
-    rawJson = JSON.stringify(config, null, 2);
-    syncFromConfig();
-  }
-
-  async function testGenerate() {
-    testLoading = true;
-    testResult = '';
-    testCharacter = null;
-    try {
-      const session = await getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${getSupabaseUrl()}/functions/v1/generate-character`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ rarity: testRarity }),
-      });
-
-      const data = await res.json();
-      testResult = JSON.stringify(data, null, 2);
-
-      if (res.ok) {
-        testCharacter = data as GachaCharacter;
-      }
-    } catch (e) {
-      testResult = e instanceof Error ? e.message : 'Failed';
-    } finally {
-      testLoading = false;
-    }
-  }
-
-  const dropRateSum = $derived(
-    Math.round((dropRates.common + dropRates.rare + dropRates.epic + dropRates.legendary) * 100) / 100
-  );
 </script>
 
-<div class="settings-page">
-  <h1>Gacha Admin</h1>
+<div class="debug-page">
+  <h1>Settings & Debug</h1>
 
-  {#if loading}
-    <p class="muted">Loading config...</p>
-  {:else}
-    <!-- Quick Settings -->
-    <section class="section">
-      <h2>Quick Settings</h2>
-      <div class="form-grid">
-        <label>
-          <span>Packs/Day</span>
-          <input type="number" bind:value={packsPerDay} min="1" max="99" oninput={syncToConfig} />
-        </label>
-        <label>
-          <span>Cards/Pack</span>
-          <input type="number" bind:value={cardsPerPack} min="1" max="10" oninput={syncToConfig} />
-        </label>
-        <label>
-          <span>Temperature</span>
-          <input type="range" bind:value={baseTemperature} min="0" max="2" step="0.05" oninput={syncToConfig} />
-          <span class="range-val">{baseTemperature.toFixed(2)}</span>
-        </label>
-        <label>
-          <span>Model</span>
-          <select bind:value={model} onchange={syncToConfig}>
-            <option value="qwen-plus">qwen-plus</option>
-            <option value="qwen-turbo">qwen-turbo</option>
-            <option value="qwen-max">qwen-max</option>
-            <option value="qwen3-vl-flash">qwen3-vl-flash</option>
-          </select>
-        </label>
+  <!-- Commentary Options -->
+  <section class="section">
+    <h2>Commentary Options</h2>
+    <div class="control-row">
+      <label>
+        <span>Game Hint</span>
+        <input
+          class="text-input"
+          type="text"
+          placeholder="e.g. League of Legends, Elden Ring..."
+          value={debug.gameHint}
+          oninput={(e) => setGameHint((e.target as HTMLInputElement).value)}
+        />
+      </label>
+    </div>
+    <div class="control-row">
+      <label>
+        <span>Commentary Gap</span>
+        <input
+          type="range"
+          value={debug.commentaryGap}
+          min="30"
+          max="120"
+          step="5"
+          oninput={(e) => setCommentaryGap(parseInt((e.target as HTMLInputElement).value, 10))}
+        />
+        <span class="range-val">{debug.commentaryGap}s</span>
+      </label>
+    </div>
+    <div class="instructions-row">
+      <label>
+        <span>Custom Instructions</span>
+      </label>
+      <textarea
+        class="instructions-editor"
+        placeholder="Extra instructions sent alongside each character's system prompt. E.g. 'Focus on teamfights', 'Be family-friendly', 'Speak in short sentences'..."
+        value={debug.customSystemInstructions}
+        oninput={(e) => setCustomSystemInstructions((e.target as HTMLTextAreaElement).value)}
+        rows="3"
+      ></textarea>
+    </div>
+  </section>
+
+  <!-- Debug Controls -->
+  <section class="section">
+    <h2>Debug</h2>
+    <div class="control-row">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={autoScroll} />
+        <span>Auto-scroll log</span>
+      </label>
+      <button class="btn-secondary" onclick={clearDebugLog}>Clear Log</button>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <section class="section">
+    <h2>Stats</h2>
+    <div class="stats-grid">
+      <div class="stat">
+        <span class="stat-label">Uptime</span>
+        <span class="stat-value">{uptimeStr()}</span>
       </div>
-    </section>
-
-    <!-- Drop Rates -->
-    <section class="section">
-      <h2>Drop Rates <span class="badge" class:warn={dropRateSum !== 1}>Sum: {dropRateSum}</span></h2>
-      <div class="form-grid">
-        {#each ['common', 'rare', 'epic', 'legendary'] as tier}
-          <label>
-            <span class="rarity-label rarity-{tier}">{tier}</span>
-            <input
-              type="range"
-              value={dropRates[tier as keyof typeof dropRates]}
-              min="0" max="1" step="0.01"
-              oninput={(e) => { dropRates[tier as keyof typeof dropRates] = parseFloat((e.target as HTMLInputElement).value); syncToConfig(); }}
-            />
-            <span class="range-val">{(dropRates[tier as keyof typeof dropRates] * 100).toFixed(0)}%</span>
-          </label>
-        {/each}
+      <div class="stat">
+        <span class="stat-label">LLM Calls</span>
+        <span class="stat-value">{debug.totalLlmCalls}</span>
       </div>
-    </section>
+      <div class="stat">
+        <span class="stat-label">TTS Calls</span>
+        <span class="stat-value">{debug.totalTtsCalls}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Tokens In</span>
+        <span class="stat-value">{debug.totalInputTokens.toLocaleString()}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Tokens Out</span>
+        <span class="stat-value">{debug.totalOutputTokens.toLocaleString()}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Log Entries</span>
+        <span class="stat-value">{debug.entries.length}</span>
+      </div>
+    </div>
+  </section>
 
-    <!-- Generation Prompt -->
-    <section class="section">
-      <button class="section-toggle" onclick={() => showPrompt = !showPrompt}>
-        <h2>Generation Prompt {showPrompt ? '▾' : '▸'}</h2>
-      </button>
-      {#if showPrompt}
-        <textarea
-          class="prompt-editor"
-          value={(config.generationPrompt as string) ?? ''}
-          oninput={(e) => { config = { ...config, generationPrompt: (e.target as HTMLTextAreaElement).value }; rawJson = JSON.stringify(config, null, 2); }}
-          rows="8"
-        ></textarea>
-      {/if}
-    </section>
-
-    <!-- Rarity Guidance -->
-    <section class="section">
-      <button class="section-toggle" onclick={() => showGuidance = !showGuidance}>
-        <h2>Rarity Guidance {showGuidance ? '▾' : '▸'}</h2>
-      </button>
-      {#if showGuidance}
-        {#each ['common', 'rare', 'epic', 'legendary'] as tier}
-          <div class="guidance-item">
-            <span class="rarity-label rarity-{tier}">{tier}</span>
-            <textarea
-              value={((config.rarityGuidance as Record<string, string>)?.[tier]) ?? ''}
-              oninput={(e) => {
-                const rg = { ...(config.rarityGuidance as Record<string, string> ?? {}) };
-                rg[tier] = (e.target as HTMLTextAreaElement).value;
-                config = { ...config, rarityGuidance: rg };
-                rawJson = JSON.stringify(config, null, 2);
-              }}
-              rows="3"
-            ></textarea>
+  <!-- Log -->
+  <section class="section log-section">
+    <h2>Event Log</h2>
+    <div class="log-container" bind:this={logContainer}>
+      {#if debug.entries.length === 0}
+        <p class="empty-msg">No events yet. Start commentary to see debug output.</p>
+      {:else}
+        {#each debug.entries as entry (entry.id)}
+          <div class="log-entry" class:error-entry={entry.type === 'error'}>
+            <span class="log-time">{formatTime(entry.timestamp)}</span>
+            <span class="log-badge" style="color: {entryColor(entry.type)}">{entryLabel(entry.type)}</span>
+            <span class="log-text">{summarize(entry)}</span>
           </div>
         {/each}
       {/if}
-    </section>
-
-    <!-- Raw JSON -->
-    <section class="section">
-      <h2>Raw Config JSON</h2>
-      <textarea
-        class="json-editor"
-        bind:value={rawJson}
-        oninput={onJsonEdit}
-        rows="16"
-        spellcheck="false"
-      ></textarea>
-      {#if jsonError}
-        <p class="error">{jsonError}</p>
-      {/if}
-    </section>
-
-    <!-- Actions -->
-    <div class="actions">
-      <button class="btn-primary" onclick={saveConfig} disabled={saving || !!jsonError}>
-        {saving ? 'Saving...' : 'Save Config'}
-      </button>
-      <button class="btn-secondary" onclick={resetDefaults}>Reset to Defaults</button>
-      {#if saveMsg}
-        <span class="save-msg" class:error={saveMsg !== 'Saved!'}>{saveMsg}</span>
-      {/if}
     </div>
-
-    <hr />
-
-    <!-- Test Generation -->
-    <section class="section">
-      <h2>Test Generation</h2>
-      <div class="test-controls">
-        <select bind:value={testRarity}>
-          <option value="common">Common</option>
-          <option value="rare">Rare</option>
-          <option value="epic">Epic</option>
-          <option value="legendary">Legendary</option>
-        </select>
-        <button class="btn-primary" onclick={testGenerate} disabled={testLoading}>
-          {testLoading ? 'Generating...' : 'Generate Test Character'}
-        </button>
-      </div>
-
-      {#if testResult}
-        <pre class="test-output">{testResult}</pre>
-      {/if}
-
-      {#if testCharacter}
-        <div class="test-preview">
-          <CharacterCard character={testCharacter} flipped={true} />
-        </div>
-      {/if}
-    </section>
-  {/if}
+  </section>
 </div>
 
 <style>
-  .settings-page {
-    padding: 24px;
-    max-width: 720px;
-    overflow-y: auto;
+  .debug-page {
+    padding: var(--space-6);
     height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   h1 {
     font-size: 1.8rem;
     color: var(--color-pink);
-    margin-bottom: 24px;
+    margin-bottom: var(--space-5);
+    flex-shrink: 0;
   }
 
   h2 {
-    font-size: 1rem;
-    color: var(--color-text-primary);
-    margin: 0 0 12px;
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted, #6B7788);
+    margin: 0 0 var(--space-2-5);
+    font-weight: 600;
   }
 
   .section {
-    margin-bottom: 24px;
+    margin-bottom: var(--space-5);
+    flex-shrink: 0;
   }
 
-  .muted { color: var(--color-text-muted); }
-
-  .form-grid {
+  .log-section {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
   }
 
   label {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   label span:first-child {
-    min-width: 100px;
-    font-size: 0.85rem;
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
+    min-width: 120px;
   }
-
-  input[type="number"], select {
-    padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    color: var(--color-text-primary);
-    font-family: inherit;
-    font-size: 0.85rem;
-    width: 120px;
-  }
-
-  select option { background: var(--color-navy); }
 
   input[type="range"] {
     flex: 1;
@@ -366,137 +257,174 @@
   }
 
   .range-val {
-    font-size: 0.8rem;
+    font-size: var(--font-brand-md);
     color: var(--color-text-muted);
     min-width: 40px;
   }
 
-  .badge {
-    font-size: 0.75rem;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(59, 151, 151, 0.2);
-    color: var(--color-teal);
-  }
-
-  .badge.warn {
-    background: rgba(248, 113, 113, 0.2);
-    color: #f87171;
-  }
-
-  .rarity-label {
-    font-weight: 600;
-    font-size: 0.8rem;
-    text-transform: capitalize;
-  }
-
-  .rarity-label.rarity-common { color: var(--rarity-common); }
-  .rarity-label.rarity-rare { color: var(--rarity-rare); }
-  .rarity-label.rarity-epic { color: var(--rarity-epic); }
-  .rarity-label.rarity-legendary { color: var(--rarity-legendary); }
-
-  .section-toggle {
-    background: none;
-    border: none;
+  .checkbox-label {
+    gap: var(--space-1-5);
     cursor: pointer;
-    color: inherit;
-    padding: 0;
-    font: inherit;
   }
 
-  textarea, .json-editor, .prompt-editor {
-    width: 100%;
-    padding: 10px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
-    border-radius: 8px;
-    color: var(--color-text-primary);
-    font-family: 'Courier New', monospace;
-    font-size: 0.8rem;
-    resize: vertical;
-    outline: none;
+  .checkbox-label span {
+    min-width: auto !important;
   }
 
-  textarea:focus { border-color: var(--color-teal); }
-
-  .guidance-item {
-    margin-bottom: 8px;
+  input[type="checkbox"] {
+    accent-color: var(--color-teal, #3B9797);
   }
-
-  .guidance-item textarea { margin-top: 4px; }
-
-  .error { color: #f87171; font-size: 0.8rem; margin-top: 4px; }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 24px;
-  }
-
-  .btn-primary {
-    padding: 8px 20px;
-    border: none;
-    border-radius: 8px;
-    background: var(--color-teal);
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 0.85rem;
-  }
-
-  .btn-primary:hover:not(:disabled) { background: #4ab0b0; }
-  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .btn-secondary {
-    padding: 8px 20px;
-    border: 1px solid var(--glass-border);
-    border-radius: 8px;
-    background: none;
-    color: var(--color-text-secondary);
+    padding: 5px var(--space-3-5);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-md);
+    background: var(--white-a4);
+    color: var(--color-text-secondary, #8a94a6);
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.85rem;
+    font-size: var(--font-xs);
+    transition: background var(--transition-base);
   }
 
-  .btn-secondary:hover { color: var(--color-text-primary); }
-
-  .save-msg {
-    font-size: 0.85rem;
-    color: var(--color-teal);
+  .btn-secondary:hover {
+    background: var(--white-a8);
+    color: var(--color-text-primary);
   }
 
-  .save-msg.error { color: #f87171; }
-
-  hr {
-    border: none;
-    border-top: 1px solid var(--glass-border);
-    margin: 24px 0;
+  .text-input {
+    flex: 1;
+    padding: var(--space-1-5) var(--space-2-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a4);
+    color: var(--color-text-primary, #e2e8f0);
+    font-family: inherit;
+    font-size: var(--font-brand-md);
+    outline: none;
+    transition: border-color var(--transition-base);
   }
 
-  .test-controls {
+  .text-input::placeholder {
+    color: var(--color-text-muted, #6B7788);
+  }
+
+  .text-input:focus {
+    border-color: var(--teal-a40);
+  }
+
+  .instructions-row {
     display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 12px;
+    flex-direction: column;
+    gap: var(--space-1-5);
+    margin-bottom: var(--space-2);
   }
 
-  .test-output {
-    background: rgba(0, 0, 0, 0.3);
-    padding: 12px;
-    border-radius: 8px;
-    font-size: 0.75rem;
-    overflow-x: auto;
-    max-height: 300px;
+  .instructions-editor {
+    width: 100%;
+    padding: var(--space-2) var(--space-2-5);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a8);
+    background: var(--white-a4);
+    color: var(--color-text-primary, #e2e8f0);
+    font-family: inherit;
+    font-size: var(--font-brand-md);
+    resize: vertical;
+    outline: none;
+    transition: border-color var(--transition-base);
+    box-sizing: border-box;
+  }
+
+  .instructions-editor::placeholder {
+    color: var(--color-text-muted, #6B7788);
+  }
+
+  .instructions-editor:focus {
+    border-color: var(--teal-a40);
+  }
+
+  /* Stats */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+  }
+
+  .stat {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--white-a3);
+    border: 1px solid var(--white-a6);
+  }
+
+  .stat-label {
+    display: block;
+    font-size: var(--font-brand-sm);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--color-text-muted, #6B7788);
+    margin-bottom: var(--space-0-5);
+  }
+
+  .stat-value {
+    font-size: var(--font-xl);
+    font-weight: 600;
+    color: var(--color-text-primary, #e2e8f0);
+  }
+
+  /* Log */
+  .log-container {
+    flex: 1;
     overflow-y: auto;
-    margin-bottom: 12px;
-    color: var(--color-text-secondary);
+    background: var(--black-a20);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--white-a6);
+    padding: var(--space-1-5);
+    font-family: 'Courier New', monospace;
+    font-size: var(--font-xs);
   }
 
-  .test-preview {
+  .log-entry {
     display: flex;
-    justify-content: center;
-    padding: 16px;
+    gap: var(--space-2);
+    padding: 3px var(--space-1-5);
+    border-radius: var(--radius-xs);
+    align-items: baseline;
+  }
+
+  .log-entry:hover {
+    background: var(--white-a3);
+  }
+
+  .error-entry {
+    background: rgba(255, 107, 107, 0.06);
+  }
+
+  .log-time {
+    color: var(--color-text-muted, #6B7788);
+    flex-shrink: 0;
+    font-size: 0.7rem;
+  }
+
+  .log-badge {
+    flex-shrink: 0;
+    font-weight: 700;
+    font-size: var(--font-brand-sm);
+    min-width: 56px;
+  }
+
+  .log-text {
+    color: var(--color-text-secondary, #8a94a6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .empty-msg {
+    color: var(--color-text-muted, #6B7788);
+    text-align: center;
+    padding: var(--space-6);
+    font-family: inherit;
+    font-size: var(--font-base);
   }
 </style>

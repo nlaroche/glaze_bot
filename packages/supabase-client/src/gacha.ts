@@ -393,5 +393,11 @@ export async function generativeTts(opts: {
 
   if (data instanceof ArrayBuffer) return data;
   if (data instanceof Blob) return await data.arrayBuffer();
+  // Supabase functions-js may return a string for unrecognized content types (e.g. audio/mpeg)
+  if (typeof data === "string" && data.length > 0) {
+    const bytes = new Uint8Array(data.length);
+    for (let i = 0; i < data.length; i++) bytes[i] = data.charCodeAt(i);
+    return bytes.buffer;
+  }
   throw new Error("Unexpected response format from generative-tts");
 }

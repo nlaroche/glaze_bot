@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
     const body: SyncRequest = await req.json().catch(() => ({}));
     const pageSize = Math.min(body.page_size ?? 100, 100);
-    const pageCount = body.page_count ?? 2;
+    const pageCount = body.page_count ?? 10;
     const language = body.language ?? "en";
 
     // Fetch all pages in parallel

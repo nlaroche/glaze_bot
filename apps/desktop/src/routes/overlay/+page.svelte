@@ -26,6 +26,7 @@
   let tick = $state(0);
   let masterRunning = false;
   let masterInterval: ReturnType<typeof setInterval> | null = null;
+  let hasReceivedMessage = $state(false);
 
   function addBubble(name: string, rarity: string, text: string, image?: string) {
     const id = Date.now() + Math.random();
@@ -39,6 +40,7 @@
       holdUntil: 0,
     }];
     tick++;
+    hasReceivedMessage = true;
     ensureMasterLoop();
   }
 
@@ -85,53 +87,7 @@
     }, 35);
   }
 
-  // Demo messages for self-test when no main window events
-  const demoMessages = [
-    { name: 'Snapjaw', rarity: 'common', text: "Oh they're actually going in. Bold move.", image: '/testCharacter1.png' },
-    { name: 'Blobsworth', rarity: 'epic', text: "That was NOT the play. I've seen better decisions from a roomba.", image: '/testCharacter3.png' },
-    { name: 'Snapjaw', rarity: 'common', text: "Wait wait wait... are they going to—yep. They did.", image: '/testCharacter1.png' },
-    { name: 'Blobsworth', rarity: 'epic', text: "INCREDIBLE. Absolutely unhinged gameplay. I love it.", image: '/testCharacter3.png' },
-    { name: 'Snapjaw', rarity: 'common', text: "I wouldn't have done that, but I also wouldn't have survived that.", image: '/testCharacter1.png' },
-    { name: 'Blobsworth', rarity: 'epic', text: "The confidence. The execution. The complete disregard for personal safety. 10/10.", image: '/testCharacter3.png' },
-  ];
-
-  let demoIdx = 0;
-  let demoTimer: ReturnType<typeof setTimeout> | null = null;
-  let receivingRealMessages = false;
-
-  function startDemo() {
-    if (demoTimer || receivingRealMessages) return;
-    function next() {
-      const msg = demoMessages[demoIdx % demoMessages.length];
-      addBubble(msg.name, msg.rarity, msg.text, msg.image);
-      demoIdx++;
-      demoTimer = setTimeout(next, 5000 + Math.random() * 2000);
-    }
-    next();
-  }
-
-  function stopDemo() {
-    if (demoTimer) {
-      clearTimeout(demoTimer);
-      demoTimer = null;
-    }
-  }
-
   onMount(() => {
-    // Start/stop demo based on visibility
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        startDemo();
-      } else {
-        stopDemo();
-      }
-    }
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    if (document.visibilityState === 'visible') {
-      startDemo();
-    }
-
     // Tauri event listeners for real messages from main window
     (async () => {
       try {
@@ -141,10 +97,6 @@
 
         await webview.listen('chat-message', (event: any) => {
           const p = event.payload;
-          if (!receivingRealMessages) {
-            receivingRealMessages = true;
-            stopDemo();
-          }
           addBubble(p.name, p.rarity, p.text, p.image);
         });
 
@@ -155,8 +107,6 @@
     })();
 
     return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      stopDemo();
       if (masterInterval) clearInterval(masterInterval);
     };
   });
@@ -166,6 +116,12 @@
 
 <div class="overlay-root">
   <div class="bubble-container">
+    {#if !hasReceivedMessage && bubbles.length === 0}
+      <div class="waiting-indicator">
+        <span class="waiting-dot"></span>
+        <span class="waiting-text">Waiting for commentary...</span>
+      </div>
+    {/if}
     {#each visibleBubbles as msg (msg.id)}
       {@const opacity = msg.visible && !msg.exiting ? 1 : 0}
       {@const tx = msg.visible && !msg.exiting ? 0 : msg.exiting ? 80 : 80}
@@ -218,13 +174,42 @@
 
   .bubble-container {
     position: absolute;
-    bottom: 40px;
-    right: 40px;
+    bottom: var(--space-10);
+    right: var(--space-10);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-3);
     max-width: 560px;
     align-items: flex-end;
+  }
+
+  .waiting-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2-5) var(--space-4);
+    background: var(--navy-a70);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-2xl);
+    opacity: 0.6;
+  }
+
+  .waiting-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: rgba(255, 255, 255, 0.4);
+    animation: pulse-wait 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-wait {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .waiting-text {
+    font-size: var(--font-base);
+    color: rgba(255, 255, 255, 0.5);
   }
 
   .bubble-wrapper {
@@ -236,10 +221,10 @@
   .speech-bubble {
     position: relative;
     background: rgba(10, 14, 24, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--white-a12);
     border-radius: 16px;
-    padding: 16px 20px;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    padding: var(--space-4) var(--space-5);
+    box-shadow: 0 6px 24px var(--black-a50);
     max-width: 520px;
     overflow: hidden;
   }
@@ -261,7 +246,7 @@
     z-index: 1;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--space-4);
   }
 
   .bubble-text-area {
@@ -272,7 +257,7 @@
   .character-avatar {
     width: 72px;
     height: 72px;
-    border-radius: 50%;
+    border-radius: var(--radius-full);
     border: 3px solid;
     overflow: hidden;
     flex-shrink: 0;
@@ -294,16 +279,16 @@
   }
 
   .bubble-name {
-    font-size: 0.95rem;
+    font-size: var(--font-md);
     font-weight: 700;
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
     letter-spacing: 0.02em;
   }
 
   .bubble-text {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     line-height: 1.45;
     word-wrap: break-word;
   }
