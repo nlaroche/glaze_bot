@@ -133,6 +133,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      fish_voices: {
+        Row: {
+          id: string;
+          title: string;
+          description: string;
+          tags: string[];
+          sample_url: string | null;
+          sample_text: string | null;
+          task_count: number;
+          like_count: number;
+          author_name: string | null;
+          cover_image: string | null;
+          languages: string[];
+          fetched_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          title: string;
+          description?: string;
+          tags?: string[];
+          sample_url?: string | null;
+          sample_text?: string | null;
+          task_count?: number;
+          like_count?: number;
+          author_name?: string | null;
+          cover_image?: string | null;
+          languages?: string[];
+          fetched_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string;
+          tags?: string[];
+          sample_url?: string | null;
+          sample_text?: string | null;
+          task_count?: number;
+          like_count?: number;
+          author_name?: string | null;
+          cover_image?: string | null;
+          languages?: string[];
+          fetched_at?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       parties: {
         Row: {
           id: string;

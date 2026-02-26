@@ -34,4 +34,7 @@ export {
   getDeletedCharacters,
   toggleCharacterActive,
   setDefaultCharacter,
+  syncFishVoices,
+  getFishVoices,
 } from "./gacha.js";
+export type { FishVoice } from "./gacha.js";

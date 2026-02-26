@@ -332,3 +332,43 @@ export async function setDefaultCharacter(
   if (error) throw error;
   return data as unknown as GachaCharacter;
 }
+
+// ─── Fish Audio Voices ─────────────────────────────────────────────
+
+export interface FishVoice {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  sample_url: string | null;
+  sample_text: string | null;
+  task_count: number;
+  like_count: number;
+  author_name: string | null;
+  cover_image: string | null;
+  languages: string[];
+  fetched_at: string;
+  created_at: string;
+}
+
+/** Sync voices from Fish Audio API into the DB (admin) */
+export async function syncFishVoices(opts?: {
+  page_size?: number;
+  page_count?: number;
+  language?: string;
+}): Promise<{ synced: number; total_available: number }> {
+  return callEdgeFunction<{ synced: number; total_available: number }>(
+    "sync-fish-voices",
+    opts as Record<string, unknown>,
+  );
+}
+
+/** Get all Fish Audio voices from DB, ordered by popularity */
+export async function getFishVoices(): Promise<FishVoice[]> {
+  const { data, error } = await db()
+    .from("fish_voices")
+    .select("*")
+    .order("task_count", { ascending: false });
+  if (error) throw error;
+  return data as FishVoice[];
+}

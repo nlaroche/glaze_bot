@@ -14,7 +14,10 @@
     getDeletedCharacters,
     toggleCharacterActive,
     setDefaultCharacter,
+    syncFishVoices,
+    getFishVoices,
   } from '@glazebot/supabase-client';
+  import type { FishVoice } from '@glazebot/supabase-client';
   import { CharacterCard } from '@glazebot/shared-ui';
   import type { GachaCharacter, CharacterRarity, GenerationMetadata } from '@glazebot/shared-types';
 
@@ -56,7 +59,7 @@
   let activeTags: string[] = $state([]);
 
   // ─── State: Panels ────────────────────────────────────────────────
-  let activeTab: 'config' | 'economy' | 'workshop' = $state('config');
+  let activeTab: 'config' | 'economy' | 'workshop' | 'voices' = $state('config');
   let detailPanelOpen = $state(false);
   let configDrawerOpen = $state(false);
 
@@ -103,6 +106,26 @@
 
   // ─── State: Generate ──────────────────────────────────────────────
   let generateRarity: CharacterRarity = $state('common');
+
+  // ─── State: Fish Voices ────────────────────────────────────────────
+  let fishVoices: FishVoice[] = $state([]);
+  let loadingVoices = $state(false);
+  let syncingVoices = $state(false);
+  let voicesLoaded = $state(false);
+  let playingVoiceId: string | null = $state(null);
+  let currentAudio: HTMLAudioElement | null = $state(null);
+  let voiceSearch = $state('');
+
+  let filteredVoices = $derived(
+    voiceSearch
+      ? fishVoices.filter(v => {
+          const q = voiceSearch.toLowerCase();
+          return v.title.toLowerCase().includes(q)
+            || v.description.toLowerCase().includes(q)
+            || v.tags.some(t => t.toLowerCase().includes(q));
+        })
+      : fishVoices
+  );
 
   // ─── Constants ────────────────────────────────────────────────────
   const modelOptions = [
@@ -550,6 +573,62 @@
     }
   }
 
+  // ─── Fish Voices ────────────────────────────────────────────────
+  async function loadFishVoices() {
+    if (voicesLoaded) return;
+    loadingVoices = true;
+    try {
+      fishVoices = await getFishVoices();
+      voicesLoaded = true;
+    } catch (e) {
+      console.error('Failed to load voices:', e);
+    } finally {
+      loadingVoices = false;
+    }
+  }
+
+  async function handleSyncVoices() {
+    syncingVoices = true;
+    try {
+      await syncFishVoices();
+      fishVoices = await getFishVoices();
+      voicesLoaded = true;
+    } catch (e) {
+      console.error('Failed to sync voices:', e);
+    } finally {
+      syncingVoices = false;
+    }
+  }
+
+  function playVoiceSample(voice: FishVoice) {
+    if (!voice.sample_url) return;
+
+    // Stop current if playing
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+
+    // Toggle off if same voice
+    if (playingVoiceId === voice.id) {
+      playingVoiceId = null;
+      return;
+    }
+
+    const audio = new Audio(voice.sample_url);
+    audio.onended = () => { playingVoiceId = null; currentAudio = null; };
+    audio.onerror = () => { playingVoiceId = null; currentAudio = null; };
+    audio.play();
+    currentAudio = audio;
+    playingVoiceId = voice.id;
+  }
+
+  function formatNumber(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return n.toString();
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────
   function formatDate(iso: string): string {
     const d = new Date(iso);
@@ -557,7 +636,7 @@
   }
 </script>
 
-<div class="admin-page" class:scrollable={activeTab !== 'workshop'} data-testid="settings-page">
+<div class="admin-page" class:scrollable={activeTab !== 'workshop' && activeTab !== 'voices'} data-testid="settings-page">
   <!-- ═══ HEADER ═══ -->
   <div class="page-header">
     <h1>Admin</h1>
@@ -600,6 +679,12 @@
       onclick={() => activeTab = 'workshop'}
       data-testid="tab-workshop"
     >Workshop</button>
+    <button
+      class="top-tab"
+      class:active={activeTab === 'voices'}
+      onclick={() => { activeTab = 'voices'; loadFishVoices(); }}
+      data-testid="tab-voices"
+    >Voices</button>
   </div>
 
   <!-- ═══ TAB: WORKSHOP ═══ -->
@@ -1023,6 +1108,99 @@
         </div>
       </div>
     {/if}
+
+  <!-- ═══ TAB: VOICES ═══ -->
+  {:else if activeTab === 'voices'}
+    <div class="voices-tab" data-testid="voices-panel">
+      <!-- Top bar -->
+      <div class="voices-toolbar">
+        <div class="voices-toolbar-left">
+          <Button
+            variant="primary"
+            loading={syncingVoices}
+            onclick={handleSyncVoices}
+            testid="sync-voices-btn"
+          >
+            {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
+          </Button>
+          {#if fishVoices.length > 0}
+            <Badge variant="default" text="{filteredVoices.length} voice{filteredVoices.length !== 1 ? 's' : ''}" testid="voice-count-badge" />
+          {/if}
+        </div>
+        <div class="voices-search">
+          <input
+            type="text"
+            class="search-input"
+            placeholder="Search voices..."
+            bind:value={voiceSearch}
+            data-testid="voice-search-input"
+          />
+        </div>
+      </div>
+
+      <!-- Content -->
+      {#if loadingVoices}
+        <p class="muted">Loading voices...</p>
+      {:else if fishVoices.length === 0}
+        <div class="voices-empty">
+          <p class="muted">No voices synced. Click <strong>Sync from Fish Audio</strong> to fetch the top voices.</p>
+        </div>
+      {:else}
+        <div class="voices-table-wrapper">
+          <table class="voices-table" data-testid="voices-table">
+            <thead>
+              <tr>
+                <th class="col-play">Play</th>
+                <th class="col-name">Name</th>
+                <th class="col-tags">Tags</th>
+                <th class="col-pop">Popularity</th>
+                <th class="col-likes">Likes</th>
+                <th class="col-author">Author</th>
+                <th class="col-desc">Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each filteredVoices as voice (voice.id)}
+                <tr data-testid="voice-row-{voice.id}">
+                  <td class="col-play">
+                    {#if voice.sample_url}
+                      <button
+                        class="play-btn"
+                        class:playing={playingVoiceId === voice.id}
+                        onclick={() => playVoiceSample(voice)}
+                        data-testid="play-voice-{voice.id}"
+                        title={playingVoiceId === voice.id ? 'Stop' : 'Play sample'}
+                      >
+                        {playingVoiceId === voice.id ? '⏹' : '▶'}
+                      </button>
+                    {:else}
+                      <span class="no-sample" title="No sample available">—</span>
+                    {/if}
+                  </td>
+                  <td class="col-name">{voice.title}</td>
+                  <td class="col-tags">
+                    <div class="tag-pills">
+                      {#each voice.tags.slice(0, 3) as tag}
+                        <span class="tag-pill">{tag}</span>
+                      {/each}
+                      {#if voice.tags.length > 3}
+                        <span class="tag-pill tag-more">+{voice.tags.length - 3}</span>
+                      {/if}
+                    </div>
+                  </td>
+                  <td class="col-pop">{formatNumber(voice.task_count)}</td>
+                  <td class="col-likes">{formatNumber(voice.like_count)}</td>
+                  <td class="col-author">{voice.author_name ?? '—'}</td>
+                  <td class="col-desc" title={voice.description}>
+                    {voice.description.length > 60 ? voice.description.slice(0, 60) + '...' : voice.description || '—'}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -1098,7 +1276,7 @@
     border: 1px solid var(--color-border);
     border-radius: 8px;
     padding: 3px;
-    max-width: 420px;
+    max-width: 540px;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
@@ -1707,5 +1885,140 @@
       min-width: unset;
       max-height: 50vh;
     }
+  }
+
+  /* ─── Voices Tab ─── */
+  .voices-tab {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .voices-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
+  }
+
+  .voices-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .voices-search {
+    max-width: 300px;
+    flex: 1;
+  }
+
+  .voices-empty {
+    padding: 48px 24px;
+    text-align: center;
+  }
+
+  .voices-table-wrapper {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    background: rgba(10, 22, 42, 0.4);
+  }
+
+  .voices-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .voices-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: rgba(10, 22, 42, 0.95);
+    backdrop-filter: blur(8px);
+  }
+
+  .voices-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+  }
+
+  .voices-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--color-text-secondary);
+  }
+
+  .voices-table tbody tr:hover {
+    background: rgba(59, 151, 151, 0.06);
+  }
+
+  .col-play { width: 48px; text-align: center; }
+  .col-name { min-width: 140px; }
+  .col-tags { min-width: 160px; }
+  .col-pop { width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-likes { width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+  .col-author { min-width: 100px; }
+  .col-desc { min-width: 160px; }
+
+  .play-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .play-btn:hover {
+    background: rgba(59, 151, 151, 0.15);
+    border-color: var(--color-teal);
+    color: var(--color-teal);
+  }
+
+  .play-btn.playing {
+    background: rgba(59, 151, 151, 0.2);
+    border-color: var(--color-teal);
+    color: var(--color-teal);
+  }
+
+  .no-sample {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+  }
+
+  .tag-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tag-pill {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--color-text-muted);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+  }
+
+  .tag-more {
+    background: rgba(59, 151, 151, 0.1);
+    color: var(--color-teal);
   }
 </style>
