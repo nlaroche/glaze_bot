@@ -1416,7 +1416,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       saveMsg = 'Saved!';
       setTimeout(() => saveMsg = '', 2000);
       // Fire-and-forget snapshot
-      saveConfigSnapshot(structuredClone(config)).then(snap => {
+      saveConfigSnapshot(JSON.parse(JSON.stringify(config))).then(snap => {
         if (snapshotsLoaded) snapshots = [snap, ...snapshots];
       }).catch(() => {});
     } catch (e) {
