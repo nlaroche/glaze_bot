@@ -284,6 +284,12 @@ export class CommentaryEngine {
     } finally {
       this.speaking = false;
       this.processingUserMessage = false;
+
+      // Drain any messages that queued while we were busy
+      if (this.userMessageQueue.length > 0) {
+        const next = this.userMessageQueue.shift()!;
+        this.sendDirectMessage(next, party);
+      }
     }
   }
 

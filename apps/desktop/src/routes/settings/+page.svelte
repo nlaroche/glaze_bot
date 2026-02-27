@@ -824,6 +824,8 @@
     border-radius: var(--radius-sm);
     align-items: baseline;
     transition: background var(--transition-fast);
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   .log-entry:hover {

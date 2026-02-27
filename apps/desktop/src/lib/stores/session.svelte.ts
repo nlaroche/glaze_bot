@@ -1,6 +1,7 @@
 import type { GachaCharacter } from '@glazebot/shared-types';
 import type { CaptureSource } from '@glazebot/shared-ui';
 import { CommentaryEngine, type ChatLogEntry } from '../commentary/engine';
+import { createSession, persistMessage } from './chatHistory';
 
 // Module-level singleton state — survives SvelteKit navigation
 let engine: CommentaryEngine = new CommentaryEngine();
@@ -26,10 +27,39 @@ let isRecording = $state(false);
 let sttBubbleText = $state<string | null>(null);
 let sttBubbleTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ── Headless chat persistence (IndexedDB) ──
+// Keeps messages across hot-reloads / restarts without any sidebar UI.
+let currentSessionId: string | null = null;
+
+async function ensureSession(): Promise<string> {
+  if (currentSessionId) return currentSessionId;
+  const partyNames = partySlots.filter((s): s is GachaCharacter => s !== null).map((c) => c.name);
+  const sess = await createSession(partyNames);
+  currentSessionId = sess.id;
+  return sess.id;
+}
+
+// Restore chat from the most-recent session on module init
+(async () => {
+  try {
+    const { getSessions, getSessionMessages } = await import('./chatHistory');
+    const sessions = await getSessions();
+    if (sessions.length > 0) {
+      const latest = sessions[0]; // sorted newest-first
+      const msgs = await getSessionMessages(latest.id);
+      if (msgs.length > 0) {
+        currentSessionId = latest.id;
+        chatLog = msgs.map((m) => ({ ...m }));
+      }
+    }
+  } catch { /* IndexedDB unavailable */ }
+})();
 
 // Wire engine callbacks once at module level
 engine.onChatMessage = (entry) => {
   chatLog = [...chatLog, entry];
+  // Persist to IndexedDB (fire-and-forget)
+  ensureSession().then((sid) => persistMessage(entry, sid)).catch(() => {});
 };
 
 engine.onOverlayMessage = async (msg) => {
@@ -102,6 +132,7 @@ export function addChatEntry(entry: ChatLogEntry) {
 
 export function clearChatLog() {
   chatLog = [];
+  currentSessionId = null; // next message starts a fresh session
 }
 
 export function getActiveParty(): GachaCharacter[] {
@@ -143,6 +174,8 @@ export function sendUserMessage(text: string) {
   };
 
   chatLog = [...chatLog, chatEntry];
+  // Persist user message to IndexedDB
+  ensureSession().then((sid) => persistMessage(chatEntry, sid)).catch(() => {});
 
   if (isRunning) {
     // Engine is running — use the normal queue (includes frame capture, TTS, overlay)
