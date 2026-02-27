@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
     let analysisPrompt = prompt;
     if (!game_name) {
       analysisPrompt +=
-        '\nIdentify what application or game is shown. On the LAST line of your response, write exactly: DETECTED: <name> (e.g. "DETECTED: League of Legends", "DETECTED: Desktop", "DETECTED: Chrome Browser", "DETECTED: Unknown").';
+        '\nIMPORTANT: Identify the EXACT game title (not the genre) from visual cues — look for logos, UI style, HUD layout, character designs, fonts, and any on-screen text. For example: "Hades", "Slay the Spire", "League of Legends" — NOT "roguelike dungeon crawler". If it\'s not a game, identify the application (e.g. "Google Chrome", "Discord", "Windows Desktop"). On the LAST line write exactly: DETECTED: <title>';
     }
     if (previous_description) {
       analysisPrompt += `\nPrevious scene: ${previous_description}. What changed?`;
@@ -222,16 +222,94 @@ Deno.serve(async (req: Request) => {
       };
     }
 
+    // ── Gemini search-grounded game identification ────────────────
+    // Uses Gemini with Google Search grounding to identify the game
+    // from the screenshot. This works even for brand-new games the
+    // LLM wasn't trained on, because it can search the web.
+
+    async function identifyGameWithSearch(): Promise<string | undefined> {
+      if (!GEMINI_API_KEY) return undefined;
+
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      inline_data: {
+                        mime_type: "image/jpeg",
+                        data: frame_b64,
+                      },
+                    },
+                    {
+                      text: "What is the exact name of this video game? Search the web if needed. Reply with ONLY the game title, nothing else. If this is not a game, reply with the application name (e.g. 'Google Chrome', 'Discord'). If you cannot identify it, reply 'Unknown'.",
+                    },
+                  ],
+                },
+              ],
+              tools: [{ google_search: {} }],
+              generationConfig: {
+                maxOutputTokens: 30,
+                temperature: 0.1,
+              },
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          console.error(`[describe-scene] Gemini search ${res.status}: ${await res.text()}`);
+          return undefined;
+        }
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p.text ?? "")
+          .join("")
+          .trim();
+
+        if (!text || text.toLowerCase() === "unknown") return undefined;
+        // Clean up common formatting artifacts
+        return text.replace(/^["']|["']$/g, "").replace(/[.!]+$/, "").trim() || undefined;
+      } catch (err) {
+        console.error("[describe-scene] Game search failed:", err);
+        return undefined;
+      }
+    }
+
     // ── Call the selected provider ──────────────────────────────────
 
+    // Run scene description and game identification in parallel when
+    // we don't have a game name yet
     let result: VisionResult;
+    let searchGameName: string | undefined;
+
     try {
-      if (provider === "anthropic") {
-        result = await callAnthropic();
-      } else if (provider === "gemini") {
-        result = await callGemini();
+      if (!game_name && GEMINI_API_KEY) {
+        // Run both in parallel — scene description + web-search game ID
+        const descriptionPromise = (async () => {
+          if (provider === "anthropic") return callAnthropic();
+          if (provider === "gemini") return callGemini();
+          return callDashscope();
+        })();
+        const [descResult, gameResult] = await Promise.all([
+          descriptionPromise,
+          identifyGameWithSearch(),
+        ]);
+        result = descResult;
+        searchGameName = gameResult;
       } else {
-        result = await callDashscope();
+        if (provider === "anthropic") {
+          result = await callAnthropic();
+        } else if (provider === "gemini") {
+          result = await callGemini();
+        } else {
+          result = await callDashscope();
+        }
       }
     } catch (providerErr) {
       const msg =
@@ -242,27 +320,19 @@ Deno.serve(async (req: Request) => {
       return errorResponse(`Vision API error: ${msg}`, 502);
     }
 
-    // Try to extract game/app name from structured DETECTED: tag
-    let detectedGame: string | undefined;
+    // Determine game name — prefer search-grounded result, fall back to DETECTED: tag
+    let detectedGame: string | undefined = searchGameName;
     let description = result.text;
-    if (!game_name) {
+
+    if (!detectedGame && !game_name) {
       const detectedMatch = result.text.match(/DETECTED:\s*(.+)/i);
       if (detectedMatch) {
         const raw = detectedMatch[1].trim();
-        // Strip trailing punctuation
         detectedGame = raw.replace(/[.!]+$/, '').trim() || undefined;
-        // Remove the DETECTED: line from the description
-        description = result.text.replace(/\n?DETECTED:\s*.+/i, '').trim();
-      } else {
-        // Fallback: try loose patterns
-        const gameMatch = result.text.match(
-          /(?:game[:\s]+|playing[:\s]+|this (?:is|looks like)[:\s]+)["']?([^"'\n.]+)/i,
-        );
-        if (gameMatch) {
-          detectedGame = gameMatch[1].trim();
-        }
       }
     }
+    // Always strip the DETECTED: line from description
+    description = result.text.replace(/\n?DETECTED:\s*.+/i, '').trim();
 
     return jsonResponse({
       description,
