@@ -1876,6 +1876,17 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
             {syncingVoices ? 'Syncing...' : 'Sync from Fish Audio'}
           </Button>
         </div>
+      {:else if activeTab === 'history'}
+        <Button variant="ghost" onclick={() => importFileInput?.click()} testid="import-yaml-btn">Import YAML</Button>
+        <Button variant="secondary" onclick={exportConfig} testid="export-yaml-btn">Export YAML</Button>
+        <input
+          type="file"
+          accept=".yaml,.yml"
+          style="display:none"
+          bind:this={importFileInput}
+          onchange={handleImportFile}
+          data-testid="import-file-input"
+        />
       {/if}
     </div>
   </div>
@@ -2746,18 +2757,11 @@ The player said: "nice shot!"</pre>
         <p class="muted">Loading snapshots...</p>
       {:else}
         <!-- Toolbar -->
-        <div class="toolbar">
-          <div class="search-bar">
+        <div class="voices-toolbar">
+          <div class="voices-toolbar-left">
             {#if snapshots.length > 0}
               <Badge variant="default" text="{snapshotsFiltered.length} snapshot{snapshotsFiltered.length !== 1 ? 's' : ''}" testid="snapshot-count-badge" />
             {/if}
-            <input
-              type="text"
-              class="search-input"
-              placeholder="Search snapshots..."
-              bind:value={snapshotSearch}
-              data-testid="snapshot-search-input"
-            />
             <button
               class="celebrity-toggle"
               class:active={snapshotFavoritesOnly}
@@ -2767,16 +2771,13 @@ The player said: "nice shot!"</pre>
               {snapshotFavoritesOnly ? 'Show All' : 'Favorites Only'}
             </button>
           </div>
-          <div class="toolbar-actions">
-            <Button variant="ghost" size="sm" onclick={exportConfig} testid="export-yaml-btn">Export YAML</Button>
-            <Button variant="ghost" size="sm" onclick={() => importFileInput?.click()} testid="import-yaml-btn">Import YAML</Button>
+          <div class="voices-search">
             <input
-              type="file"
-              accept=".yaml,.yml"
-              style="display:none"
-              bind:this={importFileInput}
-              onchange={handleImportFile}
-              data-testid="import-file-input"
+              type="text"
+              class="search-input"
+              placeholder="Search snapshots..."
+              bind:value={snapshotSearch}
+              data-testid="snapshot-search-input"
             />
           </div>
         </div>
@@ -5231,11 +5232,6 @@ The player said: "nice shot!"</pre>
     gap: var(--space-4);
     flex: 1;
     min-height: 0;
-  }
-  .toolbar-actions {
-    display: flex;
-    gap: var(--space-2);
-    align-items: center;
   }
   .star-btn {
     background: none;
