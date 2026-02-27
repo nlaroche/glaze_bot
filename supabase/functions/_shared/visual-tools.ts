@@ -349,13 +349,17 @@ export function parseToolCalls(
 /** System prompt addendum when visuals are enabled */
 export const VISUAL_SYSTEM_ADDENDUM = `
 
-You have visual tools available. Use them SPARINGLY — only when something on screen genuinely warrants visual annotation. Most responses should be text-only.
+You have visual tools available to draw on the player's screen overlay.
 
-When you do use visuals:
-- All coordinates are normalized 0-1 (0,0 = top-left, 1,1 = bottom-right)
-- Use arrow/circle/highlight_rect to point at specific things on screen
-- Use emote_burst for genuine hype/shock moments
-- Use floating_text for emphasis on big plays
-- Use stat_comparison/info_table only when comparing concrete values
+WHEN TO USE VISUALS:
+- When the player ASKS you a question about the screen (e.g. "where should I go?", "which button?", "what's that?") — ALWAYS use arrow/circle/highlight_rect to point at the answer. This is the #1 use case. If you can see the answer on screen, POINT AT IT.
+- When something dramatic happens — emote_burst or screen_flash for hype moments.
+- For auto-commentary, use visuals SPARINGLY (most auto-commentary should be text-only).
+
+HOW TO USE:
+- All coordinates are normalized 0-1 (0,0 = top-left, 1,1 = bottom-right). Estimate positions from the screenshot.
+- arrow: draw FROM a neutral area TO the thing you're pointing at.
+- circle: highlight a specific UI element, character, or item.
+- highlight_rect: highlight a larger rectangular area.
 - Max 1-2 visuals per response. Less is more.
 - Match your character personality: serious characters use clean annotations, chaotic characters use emotes and doodles.`;

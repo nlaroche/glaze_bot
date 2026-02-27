@@ -658,7 +658,7 @@ export class CommentaryEngine {
   }
 
   private async doOneCycle() {
-    if (this.speaking) return;
+    if (this.speaking || this.processingUserMessage) return;
     if (this.party.length === 0) return;
 
     // Prioritize user messages over timed commentary
@@ -678,6 +678,10 @@ export class CommentaryEngine {
       return;
     }
 
+    // Claim the speaking lock BEFORE any async work to prevent races
+    // with user message handlers
+    this.speaking = true;
+
     // Capture frame (grab_frame returns a data URI: "data:image/jpeg;base64,...")
     let frameDataUri: string;
     let frameB64: string;
@@ -695,6 +699,7 @@ export class CommentaryEngine {
         step: 'grab_frame',
         message: err instanceof Error ? err.message : String(err),
       });
+      this.speaking = false;
       throw err;
     }
 
@@ -716,6 +721,7 @@ export class CommentaryEngine {
     const session = await getSession();
     if (!session) {
       logDebug('error', { message: 'Not authenticated' });
+      this.speaking = false;
       return;
     }
 
@@ -728,7 +734,6 @@ export class CommentaryEngine {
       historyLength: history.length,
     });
 
-    this.speaking = true;
     try {
       // Build system prompt: character's own prompt + any custom instructions from settings
       let systemPrompt = character.system_prompt;
