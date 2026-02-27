@@ -84,6 +84,8 @@ export class CommentaryEngine {
   // User message queue
   private userMessageQueue: string[] = [];
   private processingUserMessage = false;
+  /** Abort controller for the current timed commentary cycle — aborted when a user message arrives */
+  private cycleAbort: AbortController | null = null;
 
   /** Callback fired when a new chat message is produced */
   onChatMessage: ((entry: ChatLogEntry) => void) | null = null;
@@ -163,6 +165,14 @@ export class CommentaryEngine {
 
   queueUserMessage(text: string) {
     this.userMessageQueue.push(text);
+
+    // If a timed commentary cycle is in-flight, abort it so the user message gets priority
+    if (this.cycleAbort) {
+      logDebug('info', { message: 'Aborting timed commentary — user message takes priority' });
+      this.cycleAbort.abort();
+      // speaking lock is released in doOneCycle's catch block
+    }
+
     if (!this.speaking && !this.processingUserMessage) {
       this.processUserMessages();
     }
@@ -683,6 +693,8 @@ export class CommentaryEngine {
     // Claim the speaking lock BEFORE any async work to prevent races
     // with user message handlers
     this.speaking = true;
+    this.cycleAbort = new AbortController();
+    const signal = this.cycleAbort.signal;
 
     // Capture frame (grab_frame returns a data URI: "data:image/jpeg;base64,...")
     let frameDataUri: string;
@@ -760,6 +772,7 @@ export class CommentaryEngine {
             scene_context: sceneContext,
             enable_visuals: true,
           }),
+          signal,
         },
       );
 
@@ -804,6 +817,18 @@ export class CommentaryEngine {
       // Update history
       this.appendHistory(character.id, responseText);
 
+      // Check if we were aborted (user message arrived) before proceeding to TTS
+      if (signal.aborted) {
+        logDebug('info', { message: 'Timed commentary aborted before TTS — yielding to user message' });
+        this.speaking = false;
+        this.cycleAbort = null;
+        // Process the queued user message now
+        if (this.userMessageQueue.length > 0) {
+          setTimeout(() => this.processUserMessages(), 0);
+        }
+        return;
+      }
+
       // TTS
       let audioBlobUrl: string | null = null;
       if (character.voice_id) {
@@ -826,6 +851,7 @@ export class CommentaryEngine {
                 text: cleanForTTS(responseText),
                 reference_id: character.voice_id,
               }),
+              signal,
             },
           );
 
@@ -845,6 +871,16 @@ export class CommentaryEngine {
             });
           }
         } catch (ttsErr) {
+          // If aborted, don't log as error — it's intentional
+          if (signal.aborted) {
+            logDebug('info', { message: 'TTS aborted — yielding to user message' });
+            this.speaking = false;
+            this.cycleAbort = null;
+            if (this.userMessageQueue.length > 0) {
+              setTimeout(() => this.processUserMessages(), 0);
+            }
+            return;
+          }
           logDebug('error', {
             step: 'tts-fetch',
             message: ttsErr instanceof Error ? ttsErr.message : String(ttsErr),
@@ -890,11 +926,19 @@ export class CommentaryEngine {
       if (this.party.length > 1 && Math.random() < REACT_CHANCE) {
         await this.doReaction(character, responseText, frameB64, session);
       }
+    } catch (err) {
+      // AbortError is expected when user message preempts timed commentary
+      if (signal.aborted) {
+        logDebug('info', { message: 'Timed commentary cycle aborted — user message takes priority' });
+      } else {
+        throw err;
+      }
     } finally {
       this.speaking = false;
+      this.cycleAbort = null;
       // Check for queued user messages after finishing
       if (this.userMessageQueue.length > 0) {
-        setTimeout(() => this.processUserMessages(), 100);
+        setTimeout(() => this.processUserMessages(), 0);
       }
     }
   }
