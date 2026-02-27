@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { VisualCommand } from '@glazebot/shared-types';
-  import { getActiveVisuals } from './primitiveRegistry';
+  import { getActiveVisuals } from './primitiveRegistry.svelte';
 
   // SVG renderers
   import ArrowRenderer from './renderers/ArrowRenderer.svelte';

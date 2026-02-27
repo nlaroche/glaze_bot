@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import VisualRenderer from '$lib/overlay/VisualRenderer.svelte';
-  import { pushVisuals } from '$lib/overlay/primitiveRegistry';
+  import { pushVisuals } from '$lib/overlay/primitiveRegistry.svelte';
 
   interface Bubble {
     id: number;
