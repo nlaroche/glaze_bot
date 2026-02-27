@@ -60,11 +60,11 @@
     if (!email.trim()) return;
     error = '';
     loading = true;
-    const { error: err } = await signInWithEmailOtp(email.trim());
-    if (err) {
-      error = err.message;
-    } else {
+    try {
+      await signInWithEmailOtp(email.trim());
       otpSent = true;
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
     }
     loading = false;
   }
@@ -73,8 +73,11 @@
     if (otpCode.length !== 6) return;
     error = '';
     loading = true;
-    const { error: err } = await verifyEmailOtp(email.trim(), otpCode);
-    if (err) error = err.message;
+    try {
+      await verifyEmailOtp(email.trim(), otpCode);
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
     loading = false;
   }
 </script>

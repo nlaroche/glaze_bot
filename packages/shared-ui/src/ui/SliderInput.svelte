@@ -8,7 +8,17 @@
     suffix = '',
     disabled = false,
     testid = '',
-    onchange = () => {},
+    onchange = (_e: Event) => {},
+  }: {
+    label?: string;
+    value?: number;
+    min?: number;
+    max?: number;
+    step?: number;
+    suffix?: string;
+    disabled?: boolean;
+    testid?: string;
+    onchange?: (e: Event & { currentTarget: EventTarget & HTMLInputElement }) => void;
   } = $props();
 
   function formatValue(v: number): string {
