@@ -39,7 +39,43 @@ let overlayOn = $state(loadOverlayPref());
 // $state signals may not resolve correctly outside Svelte's reactive tracking context.
 let _overlayOnRaw = overlayOn;
 let chatLog = $state<ChatLogEntry[]>([]);
-let activeShare = $state<CaptureSource | null>(null);
+
+// Persist activeShare to localStorage so screen share survives HMR
+function loadActiveShare(): CaptureSource | null {
+  try {
+    const stored = localStorage.getItem('glazebot-active-share');
+    if (stored) return JSON.parse(stored);
+  } catch { /* ignore */ }
+  return null;
+}
+function saveActiveShare(source: CaptureSource | null) {
+  try {
+    if (source) {
+      localStorage.setItem('glazebot-active-share', JSON.stringify(source));
+    } else {
+      localStorage.removeItem('glazebot-active-share');
+    }
+  } catch { /* ignore */ }
+}
+let activeShare = $state<CaptureSource | null>(loadActiveShare());
+
+// Persist running state so engine can auto-resume after HMR
+function loadRunningState(): boolean {
+  try {
+    return localStorage.getItem('glazebot-engine-running') === 'true';
+  } catch { /* ignore */ }
+  return false;
+}
+function saveRunningState(value: boolean) {
+  try {
+    if (value) {
+      localStorage.setItem('glazebot-engine-running', 'true');
+    } else {
+      localStorage.removeItem('glazebot-engine-running');
+    }
+  } catch { /* ignore */ }
+}
+
 let isRecording = $state(false);
 let sttBubbleText = $state<string | null>(null);
 let sttBubbleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -71,6 +107,19 @@ async function ensureSession(): Promise<string> {
     }
   } catch { /* IndexedDB unavailable */ }
 })();
+
+// ── Auto-resume engine after HMR ──
+// If the engine was running before the module re-executed, restart it.
+{
+  const wasRunning = loadRunningState();
+  const share = activeShare;
+  const party = partySlots.filter((s): s is GachaCharacter => s !== null);
+  if (wasRunning && share && party.length > 0) {
+    isRunning = true;
+    engine.start(share.id, party);
+    console.info('[session] Auto-resumed commentary engine after HMR');
+  }
+}
 
 // Wire engine callbacks once at module level
 engine.onChatMessage = (entry) => {
@@ -126,10 +175,12 @@ export function setPartySlot(index: number, char: GachaCharacter | null) {
 
 export function setActiveShare(source: CaptureSource | null) {
   activeShare = source;
+  saveActiveShare(source);
 }
 
 export function setRunning(value: boolean) {
   isRunning = value;
+  saveRunningState(value);
 }
 
 export function setPaused(value: boolean) {

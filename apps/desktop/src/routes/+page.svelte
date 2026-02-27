@@ -114,7 +114,7 @@
   // Auto-scroll chat log (only when viewing live)
   $effect(() => {
     void session.chatLog.length;
-    if (chatLogEl && !session.isViewingHistory) {
+    if (chatLogEl) {
       requestAnimationFrame(() => {
         chatLogEl!.scrollTop = chatLogEl!.scrollHeight;
       });
@@ -191,8 +191,6 @@
 
     setRunning(true);
     setPaused(false);
-    const partyNames = freshParty.map((c) => c.name);
-    await startNewSession(partyNames);
     await session.engine.start(session.activeShare.id, freshParty);
 
     // Init speech (whisper model + VAD if always-on)
@@ -237,8 +235,6 @@
     setPaused(false);
     session.engine.stop();
     cleanupSpeech();
-    // Refresh sessions list so the just-finished session shows updated message count
-    refreshSessions();
   }
 
   // Keep engine party in sync
@@ -524,9 +520,7 @@
     <div class="chat-log" bind:this={chatLogEl}>
       {#if session.chatLog.length === 0}
         <div class="chat-empty">
-          {#if session.isViewingHistory}
-            <p>This session has no messages.</p>
-          {:else if !auth.isAuthenticated}
+          {#if !auth.isAuthenticated}
             <p>Sign in to start commentary.</p>
           {:else if loadingChars}
             <p>Loading characters...</p>
@@ -563,8 +557,7 @@
     </div>
 
     <!-- Text input bar (always visible, disabled when not running) -->
-    {#if !session.isViewingHistory}
-      <div class="input-bar" class:input-bar-disabled={!hasParty}>
+    <div class="input-bar" class:input-bar-disabled={!hasParty}>
         {#if session.sttBubbleText}
           <div class="stt-bubble">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--color-teal)" stroke-width="1.5"/><path d="M6 3v3l2 1" stroke="var(--color-teal)" stroke-width="1.2" stroke-linecap="round"/></svg>
@@ -615,11 +608,8 @@
           </button>
         </div>
       </div>
-    {/if}
 
-    <!-- Controls Bar (hidden when viewing history) -->
-    {#if !session.isViewingHistory}
-      <div class="controls-bar">
+    <div class="controls-bar">
         <!-- Capture group / Active share -->
         <div class="ctrl-group">
           <span class="ctrl-label">Capture</span>
@@ -685,8 +675,7 @@
           </button>
         </div>
       </div>
-    {/if}
-  </div>
+    </div>
 
   <!-- Right Panel -->
   <aside class="right-panel">
