@@ -43,7 +43,7 @@
   .field-label { font-size: var(--font-base); font-weight: 500; color: var(--color-text-secondary); }
   .slider-row { display: flex; align-items: center; gap: var(--space-3-5); }
 
-  /* ── Custom Slider ──────────────────────────────────────────── */
+  /* ── Custom Slider ── */
   .slider {
     flex: 1;
     cursor: pointer;
@@ -52,23 +52,22 @@
     height: 6px;
     border-radius: 3px;
     outline: none;
-    /* Filled portion = teal, unfilled = subtle surface */
     background: linear-gradient(
       to right,
-      var(--color-teal) 0%,
-      var(--color-teal) var(--fill, 50%),
-      var(--white-a8) var(--fill, 50%),
-      var(--white-a8) 100%
+      var(--color-accent) 0%,
+      var(--color-accent) var(--fill, 50%),
+      var(--white-a10) var(--fill, 50%),
+      var(--white-a10) 100%
     );
     transition: background var(--transition-fast);
   }
   .slider:hover {
     background: linear-gradient(
       to right,
-      var(--color-light-teal) 0%,
-      var(--color-light-teal) var(--fill, 50%),
-      var(--white-a12) var(--fill, 50%),
-      var(--white-a12) 100%
+      var(--color-accent-light) 0%,
+      var(--color-accent-light) var(--fill, 50%),
+      var(--white-a15) var(--fill, 50%),
+      var(--white-a15) 100%
     );
   }
   .slider:disabled {
@@ -83,30 +82,30 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(180deg, #5bcece 0%, #3B9797 100%);
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(180deg, var(--color-accent-light) 0%, var(--color-accent) 100%);
+    border: 2px solid var(--white-a20);
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 0 0 0 rgba(59, 151, 151, 0);
+      0 1px 3px var(--black-a40),
+      0 0 0 0 transparent;
     cursor: pointer;
     transition: box-shadow var(--transition-base), transform var(--transition-base);
   }
   .slider::-webkit-slider-thumb:hover {
     transform: scale(1.15);
     box-shadow:
-      0 1px 4px rgba(0, 0, 0, 0.5),
-      0 0 0 4px rgba(59, 151, 151, 0.15);
+      0 1px 4px var(--black-a50),
+      0 0 0 4px var(--accent-a15);
   }
   .slider:active::-webkit-slider-thumb {
     transform: scale(1.05);
     box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.5),
-      0 0 0 6px rgba(59, 151, 151, 0.2);
+      0 1px 2px var(--black-a50),
+      0 0 0 6px var(--accent-a20);
   }
   .slider:focus-visible::-webkit-slider-thumb {
     box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 0 0 3px rgba(59, 151, 151, 0.3);
+      0 1px 3px var(--black-a40),
+      0 0 0 3px var(--accent-a30);
   }
 
   /* Firefox thumb */
@@ -114,28 +113,28 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: linear-gradient(180deg, #5bcece 0%, #3B9797 100%);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(180deg, var(--color-accent-light) 0%, var(--color-accent) 100%);
+    border: 2px solid var(--white-a20);
+    box-shadow: 0 1px 3px var(--black-a40);
     cursor: pointer;
     transition: box-shadow var(--transition-base), transform var(--transition-base);
   }
   .slider::-moz-range-thumb:hover {
     box-shadow:
-      0 1px 4px rgba(0, 0, 0, 0.5),
-      0 0 0 4px rgba(59, 151, 151, 0.15);
+      0 1px 4px var(--black-a50),
+      0 0 0 4px var(--accent-a15);
   }
 
   /* Firefox track */
   .slider::-moz-range-track {
     height: 6px;
     border-radius: 3px;
-    background: var(--white-a8);
+    background: var(--white-a10);
   }
   .slider::-moz-range-progress {
     height: 6px;
     border-radius: 3px;
-    background: var(--color-teal);
+    background: var(--color-accent);
   }
 
   .slider-value {

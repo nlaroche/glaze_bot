@@ -60,17 +60,15 @@
   nav {
     display: flex;
     flex-direction: column;
-    align-items: center;
     width: var(--sidebar-width);
     min-width: var(--sidebar-width);
     padding: var(--space-2) 0;
-    background: rgba(10, 22, 42, 0.35);
+    background: var(--color-chrome);
   }
 
   .nav-items {
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: var(--space-1);
   }
 
@@ -78,39 +76,60 @@
     margin-top: auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: var(--space-1);
     margin-bottom: var(--space-2);
   }
 
   .icon-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
+    width: 100%;
     height: 44px;
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: 0;
     background: transparent;
     color: var(--color-text-muted);
     cursor: pointer;
-    transition: all var(--transition-slow) ease;
+    transition: color var(--transition-slow) ease;
+  }
+
+  /* Left-edge indicator line */
+  .icon-btn::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    border-radius: 0 2px 2px 0;
+    background: var(--color-teal);
+    transform: translateY(-50%);
+    transition: height var(--transition-slow) ease;
   }
 
   .icon-btn:hover {
-    border-radius: var(--radius-2xl);
-    background: var(--teal-a20);
     color: var(--color-text-primary);
   }
 
+  .icon-btn:hover::before {
+    height: 20px;
+  }
+
   .icon-btn.active {
-    border-radius: var(--radius-2xl);
-    background: var(--color-teal);
-    color: white;
+    color: var(--color-teal);
+  }
+
+  .icon-btn.active::before {
+    height: 32px;
   }
 
   .logout-btn:hover {
-    background: var(--error-a20);
     color: var(--color-error);
+  }
+
+  .logout-btn:hover::before {
+    background: var(--color-error);
   }
 </style>

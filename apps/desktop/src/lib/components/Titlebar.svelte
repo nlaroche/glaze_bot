@@ -45,7 +45,7 @@
     justify-content: space-between;
     height: var(--titlebar-height);
     padding: 0 12px;
-    background: rgba(10, 22, 42, 0.35);
+    background: var(--color-chrome);
     -webkit-app-region: drag;
   }
 
@@ -53,7 +53,7 @@
     font-family: var(--font-brand);
     font-size: 12px;
     font-weight: 400;
-    color: #c0c8d4;
+    color: var(--color-heading);
     letter-spacing: 1px;
   }
 
@@ -61,7 +61,7 @@
     font-family: var(--font-brand);
     font-size: 9px;
     font-weight: 400;
-    color: #6B7788;
+    color: var(--color-text-muted);
     letter-spacing: 1.5px;
   }
 
@@ -85,7 +85,7 @@
   }
 
   button:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--color-chrome-hover);
     color: var(--color-text-primary);
   }
 

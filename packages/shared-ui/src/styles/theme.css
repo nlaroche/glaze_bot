@@ -8,13 +8,17 @@
   --color-pink: #FDB5CE;
   --color-navy: #0a0e18;
   --color-deep-blue: #0a0e18;
-  --color-teal: #3B9797;
+  --color-accent: #3B9797;
+  --color-teal: var(--color-accent);
+  --color-accent-light: #5bcece;
 
   /* Surfaces */
   --color-surface: #0f1420;
   --color-surface-raised: #141a28;
   --color-surface-overlay: #181f30;
   --color-sidebar: #070a12;
+  --color-chrome: rgba(10, 22, 42, 0.35);
+  --color-chrome-hover: rgba(255, 255, 255, 0.08);
   --color-border: rgba(255, 255, 255, 0.06);
   --color-border-subtle: rgba(255, 255, 255, 0.03);
 
@@ -106,17 +110,29 @@
   --black-a40: rgba(0, 0, 0, 0.40);
   --black-a50: rgba(0, 0, 0, 0.50);
 
-  /* Teal */
-  --teal-a5: rgba(59, 151, 151, 0.05);
-  --teal-a8: rgba(59, 151, 151, 0.08);
-  --teal-a10: rgba(59, 151, 151, 0.10);
-  --teal-a12: rgba(59, 151, 151, 0.12);
-  --teal-a15: rgba(59, 151, 151, 0.15);
-  --teal-a20: rgba(59, 151, 151, 0.20);
-  --teal-a25: rgba(59, 151, 151, 0.25);
-  --teal-a30: rgba(59, 151, 151, 0.30);
-  --teal-a40: rgba(59, 151, 151, 0.40);
-  --teal-a50: rgba(59, 151, 151, 0.50);
+  /* Accent (teal in default theme) */
+  --accent-a5: rgba(59, 151, 151, 0.05);
+  --accent-a8: rgba(59, 151, 151, 0.08);
+  --accent-a10: rgba(59, 151, 151, 0.10);
+  --accent-a12: rgba(59, 151, 151, 0.12);
+  --accent-a15: rgba(59, 151, 151, 0.15);
+  --accent-a20: rgba(59, 151, 151, 0.20);
+  --accent-a25: rgba(59, 151, 151, 0.25);
+  --accent-a30: rgba(59, 151, 151, 0.30);
+  --accent-a40: rgba(59, 151, 151, 0.40);
+  --accent-a50: rgba(59, 151, 151, 0.50);
+
+  /* Legacy aliases — use --accent-a* for new code */
+  --teal-a5: var(--accent-a5);
+  --teal-a8: var(--accent-a8);
+  --teal-a10: var(--accent-a10);
+  --teal-a12: var(--accent-a12);
+  --teal-a15: var(--accent-a15);
+  --teal-a20: var(--accent-a20);
+  --teal-a25: var(--accent-a25);
+  --teal-a30: var(--accent-a30);
+  --teal-a40: var(--accent-a40);
+  --teal-a50: var(--accent-a50);
 
   /* Navy */
   --navy-a10: rgba(10, 14, 24, 0.10);
@@ -128,10 +144,23 @@
   --navy-a70: rgba(10, 14, 24, 0.70);
   --navy-a80: rgba(10, 14, 24, 0.80);
 
-  /* Error */
+  /* Error / Stop */
   --error-a12: rgba(248, 113, 113, 0.12);
   --error-a15: rgba(248, 113, 113, 0.15);
   --error-a20: rgba(248, 113, 113, 0.20);
+  --stop-a10: rgba(255, 107, 107, 0.1);
+  --stop-a15: rgba(255, 107, 107, 0.15);
+  --stop-a20: rgba(255, 107, 107, 0.2);
+  --stop-a30: rgba(255, 107, 107, 0.3);
+  --stop-a35: rgba(255, 107, 107, 0.35);
+
+  /* Start / Success */
+  --start-a8: rgba(91, 202, 122, 0.08);
+  --start-a10: rgba(91, 202, 122, 0.1);
+  --start-a15: rgba(91, 202, 122, 0.15);
+  --start-a20: rgba(91, 202, 122, 0.2);
+  --start-a25: rgba(91, 202, 122, 0.25);
+  --start-a35: rgba(91, 202, 122, 0.35);
 
   /* Epic */
   --epic-a8: rgba(176, 106, 255, 0.08);
@@ -152,11 +181,11 @@
   --color-error-soft: #fca5a5;
   --color-success: #4ade80;
   --color-warning: #fbbf24;
-  --color-info: #5bcece;
+  --color-info: var(--color-accent-light);
   --color-heading: #c0c8d4;
   --color-start: #5bca7a;
   --color-stop: #ff6b6b;
-  --color-light-teal: #5bcece;
+  --color-light-teal: var(--color-accent-light);
 
   /* ─── Composite: Panel ─── */
   --panel-bg: rgba(255, 255, 255, 0.02);
@@ -224,12 +253,12 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-text-muted);
+  background: var(--white-a10);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: var(--white-a15);
 }
 
 /* Glass panel utility */
@@ -239,3 +268,8 @@ html, body {
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
+
+/* Theme overrides */
+@import './themes/frost.css';
+@import './themes/desert.css';
+@import './themes/sunset.css';

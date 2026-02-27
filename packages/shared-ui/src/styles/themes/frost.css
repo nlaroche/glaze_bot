@@ -1,0 +1,96 @@
+/* Frost — Dark icy theme with blue-white highlights */
+[data-theme="frost"] {
+  /* Brand colors */
+  --color-accent: #5BA8C8;
+  --color-accent-light: #7CC4E0;
+  --color-teal: var(--color-accent);
+  --color-pink: #B0C8D8;
+  --color-navy: #0A1018;
+  --color-deep-blue: #0A1018;
+
+  /* Surfaces — dark blue-grey with icy tint */
+  --color-surface: #0E1620;
+  --color-surface-raised: #14202C;
+  --color-surface-overlay: #182838;
+  --color-sidebar: #070C12;
+  --color-chrome: rgba(10, 20, 35, 0.45);
+  --color-chrome-hover: rgba(140, 200, 240, 0.08);
+  --color-border: rgba(140, 200, 240, 0.08);
+  --color-border-subtle: rgba(140, 200, 240, 0.04);
+
+  /* Text — icy white/blue tones on dark bg */
+  --color-text-primary: #D8E8F0;
+  --color-text-secondary: #8AAAB8;
+  --color-text-muted: #5A7888;
+
+  /* Glass */
+  --glass-bg: rgba(10, 16, 24, 0.88);
+  --glass-border: rgba(140, 200, 240, 0.08);
+
+  /* Semantic */
+  --color-heading: #B0D0E0;
+  --color-info: var(--color-accent-light);
+
+  /* Panel */
+  --panel-bg: rgba(140, 200, 240, 0.03);
+  --panel-border: rgba(140, 200, 240, 0.06);
+  --panel-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+
+  /* Input */
+  --input-bg: rgba(140, 200, 240, 0.04);
+  --input-border: rgba(140, 200, 240, 0.10);
+  --input-focus-border: rgba(91, 168, 200, 0.5);
+  --input-focus-bg: rgba(91, 168, 200, 0.06);
+
+  /* Buttons */
+  --btn-primary-bg: linear-gradient(135deg, rgba(91, 168, 200, 0.25), rgba(91, 168, 200, 0.15));
+  --btn-primary-bg-hover: linear-gradient(135deg, rgba(91, 168, 200, 0.35), rgba(91, 168, 200, 0.25));
+  --btn-primary-border: rgba(91, 168, 200, 0.3);
+  --btn-primary-text: #7CC4E0;
+  --btn-secondary-bg-hover-from: rgba(140, 200, 240, 0.08);
+  --btn-secondary-bg-hover-to: rgba(140, 200, 240, 0.04);
+
+  /* White alpha — icy blue tint */
+  --white-a2: rgba(140, 200, 240, 0.02);
+  --white-a3: rgba(140, 200, 240, 0.03);
+  --white-a4: rgba(140, 200, 240, 0.04);
+  --white-a5: rgba(140, 200, 240, 0.05);
+  --white-a6: rgba(140, 200, 240, 0.06);
+  --white-a8: rgba(140, 200, 240, 0.08);
+  --white-a10: rgba(140, 200, 240, 0.10);
+  --white-a12: rgba(140, 200, 240, 0.12);
+  --white-a15: rgba(140, 200, 240, 0.15);
+  --white-a20: rgba(140, 200, 240, 0.20);
+  --white-a25: rgba(140, 200, 240, 0.25);
+
+  /* Black alpha */
+  --black-a10: rgba(0, 0, 0, 0.12);
+  --black-a15: rgba(0, 0, 0, 0.18);
+  --black-a20: rgba(0, 0, 0, 0.24);
+  --black-a25: rgba(0, 0, 0, 0.30);
+  --black-a30: rgba(0, 0, 0, 0.35);
+  --black-a40: rgba(0, 0, 0, 0.45);
+  --black-a50: rgba(0, 0, 0, 0.55);
+
+  /* Accent alpha */
+  --accent-a5: rgba(91, 168, 200, 0.05);
+  --accent-a8: rgba(91, 168, 200, 0.08);
+  --accent-a10: rgba(91, 168, 200, 0.10);
+  --accent-a12: rgba(91, 168, 200, 0.12);
+  --accent-a15: rgba(91, 168, 200, 0.15);
+  --accent-a20: rgba(91, 168, 200, 0.20);
+  --accent-a25: rgba(91, 168, 200, 0.25);
+  --accent-a30: rgba(91, 168, 200, 0.30);
+  --accent-a40: rgba(91, 168, 200, 0.40);
+  --accent-a50: rgba(91, 168, 200, 0.50);
+
+  /* Navy alpha */
+  --navy-a10: rgba(10, 16, 24, 0.10);
+  --navy-a20: rgba(10, 16, 24, 0.20);
+  --navy-a30: rgba(10, 16, 24, 0.30);
+  --navy-a40: rgba(10, 16, 24, 0.40);
+  --navy-a50: rgba(10, 16, 24, 0.50);
+  --navy-a60: rgba(10, 16, 24, 0.60);
+  --navy-a70: rgba(10, 16, 24, 0.70);
+  --navy-a80: rgba(10, 16, 24, 0.80);
+}

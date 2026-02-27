@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import VisualRenderer from '$lib/overlay/VisualRenderer.svelte';
+  import { pushVisuals } from '$lib/overlay/primitiveRegistry';
 
   interface Bubble {
     id: number;
@@ -107,6 +109,9 @@
         await webview.listen('chat-message', (event: any) => {
           const p = event.payload;
           addBubble(p.name, p.rarity, p.text, p.image);
+          if (p.visuals?.length) {
+            pushVisuals(p.visuals);
+          }
         });
 
         await webview.listen('chat-dismiss', () => {
@@ -128,6 +133,7 @@
 </script>
 
 <div class="overlay-root">
+  <VisualRenderer />
   <div class="bubble-container">
     {#if !hasReceivedMessage && bubbles.length === 0}
       <div class="waiting-indicator">

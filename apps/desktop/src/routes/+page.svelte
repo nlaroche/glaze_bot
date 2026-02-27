@@ -13,12 +13,6 @@
     setOverlayOn,
     clearChatLog,
     getActiveParty,
-    initChatHistory,
-    startNewSession,
-    viewSession,
-    returnToLive,
-    removeSession,
-    refreshSessions,
     setRecording,
     showSttBubble,
     sendUserMessage,
@@ -27,7 +21,6 @@
     getDebugStore,
     logDebug,
   } from '$lib/stores/debug.svelte';
-  import type { ChatSession } from '$lib/stores/chatHistory';
 
   const auth = getAuthState();
   const session = getSessionStore();
@@ -48,14 +41,6 @@
       ? collection.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : collection
   );
-
-  // History panel state
-  let historyOpen = $state(false);
-
-  // Initialize chat history on mount
-  $effect(() => {
-    initChatHistory();
-  });
 
   // Load characters from Supabase when authenticated
   $effect(() => {
@@ -322,68 +307,114 @@
     legendary: 'var(--rarity-legendary)',
   };
 
-  // ── History helpers ──
-
-  function groupSessionsByDate(sessions: ChatSession[]): { label: string; sessions: ChatSession[] }[] {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-
-    const groups: { label: string; sessions: ChatSession[] }[] = [
-      { label: 'Today', sessions: [] },
-      { label: 'Yesterday', sessions: [] },
-      { label: 'Last 7 Days', sessions: [] },
-      { label: 'Older', sessions: [] },
-    ];
-
-    for (const s of sessions) {
-      const d = new Date(s.startedAt);
-      if (d >= today) {
-        groups[0].sessions.push(s);
-      } else if (d >= yesterday) {
-        groups[1].sessions.push(s);
-      } else if (d >= weekAgo) {
-        groups[2].sessions.push(s);
-      } else {
-        groups[3].sessions.push(s);
-      }
-    }
-
-    return groups.filter((g) => g.sessions.length > 0);
-  }
-
-  function formatSessionTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  let groupedSessions = $derived(groupSessionsByDate(session.historySessions));
-
-  function handleViewSession(sessionId: string) {
-    viewSession(sessionId);
-  }
-
-  function handleReturnToLive() {
-    returnToLive();
-  }
-
-  function handleDeleteSession(e: MouseEvent, sessionId: string) {
-    e.stopPropagation();
-    removeSession(sessionId);
-  }
-
   // ── Text input ──
   let userInput = $state('');
+  let chatInputEl = $state<HTMLInputElement | null>(null);
+
+  let hasParty = $derived(session.partySlots.some((s) => s !== null));
+
+  // ── @mention autocomplete ──
+  let mentionQuery = $state<string | null>(null);
+  let mentionIndex = $state(0);
+  let mentionStartPos = $state(0);
+
+  let mentionCandidates = $derived.by(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    const party = getActiveParty();
+    if (!q) return party; // show all party members when just "@"
+    return party.filter((c) => c.name.toLowerCase().includes(q));
+  });
+
+  /** Render @mentions in message text with cyan highlight */
+  function renderMentions(text: string): string {
+    // Escape HTML first to prevent XSS
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    // Match @Name patterns — character names from the party
+    const party = getActiveParty();
+    if (party.length === 0) return escaped;
+    // Build regex from party names (escape special regex chars), match longest first
+    const names = party
+      .map((c) => c.name)
+      .sort((a, b) => b.length - a.length)
+      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const pattern = new RegExp(`@(${names.join('|')})`, 'gi');
+    return escaped.replace(pattern, '<span class="mention-highlight">@$1</span>');
+  }
+
+  function checkMention() {
+    if (!chatInputEl) return;
+    const val = userInput;
+    const cursor = chatInputEl.selectionStart ?? val.length;
+    // Walk backwards from cursor to find "@"
+    const before = val.slice(0, cursor);
+    const atIdx = before.lastIndexOf('@');
+    if (atIdx === -1 || (atIdx > 0 && before[atIdx - 1] !== ' ')) {
+      mentionQuery = null;
+      return;
+    }
+    const query = before.slice(atIdx + 1);
+    // Close menu if there's a space after the query (user moved on)
+    if (query.includes(' ')) {
+      mentionQuery = null;
+      return;
+    }
+    mentionQuery = query;
+    mentionStartPos = atIdx;
+    mentionIndex = 0;
+  }
+
+  function insertMention(charName: string) {
+    const cursor = chatInputEl?.selectionStart ?? userInput.length;
+    const before = userInput.slice(0, mentionStartPos);
+    const after = userInput.slice(cursor);
+    userInput = `${before}@${charName} ${after}`;
+    mentionQuery = null;
+    // Focus back and set cursor position
+    setTimeout(() => {
+      if (chatInputEl) {
+        chatInputEl.focus();
+        const pos = before.length + charName.length + 2; // @name + space
+        chatInputEl.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  }
 
   function handleSendText() {
-    if (!userInput.trim() || !session.isRunning) return;
+    if (!userInput.trim() || !hasParty) return;
     sendUserMessage(userInput.trim());
     userInput = '';
+    mentionQuery = null;
   }
 
   function handleInputKeydown(e: KeyboardEvent) {
+    const candidates = mentionCandidates;
+    if (mentionQuery !== null && candidates.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mentionIndex = (mentionIndex + 1) % candidates.length;
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mentionIndex = (mentionIndex - 1 + candidates.length) % candidates.length;
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        insertMention(candidates[mentionIndex].name);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        mentionQuery = null;
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendText();
@@ -485,76 +516,10 @@
 </script>
 
 <div class="home">
-  <!-- History sidebar -->
-  <aside class="history-panel" class:history-open={historyOpen}>
-    <button class="history-toggle" onclick={() => { historyOpen = !historyOpen; }} title={historyOpen ? 'Close history' : 'Open history'}>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="8" cy="8" r="6" />
-        <polyline points="8,4 8,8 11,10" />
-      </svg>
-    </button>
-
-    {#if historyOpen}
-      <div class="history-content">
-        <div class="history-header">
-          <h2>Sessions</h2>
-        </div>
-
-        {#if session.isViewingHistory}
-          <button class="back-to-live" onclick={handleReturnToLive}>
-            <span class="live-dot"></span>
-            Back to Live
-          </button>
-        {/if}
-
-        <div class="history-list">
-          {#if groupedSessions.length === 0}
-            <p class="history-empty">No past sessions yet.</p>
-          {:else}
-            {#each groupedSessions as group}
-              <div class="history-group">
-                <span class="history-group-label">{group.label}</span>
-                {#each group.sessions as sess (sess.id)}
-                  <button
-                    class="history-item"
-                    class:history-item-active={session.viewingSessionId === sess.id}
-                    class:history-item-current={session.currentSessionId === sess.id}
-                    onclick={() => handleViewSession(sess.id)}
-                  >
-                    <div class="history-item-top">
-                      <span class="history-item-time">{formatSessionTime(sess.startedAt)}</span>
-                      <span class="history-item-count">{sess.messageCount} msg{sess.messageCount !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div class="history-item-party">
-                      {sess.partyNames.join(', ')}
-                    </div>
-                    {#if session.currentSessionId !== sess.id}
-                      <button class="history-item-delete" onclick={(e) => handleDeleteSession(e, sess.id)} title="Delete session">&times;</button>
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-            {/each}
-          {/if}
-        </div>
-      </div>
-    {/if}
-  </aside>
-
-  <!-- Left / Center area -->
   <div class="main-area">
     <!-- Commentary Log -->
     <div class="chat-section-header">
-      <h2>
-        {#if session.isViewingHistory}
-          Viewing Past Session
-        {:else}
-          Chat History
-        {/if}
-      </h2>
-      {#if session.isViewingHistory}
-        <button class="back-btn" onclick={handleReturnToLive}>Back to Live</button>
-      {/if}
+      <h2>Chat History</h2>
     </div>
     <div class="chat-log" bind:this={chatLogEl}>
       {#if session.chatLog.length === 0}
@@ -590,20 +555,42 @@
                 <span class="msg-name" style="color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">{msg.name}</span>
                 <span class="msg-time">{msg.time}</span>
               </div>
-              <p class="msg-text">{msg.text}</p>
+              <p class="msg-text">{@html renderMentions(msg.text)}</p>
             </div>
           </div>
         {/each}
       {/if}
     </div>
 
-    <!-- Text input bar (shown when running and not viewing history) -->
-    {#if session.isRunning && !session.isViewingHistory}
-      <div class="input-bar">
+    <!-- Text input bar (always visible, disabled when not running) -->
+    {#if !session.isViewingHistory}
+      <div class="input-bar" class:input-bar-disabled={!hasParty}>
         {#if session.sttBubbleText}
           <div class="stt-bubble">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--color-teal)" stroke-width="1.5"/><path d="M6 3v3l2 1" stroke="var(--color-teal)" stroke-width="1.2" stroke-linecap="round"/></svg>
             <span>{session.sttBubbleText}</span>
+          </div>
+        {/if}
+        <!-- @mention autocomplete dropdown -->
+        {#if mentionQuery !== null && mentionCandidates.length > 0}
+          <div class="mention-dropdown">
+            {#each mentionCandidates as char, i (char.id)}
+              <button
+                class="mention-option"
+                class:mention-option-active={i === mentionIndex}
+                onmousedown={(e) => { e.preventDefault(); insertMention(char.name); }}
+                onmouseenter={() => mentionIndex = i}
+              >
+                <span class="mention-avatar" style="border-color: {rarityNameColor[char.rarity]}">
+                  {#if char.avatar_url}
+                    <img src={char.avatar_url} alt="" />
+                  {:else}
+                    {char.name[0]}
+                  {/if}
+                </span>
+                <span class="mention-name" style="color: {rarityNameColor[char.rarity]}">{char.name}</span>
+              </button>
+            {/each}
           </div>
         {/if}
         <div class="input-row">
@@ -616,11 +603,14 @@
           <input
             class="chat-input"
             type="text"
-            placeholder="Type a message..."
+            placeholder={hasParty ? "Type @ to mention a character..." : "Add a character to chat..."}
             bind:value={userInput}
+            bind:this={chatInputEl}
+            oninput={checkMention}
             onkeydown={handleInputKeydown}
+            disabled={!hasParty}
           />
-          <button class="send-btn" onclick={handleSendText} disabled={!userInput.trim()}>
+          <button class="send-btn" onclick={handleSendText} disabled={!hasParty || !userInput.trim()}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/></svg>
           </button>
         </div>
@@ -831,212 +821,6 @@
     overflow: hidden;
   }
 
-  /* ── History sidebar ── */
-  .history-panel {
-    display: flex;
-    flex-direction: column;
-    width: 40px;
-    flex-shrink: 0;
-    border-right: 1px solid var(--white-a6);
-    background: var(--black-a10);
-    transition: width 0.2s ease;
-    overflow: hidden;
-  }
-
-  .history-panel.history-open {
-    width: 240px;
-  }
-
-  .history-toggle {
-    width: 100%;
-    padding: var(--space-3) var(--space-2-5);
-    border: none;
-    background: none;
-    color: var(--color-text-muted, #6B7788);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: color var(--transition-base), background var(--transition-base);
-  }
-
-  .history-toggle:hover {
-    color: var(--color-text-primary, #e2e8f0);
-    background: var(--white-a4);
-  }
-
-  .history-open .history-toggle {
-    justify-content: flex-start;
-    padding-left: var(--space-3);
-  }
-
-  .history-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 0 var(--space-2) var(--space-2);
-  }
-
-  .history-header {
-    padding: var(--space-1) var(--space-1) var(--space-2);
-  }
-
-  .history-header h2 {
-    font-size: var(--font-xs);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--color-text-muted, #6B7788);
-    margin: 0;
-    font-weight: 600;
-  }
-
-  .back-to-live {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1-5);
-    padding: var(--space-1-5) var(--space-2);
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(91, 202, 122, 0.25);
-    background: rgba(91, 202, 122, 0.08);
-    color: var(--color-start, #5BCA7A);
-    font-size: var(--font-xs);
-    cursor: pointer;
-    margin-bottom: var(--space-2);
-    transition: background var(--transition-base);
-    width: 100%;
-  }
-
-  .back-to-live:hover {
-    background: rgba(91, 202, 122, 0.15);
-  }
-
-  .live-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-full);
-    background: var(--color-start, #5BCA7A);
-    animation: pulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-  }
-
-  .history-list {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .history-empty {
-    font-size: var(--font-brand-md);
-    color: var(--color-text-muted, #6B7788);
-    text-align: center;
-    padding: var(--space-4) 0;
-    margin: 0;
-  }
-
-  .history-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-0-5);
-  }
-
-  .history-group-label {
-    font-size: var(--font-micro);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--color-text-muted, #6B7788);
-    font-weight: 600;
-    padding: var(--space-1-5) var(--space-1) var(--space-0-5);
-  }
-
-  .history-item {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: var(--space-1-5) var(--space-2);
-    border-radius: var(--radius-md);
-    border: 1px solid transparent;
-    background: none;
-    color: var(--color-text-primary, #d0d6e0);
-    cursor: pointer;
-    text-align: left;
-    transition: background var(--transition-base), border-color var(--transition-base);
-    width: 100%;
-  }
-
-  .history-item:hover {
-    background: var(--white-a4);
-    border-color: var(--white-a6);
-  }
-
-  .history-item-active {
-    background: var(--white-a6);
-    border-color: var(--white-a10);
-  }
-
-  .history-item-current {
-    border-color: rgba(91, 202, 122, 0.2);
-  }
-
-  .history-item-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-1);
-  }
-
-  .history-item-time {
-    font-size: var(--font-xs);
-    color: var(--color-text-primary, #d0d6e0);
-    font-weight: 500;
-  }
-
-  .history-item-count {
-    font-size: var(--font-micro);
-    color: var(--color-text-muted, #6B7788);
-  }
-
-  .history-item-party {
-    font-size: var(--font-xs);
-    color: var(--color-text-muted, #6B7788);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .history-item-delete {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    width: 16px;
-    height: 16px;
-    border-radius: var(--radius-sm);
-    border: none;
-    background: none;
-    color: var(--color-text-muted, #6B7788);
-    font-size: var(--font-base);
-    cursor: pointer;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    line-height: 1;
-    transition: color var(--transition-base), background var(--transition-base);
-  }
-
-  .history-item:hover .history-item-delete {
-    display: flex;
-  }
-
-  .history-item-delete:hover {
-    color: var(--color-stop, #FF6B6B);
-    background: rgba(255, 107, 107, 0.15);
-  }
-
   /* ── Main area (left/center) ── */
   .main-area {
     flex: 1;
@@ -1066,8 +850,8 @@
   .back-btn {
     padding: 3px var(--space-2-5);
     border-radius: var(--radius-md);
-    border: 1px solid rgba(91, 202, 122, 0.25);
-    background: rgba(91, 202, 122, 0.08);
+    border: 1px solid var(--start-a25);
+    background: var(--start-a8);
     color: var(--color-start, #5BCA7A);
     font-size: var(--font-xs);
     cursor: pointer;
@@ -1075,7 +859,7 @@
   }
 
   .back-btn:hover {
-    background: rgba(91, 202, 122, 0.15);
+    background: var(--start-a15);
   }
 
   /* ── Chat log ── */
@@ -1156,8 +940,8 @@
   }
 
   .msg-time {
-    font-size: var(--font-xs);
-    color: var(--color-text-muted, #6b7688);
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary, #8b95a8);
   }
 
   .msg-text {
@@ -1167,6 +951,11 @@
     line-height: 1.45;
     user-select: text;
     -webkit-user-select: text;
+  }
+
+  .msg-text :global(.mention-highlight) {
+    color: var(--color-teal, #3ecfcf);
+    font-weight: 600;
   }
 
   /* ── Inline share indicator ── */
@@ -1186,7 +975,7 @@
     height: 7px;
     border-radius: var(--radius-full);
     background: var(--color-teal);
-    box-shadow: 0 0 5px rgba(59, 151, 151, 0.6);
+    box-shadow: 0 0 5px var(--teal-a50);
     animation: pulse 2s ease-in-out infinite;
     flex-shrink: 0;
   }
@@ -1210,7 +999,7 @@
     height: 18px;
     border-radius: var(--radius-sm);
     border: none;
-    background: rgba(255, 80, 80, 0.15);
+    background: var(--stop-a15);
     color: var(--color-stop);
     font-size: var(--font-base);
     cursor: pointer;
@@ -1224,7 +1013,7 @@
   }
 
   .share-x:hover {
-    background: rgba(255, 80, 80, 0.3);
+    background: var(--stop-a30);
   }
 
   /* ── Controls bar ── */
@@ -1297,27 +1086,27 @@
 
   .ctrl-btn.capture:hover:not(:disabled) {
     background: var(--teal-a10);
-    border-color: rgba(59, 151, 151, 0.35);
+    border-color: var(--teal-a30);
   }
 
   .ctrl-btn.start {
     color: var(--color-start);
-    border-color: rgba(91, 202, 122, 0.2);
+    border-color: var(--start-a20);
   }
 
   .ctrl-btn.start:hover:not(:disabled) {
-    background: rgba(91, 202, 122, 0.1);
-    border-color: rgba(91, 202, 122, 0.35);
+    background: var(--start-a10);
+    border-color: var(--start-a35);
   }
 
   .ctrl-btn.stop {
     color: var(--color-stop);
-    border-color: rgba(255, 107, 107, 0.2);
+    border-color: var(--stop-a20);
   }
 
   .ctrl-btn.stop:hover:not(:disabled) {
-    background: rgba(255, 107, 107, 0.1);
-    border-color: rgba(255, 107, 107, 0.35);
+    background: var(--stop-a10);
+    border-color: var(--stop-a35);
   }
 
   /* ── Toggle switch ── */
@@ -1345,8 +1134,8 @@
   }
 
   .toggle.toggle-on {
-    background: rgba(176, 106, 255, 0.2);
-    border-color: rgba(176, 106, 255, 0.4);
+    background: var(--epic-a20);
+    border-color: var(--epic-a30);
   }
 
   .toggle.toggle-on .toggle-knob {
@@ -1506,7 +1295,7 @@
 
   .collection-list.drop-active {
     border-color: var(--teal-a40);
-    background: rgba(59, 151, 151, 0.03);
+    background: var(--teal-a5);
   }
 
   .collection-list :global(.card-row) {
@@ -1548,6 +1337,11 @@
     position: relative;
   }
 
+  .input-bar-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
   .stt-bubble {
     display: flex;
     align-items: center;
@@ -1565,6 +1359,73 @@
   @keyframes stt-fade {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── @mention dropdown ── */
+  .mention-dropdown {
+    position: absolute;
+    bottom: 100%;
+    left: var(--space-5);
+    right: var(--space-5);
+    margin-bottom: var(--space-1);
+    background: var(--color-surface-2, #1a2035);
+    border: 1px solid var(--white-a10);
+    border-radius: var(--radius-lg);
+    padding: var(--space-1);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 -4px 16px var(--black-a40);
+    z-index: 10;
+    animation: mention-slide 0.15s ease-out;
+  }
+
+  @keyframes mention-slide {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .mention-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1-5) var(--space-2);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .mention-option:hover,
+  .mention-option-active {
+    background: var(--white-a8);
+  }
+
+  .mention-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full);
+    border: 2px solid;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-xs);
+    color: var(--color-text-primary);
+    background: var(--white-a4);
+    flex-shrink: 0;
+  }
+
+  .mention-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mention-name {
+    font-size: var(--font-base);
+    font-weight: 600;
   }
 
   .input-row {
@@ -1630,7 +1491,7 @@
 
   .send-btn:hover:not(:disabled) {
     background: var(--teal-a20);
-    border-color: rgba(59, 151, 151, 0.4);
+    border-color: var(--teal-a40);
   }
 
   .send-btn:disabled {

@@ -76,9 +76,9 @@
     bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(248, 113, 113, 0.15);
-    border: 1px solid rgba(248, 113, 113, 0.3);
-    color: #f87171;
+    background: var(--error-a15);
+    border: 1px solid var(--error-a20);
+    color: var(--color-error);
     padding: 8px 16px;
     border-radius: 8px;
     font-size: 0.9rem;

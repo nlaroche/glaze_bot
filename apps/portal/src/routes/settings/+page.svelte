@@ -37,7 +37,7 @@
   import Badge from '$lib/components/ui/Badge.svelte';
   import Select from '$lib/components/ui/Select.svelte';
   import NumberInput from '$lib/components/ui/NumberInput.svelte';
-  import SliderInput from '$lib/components/ui/SliderInput.svelte';
+  import { SliderInput } from '@glazebot/shared-ui';
   import TextArea from '$lib/components/ui/TextArea.svelte';
   import TextInput from '$lib/components/ui/TextInput.svelte';
 
@@ -47,6 +47,7 @@
   import TagFilter from '$lib/components/ui/TagFilter.svelte';
   import type { Tag } from '$lib/components/ui/TagFilter.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+  import PrimitivesPanel from './PrimitivesPanel.svelte';
 
 
 
@@ -70,8 +71,8 @@
   let activeTags: string[] = $state([]);
 
   // ─── State: Panels ────────────────────────────────────────────────
-  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices' | 'history';
-  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices', 'history'];
+  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices' | 'history' | 'primitives';
+  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices', 'history', 'primitives'];
   const storedTab = (typeof localStorage !== 'undefined' ? localStorage.getItem('admin-active-tab') : null) as AdminTab | null;
   let activeTab: AdminTab = $state(storedTab && validTabs.includes(storedTab) ? storedTab : 'config');
   let detailPanelOpen = $state(false);
@@ -1981,6 +1982,12 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       onclick={() => { activeTab = 'history'; loadSnapshots(); }}
       data-testid="tab-history"
     >History</button>
+    <button
+      class="top-tab"
+      class:active={activeTab === 'primitives'}
+      onclick={() => activeTab = 'primitives'}
+      data-testid="tab-primitives"
+    >Primitives</button>
   </div>
 
   <!-- ═══ TAB: WORKSHOP ═══ -->
@@ -2929,6 +2936,10 @@ The player said: "nice shot!"</pre>
         {/if}
       {/if}
     </div>
+
+  <!-- ═══ TAB: PRIMITIVES ═══ -->
+  {:else if activeTab === 'primitives'}
+    <PrimitivesPanel />
   {/if}
 </div>
 

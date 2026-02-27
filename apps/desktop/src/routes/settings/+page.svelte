@@ -1,8 +1,16 @@
 <script lang="ts">
   import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
   import type { DebugEntry, FrameCapture } from '$lib/stores/debug.svelte';
-
+  import { SliderInput, ToggleSwitch } from '@glazebot/shared-ui';
   const debug = getDebugStore();
+
+  // Local slider state (bound to SliderInput, synced to store via onchange)
+  let commentaryGap = $state(debug.commentaryGap);
+  let contextInterval = $state(debug.contextInterval);
+  let contextBufferSize = $state(debug.contextBufferSize);
+  let vadThreshold = $state(debug.vadThreshold);
+  let vadSilenceMs = $state(debug.vadSilenceMs);
+  let contextEnabled = $state(debug.contextEnabled);
 
   let autoScroll = $state(true);
   let logContainer: HTMLDivElement | undefined = $state();
@@ -196,6 +204,8 @@
   <div class="settings-col">
     <h1>Settings</h1>
 
+    <!-- Theme picker hidden for now — revisit later -->
+
     <!-- Commentary Options -->
     <section class="card">
       <h2>Commentary Options</h2>
@@ -212,21 +222,7 @@
         />
       </div>
 
-      <div class="field">
-        <label class="field-label" for="commentary-gap">Commentary Gap</label>
-        <div class="range-row">
-          <input
-            id="commentary-gap"
-            type="range"
-            value={debug.commentaryGap}
-            min="30"
-            max="120"
-            step="5"
-            oninput={(e) => setCommentaryGap(parseInt((e.target as HTMLInputElement).value, 10))}
-          />
-          <span class="range-value">{debug.commentaryGap}s</span>
-        </div>
-      </div>
+      <SliderInput label="Commentary Gap" bind:value={commentaryGap} min={30} max={120} step={5} suffix="s" onchange={() => setCommentaryGap(commentaryGap)} />
 
       <div class="field">
         <label class="field-label" for="custom-instructions">Custom Instructions</label>
@@ -245,48 +241,11 @@
     <section class="card">
       <h2>Context Analysis</h2>
 
-      <div class="field">
-        <label class="checkbox-row">
-          <input
-            type="checkbox"
-            checked={debug.contextEnabled}
-            onchange={(e) => setContextEnabled((e.target as HTMLInputElement).checked)}
-          />
-          <span>Enable context analysis</span>
-        </label>
-      </div>
+      <ToggleSwitch label="Enable context analysis" bind:checked={contextEnabled} onchange={() => setContextEnabled(contextEnabled)} />
 
-      <div class="field">
-        <label class="field-label" for="context-interval">Context Interval</label>
-        <div class="range-row">
-          <input
-            id="context-interval"
-            type="range"
-            value={debug.contextInterval}
-            min="1"
-            max="15"
-            step="1"
-            oninput={(e) => setContextInterval(parseInt((e.target as HTMLInputElement).value, 10))}
-          />
-          <span class="range-value">{debug.contextInterval}s</span>
-        </div>
-      </div>
+      <SliderInput label="Context Interval" bind:value={contextInterval} min={1} max={15} step={1} suffix="s" onchange={() => setContextInterval(contextInterval)} />
 
-      <div class="field">
-        <label class="field-label" for="context-buffer-size">Buffer Size</label>
-        <div class="range-row">
-          <input
-            id="context-buffer-size"
-            type="range"
-            value={debug.contextBufferSize}
-            min="1"
-            max="50"
-            step="1"
-            oninput={(e) => setContextBufferSize(parseInt((e.target as HTMLInputElement).value, 10))}
-          />
-          <span class="range-value">{debug.contextBufferSize}</span>
-        </div>
-      </div>
+      <SliderInput label="Buffer Size" bind:value={contextBufferSize} min={1} max={50} step={1} onchange={() => setContextBufferSize(contextBufferSize)} />
     </section>
 
     <!-- Voice Input -->
@@ -325,37 +284,9 @@
       {/if}
 
       {#if debug.speechMode === 'always-on'}
-        <div class="field">
-          <label class="field-label" for="vad-sensitivity">VAD Sensitivity</label>
-          <div class="range-row">
-            <input
-              id="vad-sensitivity"
-              type="range"
-              value={debug.vadThreshold}
-              min="0.005"
-              max="0.1"
-              step="0.005"
-              oninput={(e) => setVadThreshold(parseFloat((e.target as HTMLInputElement).value))}
-            />
-            <span class="range-value">{debug.vadThreshold.toFixed(3)}</span>
-          </div>
-        </div>
+        <SliderInput label="VAD Sensitivity" bind:value={vadThreshold} min={0.005} max={0.1} step={0.005} onchange={() => setVadThreshold(vadThreshold)} />
 
-        <div class="field">
-          <label class="field-label" for="vad-silence">Silence Duration</label>
-          <div class="range-row">
-            <input
-              id="vad-silence"
-              type="range"
-              value={debug.vadSilenceMs}
-              min="500"
-              max="5000"
-              step="100"
-              oninput={(e) => setVadSilenceMs(parseInt((e.target as HTMLInputElement).value, 10))}
-            />
-            <span class="range-value">{debug.vadSilenceMs}ms</span>
-          </div>
-        </div>
+        <SliderInput label="Silence Duration" bind:value={vadSilenceMs} min={500} max={5000} step={100} suffix="ms" onchange={() => setVadSilenceMs(vadSilenceMs)} />
       {/if}
     </section>
 
@@ -420,10 +351,7 @@
       <div class="log-header">
         <h2>Event Log</h2>
         <div class="log-controls">
-          <label class="checkbox-row">
-            <input type="checkbox" bind:checked={autoScroll} />
-            <span>Auto-scroll</span>
-          </label>
+          <ToggleSwitch label="Auto-scroll" bind:checked={autoScroll} />
           <button class="clear-btn" onclick={clearDebugLog}>Clear</button>
         </div>
       </div>
@@ -569,7 +497,7 @@
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding: var(--space-6) var(--space-7);
+    padding: var(--space-6) var(--space-5) var(--space-6) var(--space-7);
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
@@ -703,27 +631,6 @@
     background: var(--input-focus-bg);
   }
 
-  .range-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  input[type="range"] {
-    flex: 1;
-    max-width: 280px;
-    accent-color: var(--color-teal);
-  }
-
-  .range-value {
-    font-size: var(--font-base);
-    font-weight: 600;
-    color: var(--color-teal);
-    min-width: 40px;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
   /* ── Stats ── */
   .stats-grid {
     display: grid;
@@ -827,19 +734,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-  }
-
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1-5);
-    cursor: pointer;
-    font-size: var(--font-sm);
-    color: var(--color-text-secondary);
-  }
-
-  .checkbox-row input[type="checkbox"] {
-    accent-color: var(--color-teal);
   }
 
   .clear-btn {
@@ -1180,7 +1074,7 @@
 
   .lightbox-game-value {
     font-size: var(--font-base);
-    color: #5bc0be;
+    color: var(--color-accent-light);
     font-weight: 600;
   }
 
@@ -1226,5 +1120,119 @@
   .lightbox-scene-desc {
     color: var(--color-text-primary);
     line-height: 1.4;
+  }
+
+  /* ── Theme picker ── */
+  .theme-section {
+    gap: var(--space-3) !important;
+  }
+
+  .theme-preview {
+    position: relative;
+    height: 120px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: var(--space-4);
+    transition: background 0.4s ease;
+  }
+
+  .theme-preview-overlay {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+  }
+
+  .theme-preview-name {
+    font-family: var(--font-brand);
+    font-size: var(--font-2xl);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .theme-preview-desc {
+    font-size: var(--font-base);
+  }
+
+  .theme-preview-accent {
+    width: 28px;
+    height: 4px;
+    border-radius: var(--radius-pill);
+    margin-top: var(--space-1);
+  }
+
+  .theme-apply-btn {
+    align-self: flex-end;
+    padding: var(--space-1-5) var(--space-5);
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: var(--font-base);
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--transition-base), transform var(--transition-base);
+  }
+
+  .theme-apply-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .theme-active-badge {
+    align-self: flex-end;
+    padding: var(--space-1) var(--space-3);
+    border: 1.5px solid;
+    border-radius: var(--radius-md);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .theme-gallery {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-2);
+  }
+
+  .theme-thumb {
+    position: relative;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color var(--transition-base), transform var(--transition-base);
+  }
+
+  .theme-thumb:hover {
+    transform: translateY(-1px);
+    border-color: var(--white-a15);
+  }
+
+  .theme-thumb-selected {
+    border-color: var(--thumb-accent) !important;
+  }
+
+  .theme-thumb-bg {
+    height: 36px;
+  }
+
+  .theme-thumb-label {
+    display: block;
+    text-align: center;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    padding: var(--space-1) 0;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  .theme-thumb-check {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: var(--font-2xs);
+    font-weight: 700;
   }
 </style>

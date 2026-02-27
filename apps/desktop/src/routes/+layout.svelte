@@ -7,9 +7,11 @@
   import AuthScreen from '$lib/components/AuthScreen.svelte';
   import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
+  import { getThemeStore } from '$lib/stores/theme.svelte';
 
   let { children } = $props();
   const auth = getAuthState();
+  const theme = getThemeStore();
 
   const isOverlay = $derived(page.url.pathname.startsWith('/overlay'));
   const isTrayMenu = $derived(page.url.pathname.startsWith('/tray-menu'));
@@ -41,7 +43,7 @@
 {#if isOverlay || isTrayMenu}
   {@render children()}
 {:else}
-  <NightSkyBackground {sceneIndex} />
+  <NightSkyBackground {sceneIndex} theme={theme.current} />
   <div class="app-shell">
     <Titlebar />
     {#if auth.loading}

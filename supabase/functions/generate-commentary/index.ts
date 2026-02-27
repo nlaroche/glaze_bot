@@ -6,6 +6,11 @@ import {
   getRequestUser,
   getServiceClient,
 } from "../_shared/mod.ts";
+import {
+  toProviderTools,
+  parseToolCalls,
+  VISUAL_SYSTEM_ADDENDUM,
+} from "../_shared/visual-tools.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
 const DASHSCOPE_BASE_URL =
@@ -54,7 +59,7 @@ interface Personality {
 }
 
 interface CommentaryRequest {
-  frame_b64: string;
+  frame_b64?: string;
   system_prompt: string;
   personality?: Personality;
   history?: { role: string; content: string }[];
@@ -62,6 +67,7 @@ interface CommentaryRequest {
   react_to?: { name: string; text: string };
   game_hint?: string;
   scene_context?: { game_name?: string; descriptions: string[] };
+  enable_visuals?: boolean;
 }
 
 /** Build personality modifier string from trait values (ported from brain.py) */
@@ -113,10 +119,11 @@ Deno.serve(async (req: Request) => {
       react_to,
       game_hint,
       scene_context,
+      enable_visuals,
     } = body;
 
-    if (!frame_b64) {
-      return errorResponse("frame_b64 is required", 400);
+    if (!frame_b64 && !player_text && !react_to) {
+      return errorResponse("At least one of frame_b64, player_text, or react_to is required", 400);
     }
     if (!system_prompt) {
       return errorResponse("system_prompt is required", 400);
@@ -170,7 +177,18 @@ Deno.serve(async (req: Request) => {
     // Build full system prompt: character persona + commentary instructions
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
 
-    const fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective;
+    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective;
+    if (enable_visuals) {
+      fullSystemPrompt += VISUAL_SYSTEM_ADDENDUM;
+    }
+
+    // Bump max tokens when visuals enabled (tool call args consume tokens)
+    const effectiveMaxTokens = enable_visuals ? Math.max(maxTokens, 200) : maxTokens;
+
+    // Get provider-specific tool definitions
+    const providerTools = enable_visuals
+      ? toProviderTools(visionProvider as "dashscope" | "anthropic" | "gemini")
+      : null;
 
     // Pick a random style nudge
     const nudge = nudges[Math.floor(Math.random() * nudges.length)];
@@ -209,14 +227,16 @@ Deno.serve(async (req: Request) => {
 
     interface VisionResult {
       text: string;
+      visuals: Array<Record<string, unknown>>;
       usage: { input_tokens: number; output_tokens: number };
     }
 
     async function callDashscope(): Promise<VisionResult> {
-      const userContent: Array<Record<string, unknown>> = [
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } },
-        { type: "text", text: textParts.join("\n") },
-      ];
+      const userContent: Array<Record<string, unknown>> = [];
+      if (frame_b64) {
+        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+      }
+      userContent.push({ type: "text", text: textParts.join("\n") });
       const messages: Array<Record<string, unknown>> = [
         { role: "system", content: fullSystemPrompt },
       ];
@@ -225,17 +245,23 @@ Deno.serve(async (req: Request) => {
       }
       messages.push({ role: "user", content: userContent });
 
+      const reqBody: Record<string, unknown> = {
+        model: visionModel,
+        messages,
+        max_tokens: effectiveMaxTokens,
+        temperature,
+        presence_penalty: presencePenalty,
+        frequency_penalty: frequencyPenalty,
+      };
+      if (providerTools) {
+        reqBody.tools = providerTools;
+        reqBody.tool_choice = "auto";
+      }
+
       const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
-        body: JSON.stringify({
-          model: visionModel,
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-          presence_penalty: presencePenalty,
-          frequency_penalty: frequencyPenalty,
-        }),
+        body: JSON.stringify(reqBody),
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -245,8 +271,12 @@ Deno.serve(async (req: Request) => {
       const reply = (data.choices?.[0]?.message?.content?.trim() ?? "")
         .replace(/<think>[\s\S]*?<\/think>/g, "")
         .trim();
+      const visuals = enable_visuals
+        ? parseToolCalls("dashscope", data)
+        : [];
       return {
         text: reply,
+        visuals,
         usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
       };
     }
@@ -254,15 +284,28 @@ Deno.serve(async (req: Request) => {
     async function callAnthropic(): Promise<VisionResult> {
       // Anthropic Messages API — no /no_think, no presence/frequency penalty
       const anthropicTextParts = textParts.filter((p) => p !== "/no_think");
-      const userBlocks: Array<Record<string, unknown>> = [
-        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } },
-        { type: "text", text: anthropicTextParts.join("\n") },
-      ];
+      const userBlocks: Array<Record<string, unknown>> = [];
+      if (frame_b64) {
+        userBlocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } });
+      }
+      userBlocks.push({ type: "text", text: anthropicTextParts.join("\n") });
       const messages: Array<Record<string, unknown>> = [];
       if (history?.length) {
         for (const entry of history) messages.push({ role: entry.role, content: entry.content });
       }
       messages.push({ role: "user", content: userBlocks });
+
+      const reqBody: Record<string, unknown> = {
+        model: visionModel,
+        max_tokens: effectiveMaxTokens,
+        temperature,
+        system: fullSystemPrompt,
+        messages,
+      };
+      if (providerTools) {
+        reqBody.tools = providerTools;
+        reqBody.tool_choice = { type: "auto" };
+      }
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -271,32 +314,33 @@ Deno.serve(async (req: Request) => {
           "x-api-key": ANTHROPIC_API_KEY,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({
-          model: visionModel,
-          max_tokens: maxTokens,
-          temperature,
-          system: fullSystemPrompt,
-          messages,
-        }),
+        body: JSON.stringify(reqBody),
       });
       if (!res.ok) {
         const errText = await res.text();
         throw new Error(`Anthropic ${res.status}: ${errText}`);
       }
       const data = await res.json();
-      const reply = data.content?.[0]?.text?.trim() ?? "";
+      // Extract text from content blocks (skip tool_use blocks)
+      const textBlocks = (data.content ?? []).filter((b: { type: string }) => b.type === "text");
+      const reply = textBlocks.map((b: { text: string }) => b.text?.trim()).join(" ").trim();
+      const visuals = enable_visuals
+        ? parseToolCalls("anthropic", data)
+        : [];
       return {
         text: reply,
+        visuals,
         usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
       };
     }
 
     async function callGemini(): Promise<VisionResult> {
       // Gemini uses OpenAI-compatible format via generativelanguage endpoint
-      const userContent: Array<Record<string, unknown>> = [
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } },
-        { type: "text", text: textParts.filter((p) => p !== "/no_think").join("\n") },
-      ];
+      const userContent: Array<Record<string, unknown>> = [];
+      if (frame_b64) {
+        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+      }
+      userContent.push({ type: "text", text: textParts.filter((p) => p !== "/no_think").join("\n") });
       const messages: Array<Record<string, unknown>> = [
         { role: "system", content: fullSystemPrompt },
       ];
@@ -305,17 +349,23 @@ Deno.serve(async (req: Request) => {
       }
       messages.push({ role: "user", content: userContent });
 
+      const reqBody: Record<string, unknown> = {
+        model: visionModel,
+        messages,
+        max_tokens: effectiveMaxTokens,
+        temperature,
+      };
+      if (providerTools) {
+        reqBody.tools = providerTools;
+        reqBody.tool_choice = "auto";
+      }
+
       const res = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
-          body: JSON.stringify({
-            model: visionModel,
-            messages,
-            max_tokens: maxTokens,
-            temperature,
-          }),
+          body: JSON.stringify(reqBody),
         },
       );
       if (!res.ok) {
@@ -324,8 +374,12 @@ Deno.serve(async (req: Request) => {
       }
       const data = await res.json();
       const reply = data.choices?.[0]?.message?.content?.trim() ?? "";
+      const visuals = enable_visuals
+        ? parseToolCalls("gemini", data)
+        : [];
       return {
         text: reply,
+        visuals,
         usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
       };
     }
@@ -351,7 +405,11 @@ Deno.serve(async (req: Request) => {
     const text =
       result.text.toUpperCase().includes("[SILENCE]") ? null : result.text;
 
-    return jsonResponse({ text, usage: result.usage });
+    return jsonResponse({
+      text,
+      visuals: result.visuals.length > 0 ? result.visuals : undefined,
+      usage: result.usage,
+    });
   } catch (err) {
     console.error("[generate-commentary]", err);
     const message = err instanceof Error ? err.message : "Internal error";

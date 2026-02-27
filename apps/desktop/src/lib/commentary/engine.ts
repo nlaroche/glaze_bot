@@ -89,7 +89,7 @@ export class CommentaryEngine {
 
   /** Callback to emit events to overlay */
   onOverlayMessage:
-    | ((msg: { name: string; rarity: string; text: string; image?: string }) => void)
+    | ((msg: { name: string; rarity: string; text: string; image?: string; visuals?: Record<string, unknown>[] }) => void)
     | null = null;
 
   /** Callback fired when overlay bubble should dismiss (after audio ends) */
@@ -166,6 +166,141 @@ export class CommentaryEngine {
     }
   }
 
+  /** Send a direct text-only message (works without engine running). */
+  async sendDirectMessage(text: string, party: GachaCharacter[]): Promise<void> {
+    if (!text.trim() || party.length === 0) return;
+    if (this.speaking || this.processingUserMessage) {
+      // Queue it and let processUserMessages handle it
+      this.userMessageQueue.push(text);
+      return;
+    }
+
+    this.processingUserMessage = true;
+
+    try {
+      // Try to match a character name in the message
+      const character = this.matchCharacterByName(text, party) ??
+        party[Math.floor(Math.random() * party.length)];
+
+      const session = await getSession();
+      if (!session) {
+        logDebug('error', { message: 'Not authenticated (direct message)' });
+        return;
+      }
+
+      const debugStore = getDebugStore();
+      const customInstructions = debugStore.customSystemInstructions;
+
+      let systemPrompt = character.system_prompt;
+      if (customInstructions) {
+        systemPrompt += '\n\n' + customInstructions;
+      }
+
+      const supabaseUrl = getSupabaseUrl();
+      const history = this.getHistory(character.id);
+
+      logDebug('llm-request', {
+        character: character.name,
+        historyLength: history.length,
+        playerText: text,
+        directMessage: true,
+      });
+
+      this.speaking = true;
+
+      // Text-only call — no frame_b64
+      const commentaryRes = await fetch(
+        `${supabaseUrl}/functions/v1/generate-commentary`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            system_prompt: systemPrompt,
+            personality: character.personality,
+            history,
+            player_text: text,
+          }),
+        },
+      );
+
+      if (!commentaryRes.ok) {
+        const errText = await commentaryRes.text();
+        logDebug('error', {
+          step: 'generate-commentary (direct)',
+          status: commentaryRes.status,
+          message: errText,
+        });
+        return;
+      }
+
+      const commentaryData = await commentaryRes.json();
+      logDebug('llm-response', {
+        character: character.name,
+        text: commentaryData.text,
+        usage: commentaryData.usage,
+        directMessage: true,
+      });
+
+      if (!commentaryData.text) return;
+
+      const responseText: string = commentaryData.text;
+
+      // Update history
+      const hist = this.histories.get(character.id) ?? [];
+      hist.push({ role: 'user', content: `Player: "${text}"` });
+      hist.push({ role: 'assistant', content: responseText });
+      while (hist.length > MAX_HISTORY * 2) {
+        hist.shift();
+        hist.shift();
+      }
+      this.histories.set(character.id, hist);
+
+      // Emit chat message (no TTS, no overlay for direct messages when engine isn't running)
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const chatEntry: ChatLogEntry = {
+        id: `${Date.now()}-${character.id}`,
+        characterId: character.id,
+        name: character.name,
+        rarity: character.rarity,
+        text: responseText,
+        time: timeStr,
+        timestamp: new Date().toISOString(),
+        voiceId: character.voice_id,
+        image: character.avatar_url,
+      };
+
+      this.onChatMessage?.(chatEntry);
+    } catch (err) {
+      logDebug('error', {
+        step: 'sendDirectMessage',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      this.speaking = false;
+      this.processingUserMessage = false;
+    }
+  }
+
+  /** Try to match a party character by name in the user's message */
+  private matchCharacterByName(text: string, party: GachaCharacter[]): GachaCharacter | null {
+    const lower = text.toLowerCase();
+    for (const char of party) {
+      // Match full name or first name
+      const fullName = char.name.toLowerCase();
+      const firstName = fullName.split(' ')[0];
+      if (lower.includes(fullName) || lower.includes(firstName)) {
+        return char;
+      }
+    }
+    return null;
+  }
+
   private async processUserMessages() {
     if (this.speaking || this.processingUserMessage || this.userMessageQueue.length === 0) return;
     if (this.party.length === 0) return;
@@ -175,9 +310,9 @@ export class CommentaryEngine {
     try {
       const message = this.userMessageQueue.shift()!;
 
-      // Pick a random party character to respond
-      const charIndex = Math.floor(Math.random() * this.party.length);
-      const character = this.party[charIndex];
+      // Try to match a character by name, otherwise pick random
+      const character = this.matchCharacterByName(message, this.party) ??
+        this.party[Math.floor(Math.random() * this.party.length)];
 
       // Get session for auth
       const session = await getSession();
@@ -236,6 +371,7 @@ export class CommentaryEngine {
             history,
             player_text: message,
             scene_context: sceneContext,
+            enable_visuals: true,
           }),
         },
       );
@@ -335,6 +471,7 @@ export class CommentaryEngine {
         rarity: character.rarity,
         text: responseText,
         image: character.avatar_url,
+        visuals: commentaryData.visuals,
       });
 
       // Play audio
@@ -608,6 +745,7 @@ export class CommentaryEngine {
             history,
             game_hint: sceneContext ? undefined : (gameHint || undefined),
             scene_context: sceneContext,
+            enable_visuals: true,
           }),
         },
       );
@@ -724,6 +862,7 @@ export class CommentaryEngine {
         rarity: character.rarity,
         text: responseText,
         image: character.avatar_url,
+        visuals: commentaryData.visuals,
       });
 
       // Play audio
@@ -795,6 +934,7 @@ export class CommentaryEngine {
             react_to: { name: speaker.name, text: spokenText },
             game_hint: sceneContext ? undefined : (gameHint || undefined),
             scene_context: sceneContext,
+            enable_visuals: true,
           }),
         },
       );
@@ -885,6 +1025,7 @@ export class CommentaryEngine {
         rarity: reactor.rarity,
         text: responseText,
         image: reactor.avatar_url,
+        visuals: data.visuals,
       });
 
       if (audioBlobUrl) {

@@ -4,7 +4,7 @@
 :root {
   --sidebar-width: 64px;
   --titlebar-height: 36px;
-  --color-chrome: rgba(16, 31, 55, 0.78);
+  --color-chrome: rgba(10, 22, 42, 0.35);
 }
 
 html, body {

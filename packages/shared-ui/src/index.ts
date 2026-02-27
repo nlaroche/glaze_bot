@@ -1,3 +1,5 @@
+export { default as SliderInput } from './ui/SliderInput.svelte';
+export { default as ToggleSwitch } from './ui/ToggleSwitch.svelte';
 export { default as ProceduralAvatar } from './gacha/ProceduralAvatar.svelte';
 export { default as RarityBadge } from './gacha/RarityBadge.svelte';
 export { default as CharacterCard } from './gacha/CharacterCard.svelte';
