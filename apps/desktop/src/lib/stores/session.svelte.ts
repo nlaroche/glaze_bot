@@ -5,7 +5,24 @@ import { createSession, persistMessage } from './chatHistory';
 
 // Module-level singleton state — survives SvelteKit navigation
 let engine: CommentaryEngine = new CommentaryEngine();
-let partySlots = $state<(GachaCharacter | null)[]>([null, null, null]);
+
+// Restore party slots from localStorage (survives HMR / hot-reload)
+function loadPartySlots(): (GachaCharacter | null)[] {
+  try {
+    const stored = localStorage.getItem('glazebot-party-slots');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length === 3) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [null, null, null];
+}
+function savePartySlots(slots: (GachaCharacter | null)[]) {
+  try {
+    localStorage.setItem('glazebot-party-slots', JSON.stringify(slots));
+  } catch { /* ignore */ }
+}
+let partySlots = $state<(GachaCharacter | null)[]>(loadPartySlots());
 let isRunning = $state(false);
 let isPaused = $state(false);
 
@@ -104,6 +121,7 @@ export function getSessionStore() {
 
 export function setPartySlot(index: number, char: GachaCharacter | null) {
   partySlots[index] = char;
+  savePartySlots(partySlots);
 }
 
 export function setActiveShare(source: CaptureSource | null) {
