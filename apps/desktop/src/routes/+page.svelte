@@ -769,6 +769,30 @@
         {/if}
       </div>
     </div>
+
+    <!-- Game detection status -->
+    <div class="game-status">
+      <svg class="game-status-icon" width="14" height="14" viewBox="0 0 14 14" fill="none">
+        {#if session.isRunning && debug.detectedGame}
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <circle cx="7" cy="7" r="2" fill="currentColor"/>
+        {:else if session.isRunning}
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
+        {:else}
+          <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <line x1="4" y1="7" x2="10" y2="7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        {/if}
+      </svg>
+      <span class="game-status-text">
+        {#if !session.isRunning}
+          Not active
+        {:else if debug.detectedGame}
+          {debug.detectedGame}
+        {:else}
+          Detecting game...
+        {/if}
+      </span>
+    </div>
   </aside>
 </div>
 
@@ -1496,5 +1520,29 @@
   .send-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+  }
+
+  /* ── Game detection status ── */
+  .game-status {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-top: 1px solid var(--white-a6);
+    color: var(--color-text-muted);
+    font-size: var(--font-sm);
+    min-height: 32px;
+  }
+
+  .game-status-icon {
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+
+  .game-status-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 </style>

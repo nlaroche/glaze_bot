@@ -609,8 +609,8 @@ export class CommentaryEngine {
         usage: data.usage,
       });
 
-      // Update detected game if returned
-      if (data.game_name && !this.detectedGame) {
+      // Update detected game (allow it to change if the user switches apps/games)
+      if (data.game_name && data.game_name !== this.detectedGame) {
         this.detectedGame = data.game_name;
         setDetectedGame(data.game_name);
       }

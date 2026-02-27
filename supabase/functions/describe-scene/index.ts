@@ -83,7 +83,8 @@ Deno.serve(async (req: Request) => {
     // Build the analysis prompt
     let analysisPrompt = prompt;
     if (!game_name) {
-      analysisPrompt += "\nAlso identify the game being played.";
+      analysisPrompt +=
+        '\nIdentify what application or game is shown. On the LAST line of your response, write exactly: DETECTED: <name> (e.g. "DETECTED: League of Legends", "DETECTED: Desktop", "DETECTED: Chrome Browser", "DETECTED: Unknown").';
     }
     if (previous_description) {
       analysisPrompt += `\nPrevious scene: ${previous_description}. What changed?`;
@@ -241,19 +242,30 @@ Deno.serve(async (req: Request) => {
       return errorResponse(`Vision API error: ${msg}`, 502);
     }
 
-    // Try to extract game name from response if we asked for it
+    // Try to extract game/app name from structured DETECTED: tag
     let detectedGame: string | undefined;
+    let description = result.text;
     if (!game_name) {
-      const gameMatch = result.text.match(
-        /(?:game[:\s]+|playing[:\s]+|this (?:is|looks like)[:\s]+)["']?([^"'\n.]+)/i,
-      );
-      if (gameMatch) {
-        detectedGame = gameMatch[1].trim();
+      const detectedMatch = result.text.match(/DETECTED:\s*(.+)/i);
+      if (detectedMatch) {
+        const raw = detectedMatch[1].trim();
+        // Strip trailing punctuation
+        detectedGame = raw.replace(/[.!]+$/, '').trim() || undefined;
+        // Remove the DETECTED: line from the description
+        description = result.text.replace(/\n?DETECTED:\s*.+/i, '').trim();
+      } else {
+        // Fallback: try loose patterns
+        const gameMatch = result.text.match(
+          /(?:game[:\s]+|playing[:\s]+|this (?:is|looks like)[:\s]+)["']?([^"'\n.]+)/i,
+        );
+        if (gameMatch) {
+          detectedGame = gameMatch[1].trim();
+        }
       }
     }
 
     return jsonResponse({
-      description: result.text,
+      description,
       game_name: detectedGame,
       usage: result.usage,
     });
