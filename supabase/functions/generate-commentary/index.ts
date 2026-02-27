@@ -9,7 +9,7 @@ import {
 import {
   toProviderTools,
   parseToolCalls,
-  VISUAL_SYSTEM_ADDENDUM,
+  buildVisualSystemAddendum,
 } from "../_shared/visual-tools.ts";
 
 const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
@@ -60,6 +60,7 @@ interface Personality {
 
 interface CommentaryRequest {
   frame_b64?: string;
+  frame_dims?: { width: number; height: number };
   system_prompt: string;
   personality?: Personality;
   history?: { role: string; content: string }[];
@@ -112,6 +113,7 @@ Deno.serve(async (req: Request) => {
     const body: CommentaryRequest = await req.json();
     const {
       frame_b64,
+      frame_dims,
       system_prompt,
       personality,
       history,
@@ -179,7 +181,7 @@ Deno.serve(async (req: Request) => {
 
     let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective;
     if (enable_visuals) {
-      fullSystemPrompt += VISUAL_SYSTEM_ADDENDUM;
+      fullSystemPrompt += buildVisualSystemAddendum(frame_dims);
     }
 
     // Bump max tokens when visuals enabled (tool call args consume tokens)

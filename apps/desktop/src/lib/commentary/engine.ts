@@ -30,6 +30,13 @@ function cleanForTTS(text: string): string {
     .trim();
 }
 
+/** Return type from Rust grab_frame command */
+interface FrameResult {
+  data_uri: string;
+  width: number;
+  height: number;
+}
+
 const MAX_HISTORY = 10; // 10 turns = 20 messages
 const POLL_INTERVAL_MS = 2000;
 const REACT_CHANCE = 0.25;
@@ -339,12 +346,14 @@ export class CommentaryEngine {
         return;
       }
 
-      // Grab a fresh frame
+      // Grab a fresh frame (with grid overlay for better coordinate estimation)
       let frameB64 = '';
+      let frameDims = { width: 1920, height: 1080 };
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const frameDataUri = await invoke<string>('grab_frame', { sourceId: this.sourceId });
-        frameB64 = frameDataUri.replace(/^data:image\/[a-z]+;base64,/, '');
+        const frame = await invoke<FrameResult>('grab_frame', { sourceId: this.sourceId, withGrid: true });
+        frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
+        frameDims = { width: frame.width, height: frame.height };
       } catch (err) {
         logDebug('error', {
           step: 'grab_frame (user message)',
@@ -384,6 +393,7 @@ export class CommentaryEngine {
           },
           body: JSON.stringify({
             frame_b64: frameB64,
+            frame_dims: frameDims,
             system_prompt: systemPrompt,
             personality: character.personality,
             history,
@@ -543,10 +553,10 @@ export class CommentaryEngine {
     this.contextRunning = true;
 
     try {
-      // Capture frame
+      // Capture frame (no grid needed for context analysis)
       const { invoke } = await import('@tauri-apps/api/core');
-      const frameDataUri = await invoke<string>('grab_frame', { sourceId: this.sourceId });
-      const frameB64 = frameDataUri.replace(/^data:image\/[a-z]+;base64,/, '');
+      const frame = await invoke<FrameResult>('grab_frame', { sourceId: this.sourceId });
+      const frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
 
       logDebug('context-request', {
         sceneHistoryLength: this.sceneHistory.length,
@@ -696,18 +706,19 @@ export class CommentaryEngine {
     this.cycleAbort = new AbortController();
     const signal = this.cycleAbort.signal;
 
-    // Capture frame (grab_frame returns a data URI: "data:image/jpeg;base64,...")
-    let frameDataUri: string;
+    // Capture frame with grid overlay for visual coordinate estimation
     let frameB64: string;
     let frameId: number;
+    let frameDims = { width: 1920, height: 1080 };
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      frameDataUri = await invoke<string>('grab_frame', { sourceId: this.sourceId });
+      const frame = await invoke<FrameResult>('grab_frame', { sourceId: this.sourceId, withGrid: true });
       // Strip data URI prefix — API expects raw base64
-      frameB64 = frameDataUri.replace(/^data:image\/[a-z]+;base64,/, '');
-      logDebug('frame', { size: frameB64.length });
+      frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
+      frameDims = { width: frame.width, height: frame.height };
+      logDebug('frame', { size: frameB64.length, width: frame.width, height: frame.height });
       // Store the full data URI for display in debug frames
-      frameId = captureFrame(frameDataUri);
+      frameId = captureFrame(frame.data_uri);
     } catch (err) {
       logDebug('error', {
         step: 'grab_frame',
@@ -765,6 +776,7 @@ export class CommentaryEngine {
           },
           body: JSON.stringify({
             frame_b64: frameB64,
+            frame_dims: frameDims,
             system_prompt: systemPrompt,
             personality: character.personality,
             history,

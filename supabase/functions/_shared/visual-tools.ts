@@ -346,8 +346,13 @@ export function parseToolCalls(
   return visuals;
 }
 
-/** System prompt addendum when visuals are enabled */
-export const VISUAL_SYSTEM_ADDENDUM = `
+/** Build the system prompt addendum when visuals are enabled */
+export function buildVisualSystemAddendum(frameDims?: { width: number; height: number }): string {
+  const gridHint = frameDims
+    ? `\nThe screenshot is ${frameDims.width}x${frameDims.height} pixels. It has a subtle yellow grid overlay: lines at every 0.1 interval (10%, 20%, ..., 90%) and small crosshair markers at (0.25, 0.25), (0.5, 0.5), (0.75, 0.75) etc. Use these gridlines as reference points to estimate coordinates accurately.`
+    : '';
+
+  return `
 
 You have visual tools available to draw on the player's screen overlay.
 
@@ -356,10 +361,20 @@ WHEN TO USE VISUALS:
 - When something dramatic happens — emote_burst or screen_flash for hype moments.
 - For auto-commentary, use visuals SPARINGLY (most auto-commentary should be text-only).
 
-HOW TO USE:
-- All coordinates are normalized 0-1 (0,0 = top-left, 1,1 = bottom-right). Estimate positions from the screenshot.
-- arrow: draw FROM a neutral area TO the thing you're pointing at.
-- circle: highlight a specific UI element, character, or item.
+HOW TO USE COORDINATES:
+- All coordinates are normalized 0-1 (0,0 = top-left, 1,1 = bottom-right).${gridHint}
+- Think in terms of screen regions: left edge = 0.0, center = 0.5, right edge = 1.0. Same for top/bottom.
+- Common reference points: top-left corner = (0.05, 0.05), center = (0.5, 0.5), bottom-right = (0.95, 0.95).
+- HUD elements are usually at the edges: health bars near top-left (0.0-0.2, 0.0-0.1), minimap near bottom-right (0.8-1.0, 0.8-1.0), ability bar near bottom-center (0.3-0.7, 0.9-1.0).
+- When in doubt, aim for the CENTER of the element you're pointing at, not its edge.
+
+TOOL TIPS:
+- arrow: draw FROM a neutral area TO the thing you're pointing at. Keep the "from" point away from the target so the arrow is visible.
+- circle: highlight a specific UI element, character, or item. Use radius 0.02-0.05 for small elements, 0.05-0.15 for larger areas.
 - highlight_rect: highlight a larger rectangular area.
 - Max 1-2 visuals per response. Less is more.
 - Match your character personality: serious characters use clean annotations, chaotic characters use emotes and doodles.`;
+}
+
+/** @deprecated Use buildVisualSystemAddendum() instead */
+export const VISUAL_SYSTEM_ADDENDUM = buildVisualSystemAddendum();
