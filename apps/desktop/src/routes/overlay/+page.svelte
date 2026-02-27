@@ -29,6 +29,7 @@
   let masterRunning = false;
   let masterInterval: ReturnType<typeof setInterval> | null = null;
   let hasReceivedMessage = $state(false);
+  let pttActive = $state(false);
 
   function addBubble(name: string, rarity: string, text: string, image?: string) {
     const id = Date.now() + Math.random();
@@ -120,6 +121,9 @@
 
         await webview.listen('party-updated', () => {});
 
+        await webview.listen('ptt-active', () => { pttActive = true; });
+        await webview.listen('ptt-inactive', () => { pttActive = false; });
+
         await emitTo('main', 'overlay-ready', {});
       } catch (_) {}
     })();
@@ -135,7 +139,22 @@
 <div class="overlay-root">
   <VisualRenderer />
   <div class="bubble-container">
-    {#if !hasReceivedMessage && bubbles.length === 0}
+    {#if pttActive}
+      <div class="ptt-indicator">
+        <div class="ptt-mic">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="5" y="1" width="6" height="9" rx="3" fill="rgba(255,80,80,0.9)"/>
+            <path d="M3 7a5 5 0 0 0 10 0" stroke="rgba(255,80,80,0.7)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <line x1="8" y1="13" x2="8" y2="15" stroke="rgba(255,80,80,0.7)" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="ptt-dots">
+          <span class="ptt-dot"></span>
+          <span class="ptt-dot"></span>
+          <span class="ptt-dot"></span>
+        </div>
+      </div>
+    {:else if !hasReceivedMessage && bubbles.length === 0}
       <div class="waiting-indicator">
         <span class="waiting-dot"></span>
         <span class="waiting-text">Waiting for commentary...</span>
@@ -319,6 +338,55 @@
     background-position: left;
     -webkit-background-clip: text;
     background-clip: text;
+  }
+
+  /* ── PTT recording indicator ── */
+  .ptt-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px;
+    background: rgba(10, 14, 24, 0.88);
+    border: 1px solid rgba(255, 80, 80, 0.3);
+    border-radius: 24px;
+    animation: ptt-fade-in 0.15s ease-out;
+  }
+
+  @keyframes ptt-fade-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .ptt-mic {
+    display: flex;
+    align-items: center;
+    animation: ptt-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes ptt-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .ptt-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .ptt-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 80, 80, 0.8);
+    animation: ptt-bounce 1.2s ease-in-out infinite;
+  }
+
+  .ptt-dot:nth-child(2) { animation-delay: 0.15s; }
+  .ptt-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes ptt-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-5px); opacity: 1; }
   }
 
 </style>
