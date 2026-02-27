@@ -12,6 +12,8 @@ const DASHSCOPE_BASE_URL =
   Deno.env.get("VISION_BASE_URL") ??
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const VISION_MODEL = Deno.env.get("VISION_MODEL") ?? "qwen3-vl-flash";
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
 /** Default style nudges — one is picked at random per call for variety */
 const DEFAULT_STYLE_NUDGES = [
@@ -117,9 +119,6 @@ Deno.serve(async (req: Request) => {
     if (!system_prompt) {
       return errorResponse("system_prompt is required", 400);
     }
-    if (!DASHSCOPE_API_KEY) {
-      return errorResponse("Dashscope API key not configured", 500);
-    }
 
     // Fetch commentary config from gacha_config (same pattern as generate-character)
     const serviceClient = getServiceClient();
@@ -146,6 +145,25 @@ Deno.serve(async (req: Request) => {
       (commentary.frequencyPenalty as number) ?? DEFAULT_FREQUENCY_PENALTY;
     const responseInstruction =
       (commentary.responseInstruction as string) ?? DEFAULT_RESPONSE_INSTRUCTION;
+    const visionProvider =
+      (commentary.visionProvider as string) ?? "dashscope";
+    const visionModel =
+      (commentary.visionModel as string) ??
+      (visionProvider === "anthropic"
+        ? "claude-haiku-4-5-20251001"
+        : visionProvider === "gemini"
+          ? "gemini-2.5-flash"
+          : VISION_MODEL);
+
+    if (visionProvider === "anthropic" && !ANTHROPIC_API_KEY) {
+      return errorResponse("Anthropic API key not configured", 500);
+    }
+    if (visionProvider === "gemini" && !GEMINI_API_KEY) {
+      return errorResponse("Gemini API key not configured", 500);
+    }
+    if (visionProvider === "dashscope" && !DASHSCOPE_API_KEY) {
+      return errorResponse("Dashscope API key not configured", 500);
+    }
 
     // Build full system prompt: character persona + commentary instructions
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
@@ -172,82 +190,153 @@ Deno.serve(async (req: Request) => {
     textParts.push("/no_think");
     textParts.push(responseInstruction);
 
-    // Build multimodal user content (OpenAI-compatible format)
-    const userContent: Array<Record<string, unknown>> = [
-      {
-        type: "image_url",
-        image_url: {
-          url: `data:image/jpeg;base64,${frame_b64}`,
-        },
-      },
-      {
-        type: "text",
-        text: textParts.join("\n"),
-      },
-    ];
+    // ── Provider-specific API helpers ──────────────────────────────
 
-    // Build messages array
-    const messages: Array<Record<string, unknown>> = [
-      { role: "system", content: fullSystemPrompt },
-    ];
-
-    // Append conversation history (text-only summaries)
-    if (history && history.length > 0) {
-      for (const entry of history) {
-        messages.push({ role: entry.role, content: entry.content });
-      }
+    interface VisionResult {
+      text: string;
+      usage: { input_tokens: number; output_tokens: number };
     }
 
-    // Add the multimodal user message
-    messages.push({ role: "user", content: userContent });
+    async function callDashscope(): Promise<VisionResult> {
+      const userContent: Array<Record<string, unknown>> = [
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } },
+        { type: "text", text: textParts.join("\n") },
+      ];
+      const messages: Array<Record<string, unknown>> = [
+        { role: "system", content: fullSystemPrompt },
+      ];
+      if (history?.length) {
+        for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+      }
+      messages.push({ role: "user", content: userContent });
 
-    // Call Dashscope Qwen VL
-    const apiRes = await fetch(
-      `${DASHSCOPE_BASE_URL}/chat/completions`,
-      {
+      const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
         body: JSON.stringify({
-          model: VISION_MODEL,
+          model: visionModel,
           messages,
           max_tokens: maxTokens,
           temperature,
           presence_penalty: presencePenalty,
           frequency_penalty: frequencyPenalty,
         }),
-      },
-    );
-
-    if (!apiRes.ok) {
-      const errText = await apiRes.text();
-      console.error(
-        `[generate-commentary] Dashscope returned ${apiRes.status}: ${errText}`,
-      );
-      return errorResponse(
-        `Vision API error (${apiRes.status}): ${errText}`,
-        502,
-      );
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Dashscope ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      const reply = (data.choices?.[0]?.message?.content?.trim() ?? "")
+        .replace(/<think>[\s\S]*?<\/think>/g, "")
+        .trim();
+      return {
+        text: reply,
+        usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
+      };
     }
 
-    const apiData = await apiRes.json();
-    // Strip any <think>...</think> blocks that qwen3 thinking mode may produce
-    let reply = (apiData.choices?.[0]?.message?.content?.trim() ?? "")
-      .replace(/<think>[\s\S]*?<\/think>/g, "")
-      .trim();
-    const inputTokens = apiData.usage?.prompt_tokens ?? 0;
-    const outputTokens = apiData.usage?.completion_tokens ?? 0;
+    async function callAnthropic(): Promise<VisionResult> {
+      // Anthropic Messages API — no /no_think, no presence/frequency penalty
+      const anthropicTextParts = textParts.filter((p) => p !== "/no_think");
+      const userBlocks: Array<Record<string, unknown>> = [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } },
+        { type: "text", text: anthropicTextParts.join("\n") },
+      ];
+      const messages: Array<Record<string, unknown>> = [];
+      if (history?.length) {
+        for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+      }
+      messages.push({ role: "user", content: userBlocks });
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: visionModel,
+          max_tokens: maxTokens,
+          temperature,
+          system: fullSystemPrompt,
+          messages,
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Anthropic ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      const reply = data.content?.[0]?.text?.trim() ?? "";
+      return {
+        text: reply,
+        usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
+      };
+    }
+
+    async function callGemini(): Promise<VisionResult> {
+      // Gemini uses OpenAI-compatible format via generativelanguage endpoint
+      const userContent: Array<Record<string, unknown>> = [
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } },
+        { type: "text", text: textParts.filter((p) => p !== "/no_think").join("\n") },
+      ];
+      const messages: Array<Record<string, unknown>> = [
+        { role: "system", content: fullSystemPrompt },
+      ];
+      if (history?.length) {
+        for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+      }
+      messages.push({ role: "user", content: userContent });
+
+      const res = await fetch(
+        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
+          body: JSON.stringify({
+            model: visionModel,
+            messages,
+            max_tokens: maxTokens,
+            temperature,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content?.trim() ?? "";
+      return {
+        text: reply,
+        usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
+      };
+    }
+
+    // ── Call the selected provider ──────────────────────────────────
+
+    let result: VisionResult;
+    try {
+      if (visionProvider === "anthropic") {
+        result = await callAnthropic();
+      } else if (visionProvider === "gemini") {
+        result = await callGemini();
+      } else {
+        result = await callDashscope();
+      }
+    } catch (providerErr) {
+      const msg = providerErr instanceof Error ? providerErr.message : String(providerErr);
+      console.error(`[generate-commentary] ${visionProvider} error:`, msg);
+      return errorResponse(`Vision API error: ${msg}`, 502);
+    }
 
     // Check for [SILENCE]
     const text =
-      reply.toUpperCase().includes("[SILENCE]") ? null : reply;
+      result.text.toUpperCase().includes("[SILENCE]") ? null : result.text;
 
-    return jsonResponse({
-      text,
-      usage: { input_tokens: inputTokens, output_tokens: outputTokens },
-    });
+    return jsonResponse({ text, usage: result.usage });
   } catch (err) {
     console.error("[generate-commentary]", err);
     const message = err instanceof Error ? err.message : "Internal error";

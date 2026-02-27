@@ -6,6 +6,9 @@ export default defineConfig({
   output: 'static',
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      noExternal: ['axobject-query'],
+    },
   },
 });
 
