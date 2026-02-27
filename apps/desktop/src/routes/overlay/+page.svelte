@@ -104,7 +104,7 @@
     (async () => {
       try {
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-        const { emitTo } = await import('@tauri-apps/api/event');
+        const { emitTo, listen } = await import('@tauri-apps/api/event');
         const webview = getCurrentWebview();
 
         await webview.listen('chat-message', (event: any) => {
@@ -121,8 +121,9 @@
 
         await webview.listen('party-updated', () => {});
 
-        await webview.listen('ptt-active', () => { pttActive = true; });
-        await webview.listen('ptt-inactive', () => { pttActive = false; });
+        // Listen for global PTT events from Rust (works regardless of engine state)
+        await listen('ptt-pressed', () => { pttActive = true; });
+        await listen('ptt-released', () => { pttActive = false; });
 
         await emitTo('main', 'overlay-ready', {});
       } catch (_) {}

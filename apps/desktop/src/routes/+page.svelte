@@ -418,10 +418,13 @@
   }
 
   // ── Push-to-Talk (global — works even when game has focus) ──
+  // The global keyboard hook runs whenever PTT mode is selected, regardless of
+  // whether the engine is running. This allows the overlay indicator to show and
+  // STT to work for both live commentary and direct chat.
   let pttActive = $state(false);
 
   $effect(() => {
-    if (debug.speechMode !== 'push-to-talk' || !session.isRunning) return;
+    if (debug.speechMode !== 'push-to-talk') return;
 
     let unlistenPress: (() => void) | undefined;
     let unlistenRelease: (() => void) | undefined;
@@ -433,19 +436,15 @@
       // Start the global keyboard listener on the Rust side
       await invoke('start_ptt_listener', { keyCode: debug.pttKey });
 
-      const { emitTo } = await import('@tauri-apps/api/event');
-
       unlistenPress = await listen('ptt-pressed', () => {
         if (pttActive) return;
         pttActive = true;
         setRecording(true);
         logDebug('stt-request', { mode: 'ptt', key: debug.pttKey });
-        emitTo('overlay', 'ptt-active', {}).catch(() => {});
         invoke('start_recording').catch((err: unknown) => {
           console.error('Failed to start recording:', err);
           pttActive = false;
           setRecording(false);
-          emitTo('overlay', 'ptt-inactive', {}).catch(() => {});
         });
       });
 
@@ -453,7 +452,6 @@
         if (!pttActive) return;
         pttActive = false;
         setRecording(false);
-        emitTo('overlay', 'ptt-inactive', {}).catch(() => {});
         invoke<string>('stop_recording').then((text) => {
           if (text && text.trim()) {
             logDebug('stt-response', { mode: 'ptt', text });
