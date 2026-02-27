@@ -5254,18 +5254,25 @@ The player said: "nice shot!"</pre>
     gap: var(--space-1);
   }
   .snapshot-preview {
-    max-width: 720px;
-    width: 100%;
-    margin: 0 auto;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--white-a12);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 14px;
+    width: min(960px, 94vw);
+    max-height: min(88vh, 920px);
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    padding: var(--space-5);
+    box-shadow: 0 0 60px var(--teal-a5), 0 8px 32px var(--black-a40);
   }
   .snapshot-preview-body {
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    max-height: 60vh;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
   }
   .snapshot-preview-actions {
