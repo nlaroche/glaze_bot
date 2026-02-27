@@ -1527,6 +1527,7 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     border-top: 1px solid var(--white-a6);
