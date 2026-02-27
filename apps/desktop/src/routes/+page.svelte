@@ -417,31 +417,38 @@
     }
   }
 
-  // ── Push-to-Talk ──
+  // ── Push-to-Talk (global — works even when game has focus) ──
   let pttActive = $state(false);
 
   $effect(() => {
     if (debug.speechMode !== 'push-to-talk' || !session.isRunning) return;
 
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.code !== debug.pttKey || e.repeat || pttActive) return;
-      pttActive = true;
-      setRecording(true);
-      logDebug('stt-request', { mode: 'ptt', key: e.code });
-      import('@tauri-apps/api/core').then(({ invoke }) => {
+    let unlistenPress: (() => void) | undefined;
+    let unlistenRelease: (() => void) | undefined;
+
+    (async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const { listen } = await import('@tauri-apps/api/event');
+
+      // Start the global keyboard listener on the Rust side
+      await invoke('start_ptt_listener', { keyCode: debug.pttKey });
+
+      unlistenPress = await listen('ptt-pressed', () => {
+        if (pttActive) return;
+        pttActive = true;
+        setRecording(true);
+        logDebug('stt-request', { mode: 'ptt', key: debug.pttKey });
         invoke('start_recording').catch((err: unknown) => {
           console.error('Failed to start recording:', err);
           pttActive = false;
           setRecording(false);
         });
       });
-    }
 
-    function onKeyUp(e: KeyboardEvent) {
-      if (e.code !== debug.pttKey || !pttActive) return;
-      pttActive = false;
-      setRecording(false);
-      import('@tauri-apps/api/core').then(({ invoke }) => {
+      unlistenRelease = await listen('ptt-released', () => {
+        if (!pttActive) return;
+        pttActive = false;
+        setRecording(false);
         invoke<string>('stop_recording').then((text) => {
           if (text && text.trim()) {
             logDebug('stt-response', { mode: 'ptt', text });
@@ -452,14 +459,14 @@
           console.error('Failed to stop recording:', err);
         });
       });
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    })();
 
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      unlistenPress?.();
+      unlistenRelease?.();
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        invoke('stop_ptt_listener').catch(() => {});
+      });
     };
   });
 

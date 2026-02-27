@@ -5,6 +5,7 @@ mod audio;
 mod capture;
 mod oauth;
 mod overlay;
+mod ptt;
 mod tts;
 
 use tauri::{
@@ -131,6 +132,8 @@ fn main() {
             overlay::hide_overlay,
             close_tray_menu,
             tray_menu_action,
+            ptt::start_ptt_listener,
+            ptt::stop_ptt_listener,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
