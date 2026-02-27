@@ -12,6 +12,7 @@ import {
   pushSceneSnapshot,
   clearSceneHistory,
   setFrameSceneContext,
+  clearLogFile,
 } from '../stores/debug.svelte';
 
 /** Strip markdown formatting so TTS doesn't read asterisks, hashes, etc. */
@@ -116,6 +117,7 @@ export class CommentaryEngine {
     this.sceneHistory = [];
     this.contextRunning = false;
     resetDebugStats();
+    clearLogFile();
     markStarted();
     logDebug('info', 'Commentary engine started');
     this.scheduleNext();

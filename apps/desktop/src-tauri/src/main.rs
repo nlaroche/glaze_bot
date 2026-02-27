@@ -3,6 +3,7 @@
 
 mod audio;
 mod capture;
+mod logging;
 mod oauth;
 mod overlay;
 mod ptt;
@@ -134,6 +135,9 @@ fn main() {
             tray_menu_action,
             ptt::start_ptt_listener,
             ptt::stop_ptt_listener,
+            logging::append_debug_log,
+            logging::get_debug_log_path,
+            logging::clear_debug_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

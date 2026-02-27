@@ -34,8 +34,14 @@ export interface FrameCapture {
 
 const MAX_ENTRIES = 100;
 const MAX_FRAME_AGE_MS = 5 * 60 * 1000; // 5 minutes
+const FLUSH_INTERVAL_MS = 5000; // Flush to file every 5 seconds
 let nextId = 1;
 let nextFrameId = 1;
+
+// File-flush state
+let pendingFlush: DebugEntry[] = [];
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+let logFilePath: string | null = null;
 
 let entries = $state<DebugEntry[]>([]);
 let recentFrames = $state<FrameCapture[]>([]);
@@ -158,6 +164,7 @@ export function logDebug(type: DebugEntryType, data: unknown) {
     data,
   };
   entries = [...entries.slice(-(MAX_ENTRIES - 1)), entry];
+  pendingFlush.push(entry);
 
   if (type === 'llm-request') totalLlmCalls++;
   if (type === 'tts-request') totalTtsCalls++;
@@ -217,4 +224,74 @@ export function setFrameResponse(id: number, response: string) {
 
 export function clearFrames() {
   recentFrames = [];
+}
+
+// ── File-based debug log flushing ──────────────────────────────────
+
+function formatEntry(entry: DebugEntry): string {
+  const ts = entry.timestamp.toISOString();
+  const type = entry.type.toUpperCase().padEnd(16);
+  let data = '';
+  try {
+    data = typeof entry.data === 'string' ? entry.data : JSON.stringify(entry.data);
+  } catch {
+    data = String(entry.data);
+  }
+  // Truncate very long data (e.g. base64 frames) to keep the log readable
+  if (data.length > 500) {
+    data = data.slice(0, 497) + '...';
+  }
+  return `[${ts}] ${type} ${data}\n`;
+}
+
+async function flushToFile() {
+  if (pendingFlush.length === 0) return;
+
+  const batch = pendingFlush.splice(0);
+  const lines = batch.map(formatEntry).join('');
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const path = await invoke<string>('append_debug_log', { lines });
+    if (!logFilePath) {
+      logFilePath = path;
+      console.info(`[debug] Log file: ${path}`);
+    }
+  } catch (err) {
+    // If Tauri isn't available (e.g. browser dev), just silently skip
+    console.warn('[debug] File flush failed:', err);
+  }
+}
+
+/** Start periodic log flushing to disk. Call once at app startup. */
+export function startLogFlushing() {
+  if (flushTimer) return;
+  flushTimer = setInterval(flushToFile, FLUSH_INTERVAL_MS);
+  // Also flush on page unload
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => { flushToFile(); });
+  }
+}
+
+/** Stop periodic log flushing. */
+export function stopLogFlushing() {
+  if (flushTimer) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
+  // Final flush
+  flushToFile();
+}
+
+/** Get the path to the debug log file (null if not yet flushed). */
+export function getLogFilePath(): string | null {
+  return logFilePath;
+}
+
+/** Clear the on-disk debug log file. */
+export async function clearLogFile() {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('clear_debug_log');
+  } catch { /* ignore */ }
 }

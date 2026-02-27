@@ -8,6 +8,7 @@
   import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
   import { getThemeStore } from '$lib/stores/theme.svelte';
+  import { startLogFlushing } from '$lib/stores/debug.svelte';
 
   let { children } = $props();
   const auth = getAuthState();
@@ -30,6 +31,7 @@
   onMount(() => {
     if (!isOverlay && !isTrayMenu) {
       initializeAuth();
+      startLogFlushing();
     }
   });
 </script>
