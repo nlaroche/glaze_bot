@@ -18,9 +18,11 @@
     "@glazebot/shared-types": "workspace:*",
     "@glazebot/shared-ui": "workspace:*",
     "@glazebot/shared-utils": "workspace:*",
-    "@glazebot/supabase-client": "workspace:*"
+    "@glazebot/supabase-client": "workspace:*",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@playwright/test": "^1.58.2",
     "@supabase/supabase-js": "^2.97.0",
     "@sveltejs/adapter-cloudflare": "^4.0.0",

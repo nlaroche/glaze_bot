@@ -516,6 +516,55 @@ export function buildDirective(tokens: TokenRoll): string {
   return "\n\nCHARACTER DIRECTIVE (follow these exactly):\n" + lines.join("\n");
 }
 
+// ─── Config Snapshots ──────────────────────────────────────────────
+
+export interface ConfigSnapshot {
+  id: string;
+  name: string;
+  comments: string;
+  config: Record<string, unknown>;
+  is_favorite: boolean;
+  created_at: string;
+}
+
+/** Save a config snapshot (admin) */
+export async function saveConfigSnapshot(
+  config: Record<string, unknown>,
+  name?: string,
+  comments?: string,
+): Promise<ConfigSnapshot> {
+  return callEdgeFunction<ConfigSnapshot>("save-config-snapshot", {
+    config,
+    ...(name !== undefined ? { name } : {}),
+    ...(comments !== undefined ? { comments } : {}),
+  });
+}
+
+/** List all config snapshots (admin) */
+export async function listConfigSnapshots(): Promise<ConfigSnapshot[]> {
+  return callEdgeFunction<ConfigSnapshot[]>("list-config-snapshots", {});
+}
+
+/** Update a config snapshot's metadata (admin) */
+export async function updateConfigSnapshot(
+  id: string,
+  fields: { name?: string; comments?: string; is_favorite?: boolean },
+): Promise<ConfigSnapshot> {
+  return callEdgeFunction<ConfigSnapshot>("update-config-snapshot", {
+    id,
+    ...fields,
+  });
+}
+
+/** Delete a config snapshot (admin) */
+export async function deleteConfigSnapshot(
+  id: string,
+): Promise<{ deleted: boolean }> {
+  return callEdgeFunction<{ deleted: boolean }>("delete-config-snapshot", {
+    id,
+  });
+}
+
 /** Generate TTS audio with Fish Audio S1 — supports emotion markers and no-reference generative mode */
 export async function generativeTts(opts: {
   text: string;

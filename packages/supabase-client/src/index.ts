@@ -43,5 +43,9 @@ export {
   rollTokenPools,
   buildDirective,
   weightedPick,
+  saveConfigSnapshot,
+  listConfigSnapshots,
+  updateConfigSnapshot,
+  deleteConfigSnapshot,
 } from "./gacha.js";
-export type { FishVoice, TokenPool, TokenPools, TokenPoolEntry, TokenRoll } from "./gacha.js";
+export type { FishVoice, TokenPool, TokenPools, TokenPoolEntry, TokenRoll, ConfigSnapshot } from "./gacha.js";

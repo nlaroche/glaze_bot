@@ -22,8 +22,13 @@
     rollTokenPools as rollTokenPoolsFn,
     buildDirective as buildDirectiveFn,
     weightedPick,
+    saveConfigSnapshot,
+    listConfigSnapshots,
+    updateConfigSnapshot,
+    deleteConfigSnapshot,
   } from '@glazebot/supabase-client';
-  import type { FishVoice, TokenPools as TokenPoolsType, TokenRoll as TokenRollType } from '@glazebot/supabase-client';
+  import type { FishVoice, TokenPools as TokenPoolsType, TokenRoll as TokenRollType, ConfigSnapshot } from '@glazebot/supabase-client';
+  import yaml from 'js-yaml';
   import { Spotlight, CardViewer } from '@glazebot/shared-ui';
   import type { GachaCharacter, CharacterRarity, GenerationMetadata } from '@glazebot/shared-types';
 
@@ -65,8 +70,8 @@
   let activeTags: string[] = $state([]);
 
   // ─── State: Panels ────────────────────────────────────────────────
-  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices';
-  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices'];
+  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices' | 'history';
+  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices', 'history'];
   const storedTab = (typeof localStorage !== 'undefined' ? localStorage.getItem('admin-active-tab') : null) as AdminTab | null;
   let activeTab: AdminTab = $state(storedTab && validTabs.includes(storedTab) ? storedTab : 'config');
   let detailPanelOpen = $state(false);
@@ -111,6 +116,8 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     'React to the PACE — is it frantic, slow, tense?',
   ];
 
+  let commentaryVisionProvider = $state('dashscope');
+  let commentaryVisionModel = $state('qwen3-vl-flash');
   let commentaryDirective = $state(DEFAULT_COMMENTARY_DIRECTIVE);
   let commentaryMaxTokens = $state(80);
   let commentaryTemperature = $state(0.9);
@@ -118,6 +125,59 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let commentaryFrequencyPenalty = $state(0.8);
   let commentaryStyleNudgesText = $state(DEFAULT_COMMENTARY_NUDGES.join('\n'));
   let commentaryResponseInstruction = $state('1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]');
+
+  // ─── State: Card Generation Provider/Model ─────────────────────────
+  let cardGenProvider = $state('dashscope');
+  let cardGenModel = $state('qwen-plus');
+
+  // ─── State: Prompt Assembly Preview ────────────────────────────────
+  const PREVIEW_CHARACTER = {
+    name: 'Pixel Pete',
+    system_prompt: 'You are Pixel Pete, a retro gaming enthusiast who speaks like a 90s arcade announcer. You get genuinely excited about pixel-perfect plays and tilted by sloppy movement. Your vibe is nostalgic but sharp.',
+    personality: { energy: 78, positivity: 55, formality: 20, talkativeness: 62, attitude: 65, humor: 72 } as Record<string, number>,
+  };
+
+  let expandedPromptSections: Set<string> = $state(new Set());
+  function togglePromptSection(key: string) {
+    const next = new Set(expandedPromptSections);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    expandedPromptSections = next;
+  }
+
+  const PREVIEW_TRAIT_LABELS: Record<string, [string, string]> = {
+    energy: ['very calm and low-energy', 'very high-energy and hyped up'],
+    positivity: ['cynical and pessimistic', 'optimistic and upbeat'],
+    formality: ['very casual and informal', 'very formal and proper'],
+    talkativeness: ['terse and brief', 'chatty and verbose'],
+    attitude: ['hostile and aggressive', 'friendly and warm'],
+    humor: ['dead serious', 'silly and goofy'],
+  };
+
+  function previewBuildPersonalityModifier(personality: Record<string, number>): string {
+    const parts: string[] = [];
+    for (const [trait, [lowDesc, highDesc]] of Object.entries(PREVIEW_TRAIT_LABELS)) {
+      const val = personality[trait] ?? 50;
+      if (val < 30) parts.push(`Be ${lowDesc}`);
+      else if (val < 45) parts.push(`Be somewhat ${lowDesc}`);
+      else if (val > 70) parts.push(`Be ${highDesc}`);
+      else if (val > 55) parts.push(`Be somewhat ${highDesc}`);
+    }
+    if (parts.length === 0) return '';
+    return `\n[Personality adjustment: ${parts.join('. ')}.]`;
+  }
+
+  let previewPersonalityMod = $derived(previewBuildPersonalityModifier(PREVIEW_CHARACTER.personality));
+
+  let previewNudges = $derived(commentaryStyleNudgesText.split('\n').filter((l: string) => l.trim()));
+  let previewRandomNudge = $derived(previewNudges.length > 0 ? previewNudges[0] : '(no nudges configured)');
+
+  let previewSystemMessage = $derived(
+    PREVIEW_CHARACTER.system_prompt + '\n\n' + commentaryDirective + previewPersonalityMod
+  );
+
+  let previewUserMessage = $derived(
+    `[Screenshot: current game frame]\n\nGame: Valorant\nThe player said: "nice shot!"\n\nStyle hint: ${previewRandomNudge}\n\n/no_think ${commentaryResponseInstruction}`
+  );
 
   // ─── State: Token Pools ───────────────────────────────────────────
   interface TokenPoolEntry { value: string; weight: number; }
@@ -497,6 +557,23 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let confirmVariant: 'destructive' | 'primary' = $state('destructive');
   let confirmAction: () => void = $state(() => {});
 
+  // ─── State: Config History ──────────────────────────────────────────
+  let snapshots: ConfigSnapshot[] = $state([]);
+  let snapshotsLoading = $state(false);
+  let snapshotsLoaded = $state(false);
+  let snapshotSearch = $state('');
+  let snapshotPage = $state(1);
+  let snapshotPageSize = $state(25);
+  let snapshotSortKey: string = $state('created_at');
+  let snapshotSortDirection: 'asc' | 'desc' = $state('desc');
+  let snapshotFavoritesOnly = $state(false);
+  let previewSnapshot: ConfigSnapshot | null = $state(null);
+  let previewOpen = $state(false);
+  let previewSchemaError = $state('');
+  let importError = $state('');
+  let importSuccess = $state('');
+  let importFileInput: HTMLInputElement | null = $state(null);
+
   // ─── State: Generate ──────────────────────────────────────────────
   let generateRarity: CharacterRarity = $state('common');
   let rolledTokens: Record<string, string> = $state({});
@@ -747,12 +824,65 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   ];
 
   // ─── Constants ────────────────────────────────────────────────────
-  const modelOptions = [
-    { value: 'qwen-plus', label: 'qwen-plus' },
-    { value: 'qwen-turbo', label: 'qwen-turbo' },
-    { value: 'qwen-max', label: 'qwen-max' },
-    { value: 'qwen3-vl-flash', label: 'qwen3-vl-flash' },
+  const commentaryProviderOptions = [
+    { value: 'dashscope', label: 'Dashscope (Qwen VL)' },
+    { value: 'anthropic', label: 'Anthropic (Claude)' },
+    { value: 'gemini', label: 'Google (Gemini)' },
   ];
+  const commentaryModelOptions: Record<string, { value: string; label: string }[]> = {
+    dashscope: [
+      { value: 'qwen3-vl-flash', label: 'qwen3-vl-flash' },
+      { value: 'qwen-vl-plus', label: 'qwen-vl-plus' },
+      { value: 'qwen-vl-max', label: 'qwen-vl-max' },
+    ],
+    anthropic: [
+      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+      { value: 'claude-sonnet-4-5-20250514', label: 'Sonnet 4.5' },
+    ],
+    gemini: [
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+      { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+    ],
+  };
+  let activeCommentaryModels = $derived(commentaryModelOptions[commentaryVisionProvider] ?? []);
+
+  function onCommentaryProviderChange() {
+    const models = commentaryModelOptions[commentaryVisionProvider];
+    if (models?.length) commentaryVisionModel = models[0].value;
+    syncToConfig();
+  }
+
+  const cardGenProviderOptions = [
+    { value: 'dashscope', label: 'Dashscope (Qwen)' },
+    { value: 'anthropic', label: 'Anthropic (Claude)' },
+    { value: 'gemini', label: 'Google (Gemini)' },
+  ];
+  const cardGenModelOptions: Record<string, { value: string; label: string }[]> = {
+    dashscope: [
+      { value: 'qwen-plus', label: 'qwen-plus' },
+      { value: 'qwen-turbo', label: 'qwen-turbo' },
+      { value: 'qwen-max', label: 'qwen-max' },
+    ],
+    anthropic: [
+      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+      { value: 'claude-sonnet-4-5-20250514', label: 'Sonnet 4.5' },
+    ],
+    gemini: [
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+      { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+    ],
+  };
+  let activeCardGenModels = $derived(cardGenModelOptions[cardGenProvider] ?? []);
+
+  function onCardGenProviderChange() {
+    const models = cardGenModelOptions[cardGenProvider];
+    if (models?.length) cardGenModel = models[0].value;
+    syncToConfig();
+  }
 
   const rarities = ['common', 'rare', 'epic', 'legendary'] as const;
   const traitLabels = ['energy', 'positivity', 'formality', 'talkativeness', 'attitude', 'humor'] as const;
@@ -887,6 +1017,211 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
 
   const paginated = $derived(sorted.slice((page - 1) * pageSize, page * pageSize));
 
+  // ─── Config Schema Validation ────────────────────────────────────
+  const EXPECTED_TOP_KEYS = [
+    'dropRates', 'baseTemperature', 'model', 'cardGenProvider', 'cardGenModel',
+    'packsPerDay', 'cardsPerPack', 'generationPrompt', 'imageSystemInfo',
+    'tokenPools', 'traitRanges', 'promptQuality', 'rarityGuidance', 'commentary',
+  ];
+  const EXPECTED_COMMENTARY_KEYS = [
+    'visionProvider', 'visionModel', 'directive', 'maxTokens', 'temperature',
+    'presencePenalty', 'frequencyPenalty', 'styleNudges', 'responseInstruction',
+  ];
+
+  function validateConfigSchema(cfg: Record<string, unknown>): string | null {
+    const missingTop = EXPECTED_TOP_KEYS.filter(k => !(k in cfg));
+    const commentary = cfg.commentary as Record<string, unknown> | undefined;
+    const missingCommentary = commentary
+      ? EXPECTED_COMMENTARY_KEYS.filter(k => !(k in commentary))
+      : EXPECTED_COMMENTARY_KEYS;
+    const missing = [...missingTop.map(k => k), ...missingCommentary.map(k => `commentary.${k}`)];
+    if (missing.length === 0) return null;
+    return `Missing keys: ${missing.join(', ')}`;
+  }
+
+  // ─── Snapshot Derived Chain ────────────────────────────────────────
+  const snapshotsFiltered = $derived(
+    snapshots.filter(s => {
+      if (snapshotFavoritesOnly && !s.is_favorite) return false;
+      if (snapshotSearch) {
+        const q = snapshotSearch.toLowerCase();
+        const nameMatch = (s.name || '(auto-save)').toLowerCase().includes(q);
+        const commentsMatch = s.comments.toLowerCase().includes(q);
+        if (!nameMatch && !commentsMatch) return false;
+      }
+      return true;
+    })
+  );
+
+  const snapshotsSorted = $derived(
+    [...snapshotsFiltered].sort((a, b) => {
+      const dir = snapshotSortDirection === 'asc' ? 1 : -1;
+      if (snapshotSortKey === 'name') {
+        return dir * (a.name || '(auto-save)').localeCompare(b.name || '(auto-save)');
+      }
+      return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    })
+  );
+
+  const snapshotsPaginated = $derived(
+    snapshotsSorted.slice((snapshotPage - 1) * snapshotPageSize, snapshotPage * snapshotPageSize)
+  );
+
+  // ─── Snapshot Helper Functions ─────────────────────────────────────
+  async function loadSnapshots() {
+    if (snapshotsLoaded || snapshotsLoading) return;
+    snapshotsLoading = true;
+    try {
+      snapshots = await listConfigSnapshots();
+      snapshotsLoaded = true;
+    } catch {
+      // silent
+    } finally {
+      snapshotsLoading = false;
+    }
+  }
+
+  function applySnapshot(snapshot: ConfigSnapshot) {
+    const err = validateConfigSchema(snapshot.config);
+    if (err) return;
+    config = structuredClone(snapshot.config);
+    rawJson = JSON.stringify(config, null, 2);
+    syncFromConfig();
+    previewOpen = false;
+    activeTab = 'config';
+    saveMsg = 'Config loaded from snapshot — review and Save when ready.';
+    setTimeout(() => saveMsg = '', 4000);
+  }
+
+  function handleDeleteSnapshot(snapshot: ConfigSnapshot) {
+    confirmTitle = 'Delete Snapshot';
+    confirmMessage = `Delete snapshot "${snapshot.name || '(auto-save)'}" from ${new Date(snapshot.created_at).toLocaleDateString()}? This cannot be undone.`;
+    confirmLabel = 'Delete';
+    confirmVariant = 'destructive';
+    confirmAction = async () => {
+      try {
+        await deleteConfigSnapshot(snapshot.id);
+        snapshots = snapshots.filter(s => s.id !== snapshot.id);
+        if (previewSnapshot?.id === snapshot.id) {
+          previewOpen = false;
+          previewSnapshot = null;
+        }
+      } catch {
+        // silent
+      }
+      confirmOpen = false;
+    };
+    confirmOpen = true;
+  }
+
+  function openSnapshotPreview(snapshot: ConfigSnapshot) {
+    previewSnapshot = snapshot;
+    previewSchemaError = validateConfigSchema(snapshot.config) ?? '';
+    previewOpen = true;
+  }
+
+  async function handleSnapshotFavorite(snapshot: ConfigSnapshot, e: Event) {
+    e.stopPropagation();
+    const newVal = !snapshot.is_favorite;
+    try {
+      await updateConfigSnapshot(snapshot.id, { is_favorite: newVal });
+      snapshots = snapshots.map(s => s.id === snapshot.id ? { ...s, is_favorite: newVal } : s);
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleSnapshotMetaUpdate(id: string, fields: { name?: string; comments?: string }) {
+    try {
+      const updated = await updateConfigSnapshot(id, fields);
+      snapshots = snapshots.map(s => s.id === id ? updated : s);
+      if (previewSnapshot?.id === id) previewSnapshot = updated;
+    } catch {
+      // silent
+    }
+  }
+
+  function exportConfigAsYaml(cfg: Record<string, unknown>, filename?: string) {
+    const doc = {
+      _purpose: 'GlazeBot creates AI gaming commentary characters through a gacha system. Characters watch gameplay via screen share and commentate in real time. Goal: characters that interact well with the game, offer funny and insightful comments, stay in character without being annoying, and offer emotional support.',
+
+      _character_generation_flow: [
+        'Step 1: Load config fields — baseTemperature, generationPrompt, traitRanges, promptQuality, rarityGuidance, tokenPools',
+        'Step 2: Roll token pools — weighted random selection per pool; conditional pools check if parent pool rolled a qualifying value',
+        'Step 3: Build directive string from roll results (e.g. "Gender: female, Species: elf, Archetype: healer")',
+        'Step 4: Assemble system prompt = generationPrompt + rarityGuidance[rarity] + trait range constraint text',
+        'Step 5: Build user message = directive block + avoid clause (no existing character names)',
+        'Step 6: LLM call with temperature = baseTemperature + tempBoost (from promptQuality[rarity]), maxTokens from promptQuality[rarity]',
+        'Step 7: Parse JSON response, clamp personality traits to traitRanges min/max',
+        'Step 8: Output fields: name, description, backstory, system_prompt, tagline, personality (6 traits 0-100: energy, positivity, formality, talkativeness, attitude, humor)',
+        'Step 9: Voice assigned randomly from Fish Audio library',
+        'Step 10: Sprite generated via PixelLab using imageSystemInfo + character description',
+      ],
+
+      _commentary_flow: [
+        'Step 1: System prompt = character.system_prompt + commentary.directive + buildPersonalityModifier(personality)',
+        'Step 2: Personality modifier — traits outside the 30-55 neutral range add behavioral instructions (e.g. energy > 70 → "Be very high-energy and hyped up")',
+        'Step 3: Random style nudge picked from commentary.styleNudges array',
+        'Step 4: User message = game_hint + player_transcript + co-caster_reaction + [style nudge] + responseInstruction',
+        'Step 5: Screenshot attached as vision input to the LLM',
+        'Step 6: LLM call with commentary provider/model/temperature/maxTokens/presencePenalty/frequencyPenalty',
+        'Step 7: If response is "[SILENCE]" → skip TTS; otherwise → Fish Audio TTS → audio playback',
+      ],
+
+      config: cfg,
+    };
+
+    const yamlStr = yaml.dump(doc, { lineWidth: 120, noRefs: true, sortKeys: false });
+    const blob = new Blob([yamlStr], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename ?? `glazebot-config-${new Date().toISOString().slice(0, 10)}.yaml`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportConfig() {
+    syncToConfig();
+    exportConfigAsYaml(config);
+  }
+
+  function exportSnapshotAsYaml(snapshot: ConfigSnapshot) {
+    const datePart = new Date(snapshot.created_at).toISOString().slice(0, 10);
+    const namePart = snapshot.name ? `-${snapshot.name.replace(/\s+/g, '-').toLowerCase()}` : '';
+    exportConfigAsYaml(snapshot.config, `glazebot-config-${datePart}${namePart}.yaml`);
+  }
+
+  function handleImportFile(e: Event) {
+    importError = '';
+    importSuccess = '';
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = yaml.load(reader.result as string) as Record<string, unknown>;
+        const cfgData = (parsed?.config ?? parsed) as Record<string, unknown>;
+        const err = validateConfigSchema(cfgData);
+        if (err) {
+          importError = `Schema validation failed: ${err}`;
+          return;
+        }
+        config = structuredClone(cfgData);
+        rawJson = JSON.stringify(config, null, 2);
+        syncFromConfig();
+        importSuccess = 'Config imported — review and Save when ready.';
+        setTimeout(() => importSuccess = '', 4000);
+        activeTab = 'config';
+      } catch (ex) {
+        importError = ex instanceof Error ? ex.message : 'Failed to parse YAML';
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be re-imported
+    if (importFileInput) importFileInput.value = '';
+  }
+
   // ─── Lifecycle ────────────────────────────────────────────────────
   $effect(() => {
     loadConfig();
@@ -911,6 +1246,12 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     voiceSearch;
     activeVoiceTags;
     voicePage = 1;
+  });
+
+  $effect(() => {
+    snapshotSearch;
+    snapshotFavoritesOnly;
+    snapshotPage = 1;
   });
 
   // Stop audio + load voices on step change
@@ -993,12 +1334,16 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     if (dr) dropRates = { common: dr.common ?? 0.6, rare: dr.rare ?? 0.25, epic: dr.epic ?? 0.12, legendary: dr.legendary ?? 0.03 };
     baseTemperature = (config.baseTemperature as number) ?? 0.9;
     model = (config.model as string) ?? 'qwen-plus';
+    cardGenProvider = (config.cardGenProvider as string) ?? 'dashscope';
+    cardGenModel = (config.cardGenModel as string) ?? model;
     packsPerDay = (config.packsPerDay as number) ?? 3;
     cardsPerPack = (config.cardsPerPack as number) ?? 3;
     generationPrompt = (config.generationPrompt as string) ?? '';
     imageSystemInfo = (config.imageSystemInfo as string) ?? 'facing south, sitting at a table, 128x128 pixel art sprite, no background';
     tokenPools = (config.tokenPools as Record<string, TokenPool>) ?? structuredClone(DEFAULT_TOKEN_POOLS);
     const c = config.commentary as Record<string, unknown> | undefined;
+    commentaryVisionProvider = (c?.visionProvider as string) ?? 'dashscope';
+    commentaryVisionModel = (c?.visionModel as string) ?? (commentaryModelOptions[commentaryVisionProvider]?.[0]?.value ?? 'qwen3-vl-flash');
     commentaryDirective = (c?.directive as string) ?? DEFAULT_COMMENTARY_DIRECTIVE;
     commentaryMaxTokens = (c?.maxTokens as number) ?? 80;
     commentaryTemperature = (c?.temperature as number) ?? 0.9;
@@ -1014,13 +1359,17 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       ...config,
       dropRates: { ...dropRates },
       baseTemperature,
-      model,
+      model: cardGenModel,
+      cardGenProvider,
+      cardGenModel,
       packsPerDay,
       cardsPerPack,
       generationPrompt,
       imageSystemInfo,
       tokenPools,
       commentary: {
+        visionProvider: commentaryVisionProvider,
+        visionModel: commentaryVisionModel,
         directive: commentaryDirective,
         maxTokens: commentaryMaxTokens,
         temperature: commentaryTemperature,
@@ -1066,6 +1415,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       await updateGachaConfig(config);
       saveMsg = 'Saved!';
       setTimeout(() => saveMsg = '', 2000);
+      // Fire-and-forget snapshot
+      saveConfigSnapshot(structuredClone(config)).then(snap => {
+        if (snapshotsLoaded) snapshots = [snap, ...snapshots];
+      }).catch(() => {});
     } catch (e) {
       saveMsg = e instanceof Error ? e.message : 'Save failed';
     } finally {
@@ -1553,6 +1906,12 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       onclick={() => { activeTab = 'voices'; loadFishVoices(); loadVoiceUsageMap(); }}
       data-testid="tab-voices"
     >Voices</button>
+    <button
+      class="top-tab"
+      class:active={activeTab === 'history'}
+      onclick={() => { activeTab = 'history'; loadSnapshots(); }}
+      data-testid="tab-history"
+    >History</button>
   </div>
 
   <!-- ═══ TAB: WORKSHOP ═══ -->
@@ -1703,16 +2062,28 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       <p class="muted">Loading config...</p>
     {:else}
       <div class="cfg" data-testid="config-panel">
-        <!-- Row 1: Generation Engine -->
-        <div class="cfg-card">
+        <!-- Global Config -->
+        <div class="cfg-card" data-testid="global-config-card">
           <div class="cfg-header">
-            <h3 class="cfg-title">Generation Engine</h3>
-            <p class="cfg-desc">Model and creativity settings for character generation</p>
+            <h3 class="cfg-title">Global Config</h3>
+            <p class="cfg-desc">Provider, model, and temperature for each pipeline</p>
           </div>
-          <div class="cfg-body">
-            <div class="cfg-pair">
-              <Select label="Model" bind:value={model} options={modelOptions} onchange={syncToConfig} testid="config-model" />
-              <SliderInput label="Temperature" bind:value={baseTemperature} min={0} max={2} step={0.05} onchange={syncToConfig} testid="config-temperature" />
+          <div class="cfg-body global-config-body">
+            <div class="global-config-row">
+              <span class="global-config-label">Card Generation</span>
+              <div class="global-config-controls">
+                <Select label="Provider" bind:value={cardGenProvider} options={cardGenProviderOptions} onchange={onCardGenProviderChange} testid="config-cardgen-provider" />
+                <Select label="Model" bind:value={cardGenModel} options={activeCardGenModels} onchange={syncToConfig} testid="config-cardgen-model" />
+                <SliderInput label="Temperature" bind:value={baseTemperature} min={0} max={2} step={0.05} onchange={syncToConfig} testid="config-temperature" />
+              </div>
+            </div>
+            <div class="global-config-row">
+              <span class="global-config-label">Commentary</span>
+              <div class="global-config-controls">
+                <Select label="Provider" bind:value={commentaryVisionProvider} options={commentaryProviderOptions} onchange={onCommentaryProviderChange} testid="config-commentary-provider" />
+                <Select label="Model" bind:value={commentaryVisionModel} options={activeCommentaryModels} onchange={syncToConfig} testid="config-commentary-model" />
+                <SliderInput label="Temperature" bind:value={commentaryTemperature} min={0.1} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-temperature" />
+              </div>
             </div>
           </div>
         </div>
@@ -1825,7 +2196,6 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
           <div class="cfg-body">
             <TextInput label="Response Instruction" bind:value={commentaryResponseInstruction} placeholder="1-2 sentences max, under 30 words..." onchange={syncToConfig} testid="config-commentary-response-instruction" />
             <NumberInput label="Max Tokens" bind:value={commentaryMaxTokens} min={10} max={500} onchange={syncToConfig} testid="config-commentary-max-tokens" />
-            <SliderInput label="Temperature" bind:value={commentaryTemperature} min={0.1} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-temperature" />
             <SliderInput label="Presence Penalty" bind:value={commentaryPresencePenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-presence-penalty" />
             <SliderInput label="Frequency Penalty" bind:value={commentaryFrequencyPenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-frequency-penalty" />
           </div>
@@ -1857,77 +2227,121 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         <div class="cfg-card" data-testid="prompt-assembly-card">
           <div class="cfg-header">
             <h3 class="cfg-title">How Commentary Prompts Are Assembled</h3>
-            <p class="cfg-desc">This is the exact structure sent to the LLM on every commentary call</p>
+            <p class="cfg-desc">Click each section to see exactly what the LLM receives — edits above update the preview in real time</p>
           </div>
           <div class="cfg-body">
             <div class="prompt-flow">
-              <div class="prompt-layer">
-                <div class="prompt-layer-header">
-                  <span class="prompt-layer-badge system">SYSTEM</span>
-                  <span class="prompt-layer-title">System Message</span>
+
+              <!-- SYSTEM section -->
+              <button class="prompt-section-header" onclick={() => togglePromptSection('system')} data-testid="prompt-section-system">
+                <span class="prompt-chevron" class:expanded={expandedPromptSections.has('system')}>&#9654;</span>
+                <span class="prompt-section-badge system">SYSTEM</span>
+                <span class="prompt-section-title">System Message</span>
+                <span class="prompt-section-hint">3 parts concatenated</span>
+              </button>
+              {#if expandedPromptSections.has('system')}
+                <div class="prompt-section-body">
+                  <div class="prompt-text-block" data-border="db">
+                    <div class="prompt-text-label"><span class="prompt-source-tag db">from DB</span> Character system_prompt</div>
+                    <pre class="prompt-text-box">{PREVIEW_CHARACTER.system_prompt}</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="config">
+                    <div class="prompt-text-label"><span class="prompt-source-tag config">from config</span> Commentary Directive</div>
+                    <pre class="prompt-text-box">{commentaryDirective}</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="auto">
+                    <div class="prompt-text-label"><span class="prompt-source-tag auto">auto-generated</span> Personality Modifier</div>
+                    <pre class="prompt-text-box">{previewPersonalityMod || '(all traits neutral — no modifier)'}</pre>
+                    <div class="prompt-trait-pills">
+                      {#each Object.entries(PREVIEW_CHARACTER.personality) as [trait, val]}
+                        <span class="prompt-trait-pill">{trait}: {val}</span>
+                      {/each}
+                    </div>
+                  </div>
                 </div>
-                <div class="prompt-layer-stack">
-                  <div class="prompt-block" data-source="db">
-                    <span class="prompt-block-label">Character system_prompt</span>
-                    <span class="prompt-block-desc">Stored per-character in DB — the personality and voice</span>
-                  </div>
-                  <div class="prompt-flow-arrow">+</div>
-                  <div class="prompt-block" data-source="config">
-                    <span class="prompt-block-label">Commentary Directive</span>
-                    <span class="prompt-block-desc">Your directive above — tells the LLM HOW to commentate</span>
-                  </div>
-                  <div class="prompt-flow-arrow">+</div>
-                  <div class="prompt-block" data-source="auto">
-                    <span class="prompt-block-label">Personality Modifier</span>
-                    <span class="prompt-block-desc">Auto-generated from character trait values (energy, humor, etc.)</span>
-                  </div>
-                </div>
-              </div>
+              {/if}
 
               <div class="prompt-flow-divider"></div>
 
-              <div class="prompt-layer">
-                <div class="prompt-layer-header">
-                  <span class="prompt-layer-badge user">USER</span>
-                  <span class="prompt-layer-title">User Message (per frame)</span>
+              <!-- USER section -->
+              <button class="prompt-section-header" onclick={() => togglePromptSection('user')} data-testid="prompt-section-user">
+                <span class="prompt-chevron" class:expanded={expandedPromptSections.has('user')}>&#9654;</span>
+                <span class="prompt-section-badge user">USER</span>
+                <span class="prompt-section-title">User Message (per frame)</span>
+                <span class="prompt-section-hint">4 parts joined</span>
+              </button>
+              {#if expandedPromptSections.has('user')}
+                <div class="prompt-section-body">
+                  <div class="prompt-text-block" data-border="runtime">
+                    <div class="prompt-text-label"><span class="prompt-source-tag runtime">runtime</span> Screenshot</div>
+                    <pre class="prompt-text-box prompt-text-italic">[Screenshot: current game frame sent as base64 image]</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="runtime">
+                    <div class="prompt-text-label"><span class="prompt-source-tag runtime">runtime</span> Context</div>
+                    <pre class="prompt-text-box">Game: Valorant
+The player said: "nice shot!"</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="config">
+                    <div class="prompt-text-label"><span class="prompt-source-tag config">from config</span> Random Style Nudge</div>
+                    <pre class="prompt-text-box">Style hint: {previewRandomNudge}</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="config">
+                    <div class="prompt-text-label"><span class="prompt-source-tag config">from config</span> Response Instruction</div>
+                    <pre class="prompt-text-box">/no_think {commentaryResponseInstruction}</pre>
+                  </div>
                 </div>
-                <div class="prompt-layer-stack">
-                  <div class="prompt-block" data-source="runtime">
-                    <span class="prompt-block-label">Screenshot</span>
-                    <span class="prompt-block-desc">Current game frame sent as base64 image</span>
-                  </div>
-                  <div class="prompt-flow-arrow">+</div>
-                  <div class="prompt-block" data-source="runtime">
-                    <span class="prompt-block-label">Context</span>
-                    <span class="prompt-block-desc">Game hint, player speech, co-caster reactions (if any)</span>
-                  </div>
-                  <div class="prompt-flow-arrow">+</div>
-                  <div class="prompt-block" data-source="config">
-                    <span class="prompt-block-label">Random Style Nudge</span>
-                    <span class="prompt-block-desc">One nudge picked at random from your list above</span>
-                  </div>
-                  <div class="prompt-flow-arrow">+</div>
-                  <div class="prompt-block" data-source="config">
-                    <span class="prompt-block-label">Response Instruction</span>
-                    <span class="prompt-block-desc">Length/format constraint — "{commentaryResponseInstruction.slice(0, 50)}..."</span>
-                  </div>
-                </div>
-              </div>
+              {/if}
 
               <div class="prompt-flow-divider"></div>
 
-              <div class="prompt-layer">
-                <div class="prompt-layer-header">
-                  <span class="prompt-layer-badge params">PARAMS</span>
-                  <span class="prompt-layer-title">API Parameters</span>
+              <!-- PARAMS section -->
+              <button class="prompt-section-header" onclick={() => togglePromptSection('params')} data-testid="prompt-section-params">
+                <span class="prompt-chevron" class:expanded={expandedPromptSections.has('params')}>&#9654;</span>
+                <span class="prompt-section-badge params">PARAMS</span>
+                <span class="prompt-section-title">API Parameters</span>
+                <span class="prompt-section-hint">sent with every call</span>
+              </button>
+              {#if expandedPromptSections.has('params')}
+                <div class="prompt-section-body">
+                  <div class="prompt-params">
+                    <span class="prompt-param">provider: {commentaryVisionProvider}</span>
+                    <span class="prompt-param">model: {commentaryVisionModel}</span>
+                    <span class="prompt-param">max_tokens: {commentaryMaxTokens}</span>
+                    <span class="prompt-param">temperature: {commentaryTemperature}</span>
+                    <span class="prompt-param">presence_penalty: {commentaryPresencePenalty}</span>
+                    <span class="prompt-param">frequency_penalty: {commentaryFrequencyPenalty}</span>
+                  </div>
                 </div>
-                <div class="prompt-params">
-                  <span class="prompt-param">max_tokens: {commentaryMaxTokens}</span>
-                  <span class="prompt-param">temperature: {commentaryTemperature}</span>
-                  <span class="prompt-param">presence_penalty: {commentaryPresencePenalty}</span>
-                  <span class="prompt-param">frequency_penalty: {commentaryFrequencyPenalty}</span>
+              {/if}
+
+              <div class="prompt-flow-divider"></div>
+
+              <!-- LIVE PREVIEW section -->
+              <button class="prompt-section-header prompt-section-header--preview" onclick={() => togglePromptSection('preview')} data-testid="prompt-section-preview">
+                <span class="prompt-chevron" class:expanded={expandedPromptSections.has('preview')}>&#9654;</span>
+                <span class="prompt-section-badge preview">LIVE</span>
+                <span class="prompt-section-title">Assembled Preview</span>
+                <span class="prompt-section-hint">what {PREVIEW_CHARACTER.name} actually sees</span>
+              </button>
+              {#if expandedPromptSections.has('preview')}
+                <div class="prompt-section-body">
+                  <div class="prompt-preview-character">
+                    Previewing as <strong>{PREVIEW_CHARACTER.name}</strong> — {Object.entries(PREVIEW_CHARACTER.personality).map(([t, v]) => `${t}:${v}`).join(' · ')}
+                  </div>
+                  <div class="prompt-text-block" data-border="system-full">
+                    <div class="prompt-text-label">Full SYSTEM message</div>
+                    <pre class="prompt-text-box prompt-text-box--tall">{previewSystemMessage}</pre>
+                  </div>
+                  <div class="prompt-text-block" data-border="user-full">
+                    <div class="prompt-text-label">Full USER message</div>
+                    <pre class="prompt-text-box prompt-text-box--tall">{previewUserMessage}</pre>
+                  </div>
+                  <div class="prompt-preview-params">
+                    provider: {commentaryVisionProvider} · model: {commentaryVisionModel} · max_tokens: {commentaryMaxTokens} · temperature: {commentaryTemperature} · presence_penalty: {commentaryPresencePenalty} · frequency_penalty: {commentaryFrequencyPenalty}
+                  </div>
                 </div>
-              </div>
+              {/if}
+
             </div>
           </div>
         </div>
@@ -2324,8 +2738,186 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         </div>
       {/if}
     </div>
+
+  <!-- ═══ TAB: HISTORY ═══ -->
+  {:else if activeTab === 'history'}
+    <div class="history-tab" data-testid="history-panel">
+      {#if snapshotsLoading}
+        <p class="muted">Loading snapshots...</p>
+      {:else}
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <div class="search-bar">
+            {#if snapshots.length > 0}
+              <Badge variant="default" text="{snapshotsFiltered.length} snapshot{snapshotsFiltered.length !== 1 ? 's' : ''}" testid="snapshot-count-badge" />
+            {/if}
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search snapshots..."
+              bind:value={snapshotSearch}
+              data-testid="snapshot-search-input"
+            />
+            <button
+              class="celebrity-toggle"
+              class:active={snapshotFavoritesOnly}
+              onclick={() => { snapshotFavoritesOnly = !snapshotFavoritesOnly; snapshotPage = 1; }}
+              data-testid="favorites-toggle-btn"
+            >
+              {snapshotFavoritesOnly ? 'Show All' : 'Favorites Only'}
+            </button>
+          </div>
+          <div class="toolbar-actions">
+            <Button variant="ghost" size="sm" onclick={exportConfig} testid="export-yaml-btn">Export YAML</Button>
+            <Button variant="ghost" size="sm" onclick={() => importFileInput?.click()} testid="import-yaml-btn">Import YAML</Button>
+            <input
+              type="file"
+              accept=".yaml,.yml"
+              style="display:none"
+              bind:this={importFileInput}
+              onchange={handleImportFile}
+              data-testid="import-file-input"
+            />
+          </div>
+        </div>
+
+        {#if importError}
+          <p class="error" data-testid="import-error">{importError}</p>
+        {/if}
+        {#if importSuccess}
+          <p class="save-msg" data-testid="import-success">{importSuccess}</p>
+        {/if}
+
+        {#if snapshots.length === 0}
+          <p class="muted">No snapshots yet. Snapshots are created automatically each time you save the config.</p>
+        {:else}
+          <DataTable
+            columns={[
+              { key: 'favorite', label: '\u2605', width: '44px' },
+              { key: 'name', label: 'Name', sortable: true },
+              { key: 'comments', label: 'Comments' },
+              { key: 'created_at', label: 'Saved', sortable: true, width: '120px' },
+              { key: 'actions', label: 'Actions', width: '120px' },
+            ] as Column[]}
+            rows={snapshotsPaginated}
+            sortKey={snapshotSortKey}
+            sortDirection={snapshotSortDirection}
+            onsort={(key, dir) => { snapshotSortKey = key; snapshotSortDirection = dir; }}
+            onrowclick={(row) => openSnapshotPreview(row as unknown as ConfigSnapshot)}
+          >
+            {#snippet cell({ row, column })}
+              {#if column.key === 'favorite'}
+                <button
+                  class="star-btn"
+                  class:active={row.is_favorite}
+                  onclick={(e) => handleSnapshotFavorite(row as unknown as ConfigSnapshot, e)}
+                  title={row.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                  data-testid="star-{row.id}"
+                >
+                  {row.is_favorite ? '\u2605' : '\u2606'}
+                </button>
+              {:else if column.key === 'name'}
+                <span class="cell-name">{row.name || '(auto-save)'}</span>
+              {:else if column.key === 'comments'}
+                <span class="cell-muted" title={row.comments}>
+                  {row.comments.length > 60 ? row.comments.slice(0, 60) + '...' : row.comments || '\u2014'}
+                </span>
+              {:else if column.key === 'created_at'}
+                <span class="cell-muted">{new Date(row.created_at).toLocaleDateString()}</span>
+              {:else if column.key === 'actions'}
+                <div class="snapshot-actions">
+                  <Button variant="ghost" size="sm" onclick={(e) => { e.stopPropagation(); openSnapshotPreview(row as unknown as ConfigSnapshot); }} testid="preview-{row.id}">Preview</Button>
+                  <Button variant="ghost" size="sm" onclick={(e) => { e.stopPropagation(); handleDeleteSnapshot(row as unknown as ConfigSnapshot); }} testid="delete-{row.id}">Delete</Button>
+                </div>
+              {/if}
+            {/snippet}
+          </DataTable>
+
+          <Pagination
+            total={snapshotsFiltered.length}
+            page={snapshotPage}
+            pageSize={snapshotPageSize}
+            onpagechange={(p) => snapshotPage = p}
+            onpagesizechange={(s) => { snapshotPageSize = s; snapshotPage = 1; }}
+          />
+        {/if}
+      {/if}
+    </div>
   {/if}
 </div>
+
+<!-- ═══ SNAPSHOT PREVIEW ═══ -->
+<Spotlight open={previewOpen} onclose={() => { previewOpen = false; previewSnapshot = null; }}>
+  {#if previewSnapshot}
+    <div class="snapshot-preview" data-testid="snapshot-preview">
+      <div class="modal-header">
+        <div class="modal-header-title">
+          <h2>{previewSnapshot.name || '(auto-save)'}</h2>
+          <span class="cell-muted">{new Date(previewSnapshot.created_at).toLocaleString()}</span>
+        </div>
+        <button class="close-btn" onclick={() => { previewOpen = false; previewSnapshot = null; }} data-testid="close-snapshot-preview">&times;</button>
+      </div>
+
+      <div class="snapshot-preview-body">
+        <div class="cfg-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">Snapshot Details</h3>
+          </div>
+          <div class="cfg-body">
+            <div class="snapshot-field">
+              <label>Name</label>
+              <input
+                type="text"
+                class="search-input"
+                value={previewSnapshot.name}
+                onchange={(e) => handleSnapshotMetaUpdate(previewSnapshot!.id, { name: (e.target as HTMLInputElement).value })}
+                placeholder="(auto-save)"
+                data-testid="snapshot-edit-name"
+              />
+            </div>
+            <div class="snapshot-field">
+              <label>Comments</label>
+              <textarea
+                class="search-input snapshot-comments-input"
+                value={previewSnapshot.comments}
+                onchange={(e) => handleSnapshotMetaUpdate(previewSnapshot!.id, { comments: (e.target as HTMLTextAreaElement).value })}
+                placeholder="Add notes..."
+                rows="2"
+                data-testid="snapshot-edit-comments"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        {#if previewSchemaError}
+          <div class="error" data-testid="snapshot-schema-error">
+            Schema incompatibility: {previewSchemaError}
+          </div>
+        {/if}
+
+        <div class="cfg-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">Config JSON</h3>
+          </div>
+          <div class="cfg-body">
+            <pre class="prompt-text-box">{JSON.stringify(previewSnapshot.config, null, 2)}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="snapshot-preview-actions">
+        <Button variant="ghost" onclick={() => { previewOpen = false; previewSnapshot = null; }} testid="snapshot-cancel">Cancel</Button>
+        <Button variant="ghost" onclick={() => exportSnapshotAsYaml(previewSnapshot!)} testid="snapshot-export-yaml">Export YAML</Button>
+        <Button
+          variant="primary"
+          disabled={!!previewSchemaError}
+          onclick={() => applySnapshot(previewSnapshot!)}
+          testid="snapshot-apply"
+        >Apply This Config</Button>
+      </div>
+    </div>
+  {/if}
+</Spotlight>
 
 <!-- ═══ WORKSHOP MODAL ═══ -->
 <Spotlight open={detailPanelOpen} onclose={closeDetailPanel}>
@@ -3530,6 +4122,31 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     gap: var(--space-6);
   }
 
+  /* ─── Global Config ─── */
+  .global-config-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+  .global-config-row {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-6);
+  }
+  .global-config-label {
+    min-width: 130px;
+    font-weight: 600;
+    font-size: var(--font-base);
+    color: var(--color-text-primary);
+    padding-bottom: var(--space-2);
+  }
+  .global-config-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-4);
+    flex: 1;
+  }
+
   /* ─── Drop Rate Rows ─── */
   .drop-rate-row {
     display: flex;
@@ -4439,71 +5056,135 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   .prompt-flow {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: 0;
   }
-  .prompt-layer {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .prompt-layer-header {
+  .prompt-section-header {
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-3);
+    background: rgba(255, 255, 255, 0.03);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-base, 0.15s ease);
+    text-align: left;
   }
-  .prompt-layer-badge {
+  .prompt-section-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .prompt-section-header--preview {
+    background: rgba(45, 212, 191, 0.06);
+  }
+  .prompt-section-header--preview:hover {
+    background: rgba(45, 212, 191, 0.1);
+  }
+  .prompt-chevron {
     font-size: var(--font-xs);
+    color: var(--color-text-muted);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  .prompt-chevron.expanded {
+    transform: rotate(90deg);
+  }
+  .prompt-section-badge {
+    font-size: var(--font-sm);
     font-weight: 700;
     letter-spacing: 0.05em;
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
     text-transform: uppercase;
+    flex-shrink: 0;
   }
-  .prompt-layer-badge.system { background: rgba(99, 179, 237, 0.15); color: #63b3ed; }
-  .prompt-layer-badge.user { background: rgba(72, 187, 120, 0.15); color: #48bb78; }
-  .prompt-layer-badge.params { background: rgba(237, 137, 54, 0.15); color: #ed8936; }
-  .prompt-layer-title {
+  .prompt-section-badge.system { background: rgba(99, 179, 237, 0.15); color: #63b3ed; }
+  .prompt-section-badge.user { background: rgba(72, 187, 120, 0.15); color: #48bb78; }
+  .prompt-section-badge.params { background: rgba(237, 137, 54, 0.15); color: #ed8936; }
+  .prompt-section-badge.preview { background: rgba(45, 212, 191, 0.15); color: var(--color-teal); }
+  .prompt-section-title {
     font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-primary);
   }
-  .prompt-layer-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin-left: var(--space-3);
-    border-left: 2px solid var(--white-a6);
-    padding-left: var(--space-3);
-  }
-  .prompt-block {
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--white-a6);
-  }
-  .prompt-block[data-source="config"] { border-left: 3px solid var(--color-teal); }
-  .prompt-block[data-source="db"] { border-left: 3px solid #63b3ed; }
-  .prompt-block[data-source="auto"] { border-left: 3px solid #b794f4; }
-  .prompt-block[data-source="runtime"] { border-left: 3px solid #48bb78; }
-  .prompt-block-label {
-    display: block;
-    font-size: var(--font-base);
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-  .prompt-block-desc {
-    display: block;
+  .prompt-section-hint {
     font-size: var(--font-sm);
     color: var(--color-text-secondary);
-    margin-top: var(--space-1);
+    margin-left: auto;
   }
-  .prompt-flow-arrow {
-    text-align: center;
-    color: var(--color-text-secondary);
+  .prompt-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    padding-top: 0;
+  }
+  .prompt-text-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .prompt-text-block[data-border="db"] { border-left: 3px solid #63b3ed; padding-left: var(--space-3); }
+  .prompt-text-block[data-border="config"] { border-left: 3px solid var(--color-teal); padding-left: var(--space-3); }
+  .prompt-text-block[data-border="auto"] { border-left: 3px solid #b794f4; padding-left: var(--space-3); }
+  .prompt-text-block[data-border="runtime"] { border-left: 3px solid #48bb78; padding-left: var(--space-3); }
+  .prompt-text-block[data-border="system-full"] { border-left: 3px solid #63b3ed; padding-left: var(--space-3); }
+  .prompt-text-block[data-border="user-full"] { border-left: 3px solid #48bb78; padding-left: var(--space-3); }
+  .prompt-text-label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-size: var(--font-base);
     font-weight: 600;
-    padding: var(--space-1) 0;
-    margin-left: var(--space-3);
+    color: var(--color-text-primary);
+  }
+  .prompt-source-tag {
+    font-size: var(--font-xs);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 2px var(--space-2);
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+  .prompt-source-tag.db { background: rgba(99, 179, 237, 0.12); color: #63b3ed; }
+  .prompt-source-tag.config { background: rgba(45, 212, 191, 0.12); color: var(--color-teal); }
+  .prompt-source-tag.auto { background: rgba(183, 148, 244, 0.12); color: #b794f4; }
+  .prompt-source-tag.runtime { background: rgba(72, 187, 120, 0.12); color: #48bb78; }
+  .prompt-text-box {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-base);
+    line-height: 1.6;
+    color: var(--color-text-primary);
+    background: var(--input-bg);
+    border-top: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .prompt-text-box--tall {
+    max-height: 300px;
+  }
+  .prompt-text-italic {
+    font-style: italic;
+    color: var(--color-text-secondary);
+  }
+  .prompt-trait-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-top: var(--space-1);
+  }
+  .prompt-trait-pill {
+    font-size: var(--font-sm);
+    font-family: var(--font-mono, monospace);
+    color: #b794f4;
+    background: rgba(183, 148, 244, 0.1);
+    padding: var(--space-1) var(--space-2);
+    border-radius: 999px;
   }
   .prompt-flow-divider {
     height: 1px;
@@ -4514,15 +5195,98 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-left: var(--space-3);
   }
   .prompt-param {
-    font-size: var(--font-sm);
+    font-size: var(--font-base);
     font-family: var(--font-mono, monospace);
-    color: var(--color-text-secondary);
+    color: var(--color-text-primary);
     background: rgba(255, 255, 255, 0.04);
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--space-3);
     border-radius: var(--radius-sm);
     border: 1px solid var(--white-a6);
+  }
+  .prompt-preview-character {
+    font-size: var(--font-base);
+    color: var(--color-text-secondary);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(45, 212, 191, 0.06);
+    border-radius: var(--radius-sm);
+  }
+  .prompt-preview-character strong {
+    color: var(--color-teal);
+  }
+  .prompt-preview-params {
+    font-size: var(--font-base);
+    font-family: var(--font-mono, monospace);
+    color: var(--color-text-primary);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-sm);
+  }
+
+  /* ─── Config History ──────────────────────────────────────────── */
+  .history-tab {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    flex: 1;
+    min-height: 0;
+  }
+  .toolbar-actions {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+  .star-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: var(--font-lg);
+    color: var(--color-text-muted);
+    padding: 0;
+    line-height: 1;
+  }
+  .star-btn.active {
+    color: var(--color-gold, #f6c744);
+  }
+  .snapshot-actions {
+    display: flex;
+    gap: var(--space-1);
+  }
+  .snapshot-preview {
+    max-width: 720px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .snapshot-preview-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .snapshot-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--white-a6);
+  }
+  .snapshot-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .snapshot-field label {
+    font-size: var(--font-base);
+    color: var(--color-text-primary);
+    font-weight: 500;
+  }
+  .snapshot-comments-input {
+    resize: vertical;
+    font-family: inherit;
   }
 </style>
