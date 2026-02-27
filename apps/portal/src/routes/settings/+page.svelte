@@ -125,6 +125,15 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let commentaryFrequencyPenalty = $state(0.8);
   let commentaryStyleNudgesText = $state(DEFAULT_COMMENTARY_NUDGES.join('\n'));
   let commentaryResponseInstruction = $state('1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]');
+  let commentaryInteractionInstruction = $state('When the player speaks to you, respond directly and conversationally. Acknowledge what they said, stay in character. Keep it brief.');
+
+  // ─── State: Context Analysis ────────────────────────────────────
+  let contextProvider = $state('dashscope');
+  let contextModel = $state('qwen3-vl-flash');
+  let contextPrompt = $state('Describe what is happening on screen in 1-2 sentences. Focus on the game state, player actions, and any notable events.');
+  let contextMaxTokens = $state(100);
+  let contextInterval = $state(3);
+  let contextBufferSize = $state(10);
 
   // ─── State: Card Generation Provider/Model ─────────────────────────
   let cardGenProvider = $state('dashscope');
@@ -855,6 +864,33 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     syncToConfig();
   }
 
+  // Context analysis uses the same provider/model options as commentary
+  const contextProviderOptions = [
+    { value: 'dashscope', label: 'Dashscope (Qwen VL)' },
+    { value: 'anthropic', label: 'Anthropic (Claude)' },
+    { value: 'gemini', label: 'Google (Gemini)' },
+  ];
+  const contextModelOptions: Record<string, { value: string; label: string }[]> = {
+    dashscope: [
+      { value: 'qwen3-vl-flash', label: 'qwen3-vl-flash' },
+      { value: 'qwen-vl-plus', label: 'qwen-vl-plus' },
+    ],
+    anthropic: [
+      { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+    ],
+    gemini: [
+      { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    ],
+  };
+  let activeContextModels = $derived(contextModelOptions[contextProvider] ?? []);
+
+  function onContextProviderChange() {
+    const models = contextModelOptions[contextProvider];
+    if (models?.length) contextModel = models[0].value;
+    syncToConfig();
+  }
+
   const cardGenProviderOptions = [
     { value: 'dashscope', label: 'Dashscope (Qwen)' },
     { value: 'anthropic', label: 'Anthropic (Claude)' },
@@ -1026,6 +1062,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   const EXPECTED_COMMENTARY_KEYS = [
     'visionProvider', 'visionModel', 'directive', 'maxTokens', 'temperature',
     'presencePenalty', 'frequencyPenalty', 'styleNudges', 'responseInstruction',
+    'interactionInstruction', 'context',
   ];
 
   function validateConfigSchema(cfg: Record<string, unknown>): string | null {
@@ -1081,7 +1118,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     }
   }
 
-  function applySnapshot(snapshot: ConfigSnapshot) {
+  async function applySnapshot(snapshot: ConfigSnapshot) {
     const err = validateConfigSchema(snapshot.config);
     if (err) return;
     config = structuredClone(snapshot.config);
@@ -1089,8 +1126,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     syncFromConfig();
     previewOpen = false;
     activeTab = 'config';
-    saveMsg = 'Config loaded from snapshot — review and Save when ready.';
-    setTimeout(() => saveMsg = '', 4000);
+    await saveConfig();
   }
 
   function handleDeleteSnapshot(snapshot: ConfigSnapshot) {
@@ -1213,6 +1249,11 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         importSuccess = 'Config imported — review and Save when ready.';
         setTimeout(() => importSuccess = '', 4000);
         activeTab = 'config';
+        // Fire-and-forget: save an import snapshot
+        const importName = file.name.replace(/\.(yaml|yml)$/i, '');
+        saveConfigSnapshot(JSON.parse(JSON.stringify(cfgData)), importName, 'Imported from YAML').then(snap => {
+          if (snapshotsLoaded) snapshots = [snap, ...snapshots];
+        }).catch(() => {});
       } catch (ex) {
         importError = ex instanceof Error ? ex.message : 'Failed to parse YAML';
       }
@@ -1352,6 +1393,14 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     const nudgesArr = (c?.styleNudges as string[]) ?? DEFAULT_COMMENTARY_NUDGES;
     commentaryStyleNudgesText = nudgesArr.join('\n');
     commentaryResponseInstruction = (c?.responseInstruction as string) ?? '1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]';
+    commentaryInteractionInstruction = (c?.interactionInstruction as string) ?? 'When the player speaks to you, respond directly and conversationally. Acknowledge what they said, stay in character. Keep it brief.';
+    const ctx = c?.context as Record<string, unknown> | undefined;
+    contextProvider = (ctx?.provider as string) ?? 'dashscope';
+    contextModel = (ctx?.model as string) ?? (contextModelOptions[contextProvider]?.[0]?.value ?? 'qwen3-vl-flash');
+    contextPrompt = (ctx?.prompt as string) ?? 'Describe what is happening on screen in 1-2 sentences. Focus on the game state, player actions, and any notable events.';
+    contextMaxTokens = (ctx?.maxTokens as number) ?? 100;
+    contextInterval = (ctx?.interval as number) ?? 3;
+    contextBufferSize = (ctx?.bufferSize as number) ?? 10;
   }
 
   function syncToConfig() {
@@ -1377,6 +1426,15 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         frequencyPenalty: commentaryFrequencyPenalty,
         styleNudges: commentaryStyleNudgesText.split('\n').map(s => s.trim()).filter(Boolean),
         responseInstruction: commentaryResponseInstruction,
+        interactionInstruction: commentaryInteractionInstruction,
+        context: {
+          provider: contextProvider,
+          model: contextModel,
+          prompt: contextPrompt,
+          maxTokens: contextMaxTokens,
+          interval: contextInterval,
+          bufferSize: contextBufferSize,
+        },
       },
     };
     rawJson = JSON.stringify(config, null, 2);
@@ -1415,9 +1473,9 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       await updateGachaConfig(config);
       saveMsg = 'Saved!';
       setTimeout(() => saveMsg = '', 2000);
-      // Fire-and-forget snapshot
-      saveConfigSnapshot(JSON.parse(JSON.stringify(config))).then(snap => {
-        if (snapshotsLoaded) snapshots = [snap, ...snapshots];
+      // Fire-and-forget snapshot — mark as active
+      saveConfigSnapshot(JSON.parse(JSON.stringify(config)), undefined, undefined, true).then(snap => {
+        if (snapshotsLoaded) snapshots = [snap, ...snapshots.map(s => ({ ...s, is_active: false }))];
       }).catch(() => {});
     } catch (e) {
       saveMsg = e instanceof Error ? e.message : 'Save failed';
@@ -2206,6 +2264,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
           </div>
           <div class="cfg-body">
             <TextInput label="Response Instruction" bind:value={commentaryResponseInstruction} placeholder="1-2 sentences max, under 30 words..." onchange={syncToConfig} testid="config-commentary-response-instruction" />
+            <TextInput label="Interaction Instruction" bind:value={commentaryInteractionInstruction} placeholder="When the player speaks to you, respond directly..." onchange={syncToConfig} testid="config-commentary-interaction-instruction" />
             <NumberInput label="Max Tokens" bind:value={commentaryMaxTokens} min={10} max={500} onchange={syncToConfig} testid="config-commentary-max-tokens" />
             <SliderInput label="Presence Penalty" bind:value={commentaryPresencePenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-presence-penalty" />
             <SliderInput label="Frequency Penalty" bind:value={commentaryFrequencyPenalty} min={0} max={2} step={0.1} onchange={syncToConfig} testid="config-commentary-frequency-penalty" />
@@ -2231,6 +2290,27 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
             <div class="cfg-body">
               <TextArea bind:value={commentaryStyleNudgesText} rows={12} monospace placeholder="One nudge per line..." onchange={syncToConfig} testid="config-commentary-nudges" />
             </div>
+          </div>
+        </div>
+
+        <!-- Context Analysis -->
+        <div class="cfg-card" data-testid="context-analysis-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">Context Analysis</h3>
+            <p class="cfg-desc">Background scene analysis loop that feeds rich context to commentary characters</p>
+          </div>
+          <div class="cfg-body">
+            <div class="global-config-row">
+              <span class="global-config-label">Provider / Model</span>
+              <div class="global-config-controls">
+                <Select label="Provider" bind:value={contextProvider} options={contextProviderOptions} onchange={onContextProviderChange} testid="config-context-provider" />
+                <Select label="Model" bind:value={contextModel} options={activeContextModels} onchange={syncToConfig} testid="config-context-model" />
+              </div>
+            </div>
+            <NumberInput label="Max Tokens" bind:value={contextMaxTokens} min={20} max={300} onchange={syncToConfig} testid="config-context-max-tokens" />
+            <SliderInput label="Interval (seconds)" bind:value={contextInterval} min={1} max={30} step={1} onchange={syncToConfig} testid="config-context-interval" />
+            <NumberInput label="Buffer Size" bind:value={contextBufferSize} min={1} max={50} onchange={syncToConfig} testid="config-context-buffer-size" />
+            <TextArea bind:value={contextPrompt} rows={4} monospace placeholder="Scene analysis prompt..." onchange={syncToConfig} testid="config-context-prompt" />
           </div>
         </div>
 
@@ -2818,7 +2898,12 @@ The player said: "nice shot!"</pre>
                   {row.is_favorite ? '\u2605' : '\u2606'}
                 </button>
               {:else if column.key === 'name'}
-                <span class="cell-name">{row.name || '(auto-save)'}</span>
+                <span class="cell-name">
+                  {row.name || '(auto-save)'}
+                  {#if row.is_active}
+                    <Badge variant="success" text="ACTIVE" testid="active-badge-{row.id}" />
+                  {/if}
+                </span>
               {:else if column.key === 'comments'}
                 <span class="cell-muted" title={row.comments}>
                   {row.comments.length > 60 ? row.comments.slice(0, 60) + '...' : row.comments || '\u2014'}
@@ -2853,7 +2938,12 @@ The player said: "nice shot!"</pre>
     <div class="snapshot-preview" data-testid="snapshot-preview">
       <div class="modal-header">
         <div class="modal-header-title">
-          <h2>{previewSnapshot.name || '(auto-save)'}</h2>
+          <h2>
+            {previewSnapshot.name || '(auto-save)'}
+            {#if previewSnapshot.is_active}
+              <Badge variant="success" text="ACTIVE" testid="preview-active-badge" />
+            {/if}
+          </h2>
           <span class="cell-muted">{new Date(previewSnapshot.created_at).toLocaleString()}</span>
         </div>
         <button class="close-btn" onclick={() => { previewOpen = false; previewSnapshot = null; }} data-testid="close-snapshot-preview">&times;</button>
@@ -2909,6 +2999,19 @@ The player said: "nice shot!"</pre>
       <div class="snapshot-preview-actions">
         <Button variant="ghost" onclick={() => { previewOpen = false; previewSnapshot = null; }} testid="snapshot-cancel">Cancel</Button>
         <Button variant="ghost" onclick={() => exportSnapshotAsYaml(previewSnapshot!)} testid="snapshot-export-yaml">Export YAML</Button>
+        {#if previewSnapshot.is_active}
+          <Button
+            variant="ghost"
+            onclick={async () => {
+              try {
+                const updated = await updateConfigSnapshot(previewSnapshot!.id, { is_active: false });
+                snapshots = snapshots.map(s => s.id === updated.id ? updated : s);
+                previewSnapshot = updated;
+              } catch { /* silent */ }
+            }}
+            testid="snapshot-deactivate"
+          >Deactivate</Button>
+        {/if}
         <Button
           variant="primary"
           disabled={!!previewSchemaError}
@@ -3985,6 +4088,9 @@ The player said: "nice shot!"</pre>
   .cell-name {
     font-weight: 600;
     color: var(--color-text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .cell-muted {

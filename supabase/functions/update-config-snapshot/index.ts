@@ -28,12 +28,22 @@ Deno.serve(async (req: Request) => {
     if (body.name !== undefined) updates.name = body.name;
     if (body.comments !== undefined) updates.comments = body.comments;
     if (body.is_favorite !== undefined) updates.is_favorite = body.is_favorite;
+    if (body.is_active !== undefined) updates.is_active = body.is_active;
 
     if (Object.keys(updates).length === 0) {
       return errorResponse("No fields to update", 400);
     }
 
     const serviceClient = getServiceClient();
+
+    // If setting active, clear all existing active snapshots first
+    if (body.is_active === true) {
+      await serviceClient
+        .from("config_snapshots")
+        .update({ is_active: false })
+        .eq("is_active", true);
+    }
+
     const { data, error } = await serviceClient
       .from("config_snapshots")
       .update(updates)

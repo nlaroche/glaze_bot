@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CharacterCard } from '@glazebot/shared-ui';
+  import { CharacterCard, CardViewer } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
   import { getCollection } from '@glazebot/supabase-client';
   import { onMount } from 'svelte';
@@ -7,20 +7,11 @@
   let characters: GachaCharacter[] = $state([]);
   let loading = $state(true);
   let error = $state('');
-
-  let flippedStates = $state<Record<string, boolean>>({});
-
-  function toggleFlip(id: string) {
-    flippedStates[id] = !flippedStates[id];
-  }
+  let viewerCharacter = $state<GachaCharacter | null>(null);
 
   onMount(async () => {
     try {
       characters = await getCollection();
-      // Start all cards flipped (showing front)
-      for (const c of characters) {
-        flippedStates[c.id] = true;
-      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load collection';
     } finally {
@@ -46,14 +37,20 @@
       {#each characters as char (char.id)}
         <CharacterCard
           character={char}
-          flipped={flippedStates[char.id]}
-          onflip={() => toggleFlip(char.id)}
+          flipped={true}
+          onclick={() => { viewerCharacter = char; }}
           image={char.avatar_url}
         />
       {/each}
     </div>
   {/if}
 </div>
+
+<CardViewer
+  character={viewerCharacter}
+  image={viewerCharacter?.avatar_url}
+  onclose={() => { viewerCharacter = null; }}
+/>
 
 <style>
   .page {

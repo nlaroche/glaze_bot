@@ -13,10 +13,25 @@
     setOverlayOn,
     clearChatLog,
     getActiveParty,
+    initChatHistory,
+    startNewSession,
+    viewSession,
+    returnToLive,
+    removeSession,
+    refreshSessions,
+    setRecording,
+    showSttBubble,
+    sendUserMessage,
   } from '$lib/stores/session.svelte';
+  import {
+    getDebugStore,
+    logDebug,
+  } from '$lib/stores/debug.svelte';
+  import type { ChatSession } from '$lib/stores/chatHistory';
 
   const auth = getAuthState();
   const session = getSessionStore();
+  const debug = getDebugStore();
 
   // Character data from Supabase (cheap to re-fetch, not session-critical)
   let allCharacters = $state<GachaCharacter[]>([]);
@@ -33,6 +48,14 @@
       ? collection.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : collection
   );
+
+  // History panel state
+  let historyOpen = $state(false);
+
+  // Initialize chat history on mount
+  $effect(() => {
+    initChatHistory();
+  });
 
   // Load characters from Supabase when authenticated
   $effect(() => {
@@ -103,10 +126,10 @@
   // Chat log element for auto-scroll
   let chatLogEl: HTMLDivElement | undefined = $state();
 
-  // Auto-scroll chat log
+  // Auto-scroll chat log (only when viewing live)
   $effect(() => {
     void session.chatLog.length;
-    if (chatLogEl) {
+    if (chatLogEl && !session.isViewingHistory) {
       requestAnimationFrame(() => {
         chatLogEl!.scrollTop = chatLogEl!.scrollHeight;
       });
@@ -148,15 +171,12 @@
     if (session.isRunning) {
       handleStop();
     }
-    // Auto-hide overlay when share stops — overlay only makes sense over a shared screen
-    if (session.overlayOn) {
-      setOverlayOn(false);
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('hide_overlay');
-      } catch (e) {
-        console.error('Failed to hide overlay:', e);
-      }
+    // Hide overlay window when share stops — but preserve the preference
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('hide_overlay');
+    } catch (e) {
+      console.error('Failed to hide overlay:', e);
     }
     setActiveShare(null);
   }
@@ -186,8 +206,35 @@
 
     setRunning(true);
     setPaused(false);
-    clearChatLog();
+    const partyNames = freshParty.map((c) => c.name);
+    await startNewSession(partyNames);
     await session.engine.start(session.activeShare.id, freshParty);
+
+    // Init speech (whisper model + VAD if always-on)
+    await initSpeech();
+
+    // Auto-show overlay if preference is ON
+    if (session.overlayOn) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('show_overlay');
+        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+        const webview = getCurrentWebview();
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('[main] Overlay ready timeout, proceeding anyway');
+            resolve();
+          }, 5000);
+          webview.listen('overlay-ready', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+        await emitPartyToOverlay();
+      } catch (e) {
+        console.error('Failed to auto-show overlay:', e);
+      }
+    }
   }
 
   function handlePauseResume() {
@@ -204,6 +251,9 @@
     setRunning(false);
     setPaused(false);
     session.engine.stop();
+    cleanupSpeech();
+    // Refresh sessions list so the just-finished session shows updated message count
+    refreshSessions();
   }
 
   // Keep engine party in sync
@@ -226,6 +276,10 @@
 
   async function toggleOverlay() {
     setOverlayOn(!session.overlayOn);
+
+    // Only show/hide the overlay window if screen share is active
+    if (!session.activeShare) return;
+
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       if (session.overlayOn) {
@@ -267,19 +321,247 @@
     epic: 'var(--rarity-epic)',
     legendary: 'var(--rarity-legendary)',
   };
+
+  // ── History helpers ──
+
+  function groupSessionsByDate(sessions: ChatSession[]): { label: string; sessions: ChatSession[] }[] {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const groups: { label: string; sessions: ChatSession[] }[] = [
+      { label: 'Today', sessions: [] },
+      { label: 'Yesterday', sessions: [] },
+      { label: 'Last 7 Days', sessions: [] },
+      { label: 'Older', sessions: [] },
+    ];
+
+    for (const s of sessions) {
+      const d = new Date(s.startedAt);
+      if (d >= today) {
+        groups[0].sessions.push(s);
+      } else if (d >= yesterday) {
+        groups[1].sessions.push(s);
+      } else if (d >= weekAgo) {
+        groups[2].sessions.push(s);
+      } else {
+        groups[3].sessions.push(s);
+      }
+    }
+
+    return groups.filter((g) => g.sessions.length > 0);
+  }
+
+  function formatSessionTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  let groupedSessions = $derived(groupSessionsByDate(session.historySessions));
+
+  function handleViewSession(sessionId: string) {
+    viewSession(sessionId);
+  }
+
+  function handleReturnToLive() {
+    returnToLive();
+  }
+
+  function handleDeleteSession(e: MouseEvent, sessionId: string) {
+    e.stopPropagation();
+    removeSession(sessionId);
+  }
+
+  // ── Text input ──
+  let userInput = $state('');
+
+  function handleSendText() {
+    if (!userInput.trim() || !session.isRunning) return;
+    sendUserMessage(userInput.trim());
+    userInput = '';
+  }
+
+  function handleInputKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText();
+    }
+  }
+
+  // ── Push-to-Talk ──
+  let pttActive = $state(false);
+
+  $effect(() => {
+    if (debug.speechMode !== 'push-to-talk' || !session.isRunning) return;
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code !== debug.pttKey || e.repeat || pttActive) return;
+      pttActive = true;
+      setRecording(true);
+      logDebug('stt-request', { mode: 'ptt', key: e.code });
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        invoke('start_recording').catch((err: unknown) => {
+          console.error('Failed to start recording:', err);
+          pttActive = false;
+          setRecording(false);
+        });
+      });
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== debug.pttKey || !pttActive) return;
+      pttActive = false;
+      setRecording(false);
+      import('@tauri-apps/api/core').then(({ invoke }) => {
+        invoke<string>('stop_recording').then((text) => {
+          if (text && text.trim()) {
+            logDebug('stt-response', { mode: 'ptt', text });
+            showSttBubble(text.trim());
+            sendUserMessage(text.trim());
+          }
+        }).catch((err: unknown) => {
+          console.error('Failed to stop recording:', err);
+        });
+      });
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  });
+
+  // ── Always-on VAD STT listener ──
+  $effect(() => {
+    if (debug.speechMode !== 'always-on' || !session.isRunning) return;
+
+    let unlisten: (() => void) | undefined;
+
+    import('@tauri-apps/api/webview').then(({ getCurrentWebview }) => {
+      getCurrentWebview().listen<string>('stt-result', (event) => {
+        const text = event.payload;
+        if (text && text.trim()) {
+          logDebug('stt-response', { mode: 'always-on', text });
+          showSttBubble(text.trim());
+          sendUserMessage(text.trim());
+        }
+      }).then((fn) => { unlisten = fn; });
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  });
+
+  // ── Whisper + VAD lifecycle ──
+  async function initSpeech() {
+    if (debug.speechMode === 'off') return;
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('init_whisper');
+
+      if (debug.speechMode === 'always-on') {
+        await invoke('set_vad_config', { threshold: debug.vadThreshold, silenceMs: debug.vadSilenceMs });
+        await invoke('start_vad');
+      }
+    } catch (e) {
+      console.error('Failed to init speech:', e);
+    }
+  }
+
+  async function cleanupSpeech() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('stop_vad');
+    } catch {
+      // Ignore — may not have been started
+    }
+  }
 </script>
 
 <div class="home">
+  <!-- History sidebar -->
+  <aside class="history-panel" class:history-open={historyOpen}>
+    <button class="history-toggle" onclick={() => { historyOpen = !historyOpen; }} title={historyOpen ? 'Close history' : 'Open history'}>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="8" cy="8" r="6" />
+        <polyline points="8,4 8,8 11,10" />
+      </svg>
+    </button>
+
+    {#if historyOpen}
+      <div class="history-content">
+        <div class="history-header">
+          <h2>Sessions</h2>
+        </div>
+
+        {#if session.isViewingHistory}
+          <button class="back-to-live" onclick={handleReturnToLive}>
+            <span class="live-dot"></span>
+            Back to Live
+          </button>
+        {/if}
+
+        <div class="history-list">
+          {#if groupedSessions.length === 0}
+            <p class="history-empty">No past sessions yet.</p>
+          {:else}
+            {#each groupedSessions as group}
+              <div class="history-group">
+                <span class="history-group-label">{group.label}</span>
+                {#each group.sessions as sess (sess.id)}
+                  <button
+                    class="history-item"
+                    class:history-item-active={session.viewingSessionId === sess.id}
+                    class:history-item-current={session.currentSessionId === sess.id}
+                    onclick={() => handleViewSession(sess.id)}
+                  >
+                    <div class="history-item-top">
+                      <span class="history-item-time">{formatSessionTime(sess.startedAt)}</span>
+                      <span class="history-item-count">{sess.messageCount} msg{sess.messageCount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div class="history-item-party">
+                      {sess.partyNames.join(', ')}
+                    </div>
+                    {#if session.currentSessionId !== sess.id}
+                      <button class="history-item-delete" onclick={(e) => handleDeleteSession(e, sess.id)} title="Delete session">&times;</button>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </aside>
+
   <!-- Left / Center area -->
   <div class="main-area">
     <!-- Commentary Log -->
     <div class="chat-section-header">
-      <h2>Chat History</h2>
+      <h2>
+        {#if session.isViewingHistory}
+          Viewing Past Session
+        {:else}
+          Chat History
+        {/if}
+      </h2>
+      {#if session.isViewingHistory}
+        <button class="back-btn" onclick={handleReturnToLive}>Back to Live</button>
+      {/if}
     </div>
     <div class="chat-log" bind:this={chatLogEl}>
       {#if session.chatLog.length === 0}
         <div class="chat-empty">
-          {#if !auth.isAuthenticated}
+          {#if session.isViewingHistory}
+            <p>This session has no messages.</p>
+          {:else if !auth.isAuthenticated}
             <p>Sign in to start commentary.</p>
           {:else if loadingChars}
             <p>Loading characters...</p>
@@ -295,8 +577,8 @@
         </div>
       {:else}
         {#each session.chatLog as msg (msg.id)}
-          <div class="chat-msg">
-            <div class="msg-avatar" style="border-color: {rarityNameColor[msg.rarity]}">
+          <div class="chat-msg" class:chat-msg-user={msg.isUserMessage}>
+            <div class="msg-avatar" style="border-color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">
               {#if msg.image}
                 <img src={msg.image} alt="" />
               {:else}
@@ -305,7 +587,7 @@
             </div>
             <div class="msg-body">
               <div class="msg-header">
-                <span class="msg-name" style="color: {rarityNameColor[msg.rarity]}">{msg.name}</span>
+                <span class="msg-name" style="color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">{msg.name}</span>
                 <span class="msg-time">{msg.time}</span>
               </div>
               <p class="msg-text">{msg.text}</p>
@@ -315,75 +597,105 @@
       {/if}
     </div>
 
-    <!-- Controls Bar -->
-    <div class="controls-bar">
-      <!-- Capture group / Active share -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Capture</span>
-        {#if session.activeShare}
-          <div class="share-inline">
-            <div class="share-pulse"></div>
-            <span class="share-name" title={session.activeShare.name}>{session.activeShare.name}</span>
-            <button class="share-x" onclick={stopSharing} title="Stop sharing">&times;</button>
-          </div>
-        {:else}
-          <div class="ctrl-group-buttons">
-            <button class="ctrl-btn capture" onclick={() => openPicker('screen')}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
-              Screen
-            </button>
-            <button class="ctrl-btn capture" onclick={() => openPicker('app')}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-              App
-            </button>
+    <!-- Text input bar (shown when running and not viewing history) -->
+    {#if session.isRunning && !session.isViewingHistory}
+      <div class="input-bar">
+        {#if session.sttBubbleText}
+          <div class="stt-bubble">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--color-teal)" stroke-width="1.5"/><path d="M6 3v3l2 1" stroke="var(--color-teal)" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <span>{session.sttBubbleText}</span>
           </div>
         {/if}
-      </div>
-
-      <div class="ctrl-divider"></div>
-
-      <!-- Playback group -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Commentary</span>
-        <div class="ctrl-group-buttons">
-          <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
-            Start
-          </button>
-          <button class="ctrl-btn" disabled={!session.isRunning} onclick={handlePauseResume}>
-            {#if session.isPaused}
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
-              Resume
-            {:else}
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>
-              Pause
-            {/if}
-          </button>
-          <button class="ctrl-btn stop" disabled={!session.isRunning} onclick={handleStop}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
-            Stop
+        <div class="input-row">
+          {#if session.isRecording}
+            <div class="recording-indicator">
+              <span class="recording-dot"></span>
+              <span>Listening...</span>
+            </div>
+          {/if}
+          <input
+            class="chat-input"
+            type="text"
+            placeholder="Type a message..."
+            bind:value={userInput}
+            onkeydown={handleInputKeydown}
+          />
+          <button class="send-btn" onclick={handleSendText} disabled={!userInput.trim()}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/></svg>
           </button>
         </div>
       </div>
+    {/if}
 
-      <div class="ctrl-divider"></div>
+    <!-- Controls Bar (hidden when viewing history) -->
+    {#if !session.isViewingHistory}
+      <div class="controls-bar">
+        <!-- Capture group / Active share -->
+        <div class="ctrl-group">
+          <span class="ctrl-label">Capture</span>
+          {#if session.activeShare}
+            <div class="share-inline">
+              <div class="share-pulse"></div>
+              <span class="share-name" title={session.activeShare.name}>{session.activeShare.name}</span>
+              <button class="share-x" onclick={stopSharing} title="Stop sharing">&times;</button>
+            </div>
+          {:else}
+            <div class="ctrl-group-buttons">
+              <button class="ctrl-btn capture" onclick={() => openPicker('screen')}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
+                Screen
+              </button>
+              <button class="ctrl-btn capture" onclick={() => openPicker('app')}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                App
+              </button>
+            </div>
+          {/if}
+        </div>
 
-      <!-- Overlay toggle — only available when screenshare is active -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Overlay</span>
-        <button
-          class="toggle"
-          class:toggle-on={session.overlayOn}
-          class:toggle-disabled={!session.activeShare}
-          onclick={toggleOverlay}
-          disabled={!session.activeShare}
-          aria-pressed={session.overlayOn}
-          title={session.activeShare ? '' : 'Start a screen share first'}
-        >
-          <span class="toggle-knob"></span>
-        </button>
+        <div class="ctrl-divider"></div>
+
+        <!-- Playback group -->
+        <div class="ctrl-group">
+          <span class="ctrl-label">Commentary</span>
+          <div class="ctrl-group-buttons">
+            <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
+              Start
+            </button>
+            <button class="ctrl-btn" disabled={!session.isRunning} onclick={handlePauseResume}>
+              {#if session.isPaused}
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
+                Resume
+              {:else}
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg>
+                Pause
+              {/if}
+            </button>
+            <button class="ctrl-btn stop" disabled={!session.isRunning} onclick={handleStop}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
+              Stop
+            </button>
+          </div>
+        </div>
+
+        <div class="ctrl-divider"></div>
+
+        <!-- Overlay toggle — toggles preference anytime, shows/hides window only during screen share -->
+        <div class="ctrl-group">
+          <span class="ctrl-label">Overlay</span>
+          <button
+            class="toggle"
+            class:toggle-on={session.overlayOn}
+            onclick={toggleOverlay}
+            aria-pressed={session.overlayOn}
+            title={session.activeShare ? '' : 'Overlay will appear when screen sharing starts'}
+          >
+            <span class="toggle-knob"></span>
+          </button>
+        </div>
       </div>
-    </div>
+    {/if}
   </div>
 
   <!-- Right Panel -->
@@ -519,6 +831,212 @@
     overflow: hidden;
   }
 
+  /* ── History sidebar ── */
+  .history-panel {
+    display: flex;
+    flex-direction: column;
+    width: 40px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--white-a6);
+    background: var(--black-a10);
+    transition: width 0.2s ease;
+    overflow: hidden;
+  }
+
+  .history-panel.history-open {
+    width: 240px;
+  }
+
+  .history-toggle {
+    width: 100%;
+    padding: var(--space-3) var(--space-2-5);
+    border: none;
+    background: none;
+    color: var(--color-text-muted, #6B7788);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: color var(--transition-base), background var(--transition-base);
+  }
+
+  .history-toggle:hover {
+    color: var(--color-text-primary, #e2e8f0);
+    background: var(--white-a4);
+  }
+
+  .history-open .history-toggle {
+    justify-content: flex-start;
+    padding-left: var(--space-3);
+  }
+
+  .history-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0 var(--space-2) var(--space-2);
+  }
+
+  .history-header {
+    padding: var(--space-1) var(--space-1) var(--space-2);
+  }
+
+  .history-header h2 {
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted, #6B7788);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .back-to-live {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    padding: var(--space-1-5) var(--space-2);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(91, 202, 122, 0.25);
+    background: rgba(91, 202, 122, 0.08);
+    color: var(--color-start, #5BCA7A);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    margin-bottom: var(--space-2);
+    transition: background var(--transition-base);
+    width: 100%;
+  }
+
+  .back-to-live:hover {
+    background: rgba(91, 202, 122, 0.15);
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-full);
+    background: var(--color-start, #5BCA7A);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .history-empty {
+    font-size: var(--font-brand-md);
+    color: var(--color-text-muted, #6B7788);
+    text-align: center;
+    padding: var(--space-4) 0;
+    margin: 0;
+  }
+
+  .history-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-0-5);
+  }
+
+  .history-group-label {
+    font-size: var(--font-micro);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--color-text-muted, #6B7788);
+    font-weight: 600;
+    padding: var(--space-1-5) var(--space-1) var(--space-0-5);
+  }
+
+  .history-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-1-5) var(--space-2);
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    background: none;
+    color: var(--color-text-primary, #d0d6e0);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--transition-base), border-color var(--transition-base);
+    width: 100%;
+  }
+
+  .history-item:hover {
+    background: var(--white-a4);
+    border-color: var(--white-a6);
+  }
+
+  .history-item-active {
+    background: var(--white-a6);
+    border-color: var(--white-a10);
+  }
+
+  .history-item-current {
+    border-color: rgba(91, 202, 122, 0.2);
+  }
+
+  .history-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-1);
+  }
+
+  .history-item-time {
+    font-size: var(--font-xs);
+    color: var(--color-text-primary, #d0d6e0);
+    font-weight: 500;
+  }
+
+  .history-item-count {
+    font-size: var(--font-micro);
+    color: var(--color-text-muted, #6B7788);
+  }
+
+  .history-item-party {
+    font-size: var(--font-xs);
+    color: var(--color-text-muted, #6B7788);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .history-item-delete {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: none;
+    color: var(--color-text-muted, #6B7788);
+    font-size: var(--font-base);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    transition: color var(--transition-base), background var(--transition-base);
+  }
+
+  .history-item:hover .history-item-delete {
+    display: flex;
+  }
+
+  .history-item-delete:hover {
+    color: var(--color-stop, #FF6B6B);
+    background: rgba(255, 107, 107, 0.15);
+  }
+
   /* ── Main area (left/center) ── */
   .main-area {
     flex: 1;
@@ -531,6 +1049,9 @@
   .chat-section-header {
     padding: var(--space-3-5) var(--space-5) var(--space-2);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .chat-section-header h2 {
@@ -540,6 +1061,21 @@
     color: var(--color-text-muted, #6B7788);
     margin: 0;
     font-weight: 600;
+  }
+
+  .back-btn {
+    padding: 3px var(--space-2-5);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(91, 202, 122, 0.25);
+    background: rgba(91, 202, 122, 0.08);
+    color: var(--color-start, #5BCA7A);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    transition: background var(--transition-base);
+  }
+
+  .back-btn:hover {
+    background: rgba(91, 202, 122, 0.15);
   }
 
   /* ── Chat log ── */
@@ -818,11 +1354,6 @@
     background: var(--rarity-epic, #B06AFF);
   }
 
-  .toggle.toggle-disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-
   /* ── Right panel ── */
   .right-panel {
     width: 280px;
@@ -995,5 +1526,115 @@
     text-align: center;
     padding: var(--space-4) 0;
     margin: 0;
+  }
+
+  /* ── User messages ── */
+  .chat-msg-user {
+    flex-direction: row-reverse;
+  }
+
+  .chat-msg-user .msg-body {
+    text-align: right;
+  }
+
+  .chat-msg-user .msg-header {
+    flex-direction: row-reverse;
+  }
+
+  /* ── Text input bar ── */
+  .input-bar {
+    flex-shrink: 0;
+    padding: var(--space-2) var(--space-5);
+    position: relative;
+  }
+
+  .stt-bubble {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    padding: var(--space-1) var(--space-2-5);
+    margin-bottom: var(--space-1-5);
+    border-radius: var(--radius-md);
+    background: var(--teal-a8);
+    border: 1px solid var(--teal-a20);
+    font-size: var(--font-sm);
+    color: var(--color-light-teal);
+    animation: stt-fade 0.2s ease-in;
+  }
+
+  @keyframes stt-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+  }
+
+  .recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    font-size: var(--font-sm);
+    color: var(--color-stop, #FF6B6B);
+    flex-shrink: 0;
+  }
+
+  .recording-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--radius-full);
+    background: var(--color-stop, #FF6B6B);
+    animation: pulse 1s ease-in-out infinite;
+  }
+
+  .chat-input {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--white-a10);
+    background: var(--white-a4);
+    color: var(--color-text-primary, #e2e8f0);
+    font-size: var(--font-base);
+    font-family: inherit;
+    outline: none;
+    transition: border-color var(--transition-base), background var(--transition-base);
+  }
+
+  .chat-input::placeholder {
+    color: var(--color-text-muted, #6B7788);
+  }
+
+  .chat-input:focus {
+    border-color: var(--white-a20);
+    background: var(--white-a6);
+  }
+
+  .send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--teal-a20);
+    background: var(--teal-a8);
+    color: var(--color-teal);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--transition-base), border-color var(--transition-base);
+  }
+
+  .send-btn:hover:not(:disabled) {
+    background: var(--teal-a20);
+    border-color: rgba(59, 151, 151, 0.4);
+  }
+
+  .send-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 </style>

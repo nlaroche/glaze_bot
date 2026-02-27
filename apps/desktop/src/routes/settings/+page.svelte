@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
+  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
   import type { DebugEntry, FrameCapture } from '$lib/stores/debug.svelte';
 
   const debug = getDebugStore();
@@ -92,6 +92,34 @@
     return `${s}s`;
   }
 
+  // PTT key capture
+  let capturingPttKey = $state(false);
+
+  function startPttCapture() {
+    capturingPttKey = true;
+
+    function onKey(e: KeyboardEvent) {
+      e.preventDefault();
+      setPttKey(e.code);
+      capturingPttKey = false;
+      window.removeEventListener('keydown', onKey);
+    }
+
+    window.addEventListener('keydown', onKey);
+  }
+
+  function formatKeyCode(code: string): string {
+    // Human-friendly key names
+    const map: Record<string, string> = {
+      ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift',
+      ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl',
+      AltLeft: 'Left Alt', AltRight: 'Right Alt',
+      Space: 'Space', CapsLock: 'Caps Lock',
+      Backquote: '`', Tab: 'Tab',
+    };
+    return map[code] ?? code.replace(/^Key/, '').replace(/^Digit/, '');
+  }
+
   function entryLabel(type: string): string {
     switch (type) {
       case 'frame': return 'FRAME';
@@ -99,6 +127,10 @@
       case 'llm-response': return 'LLM RES';
       case 'tts-request': return 'TTS REQ';
       case 'tts-response': return 'TTS RES';
+      case 'context-request': return 'CTX REQ';
+      case 'context-response': return 'CTX RES';
+      case 'stt-request': return 'STT REQ';
+      case 'stt-response': return 'STT RES';
       case 'error': return 'ERROR';
       case 'info': return 'INFO';
       default: return type.toUpperCase();
@@ -111,6 +143,10 @@
     'llm-response': 'var(--color-start)',
     'tts-request': 'var(--rarity-epic)',
     'tts-response': '#d4a0ff',
+    'context-request': '#5bc0be',
+    'context-response': '#3aafa9',
+    'stt-request': '#e6a23c',
+    'stt-response': '#f0c674',
     'error': 'var(--color-error)',
     'info': 'var(--color-text-secondary)',
   };
@@ -137,6 +173,14 @@
         return `${d.character} → ${(d.voiceId as string)?.slice(0, 8)}... (${d.textLength} chars)`;
       case 'tts-response':
         return `${d.character}: ${((d.audioSize as number) / 1024).toFixed(0)}KB audio`;
+      case 'context-request':
+        return `History: ${d.sceneHistoryLength}${d.detectedGame ? `, game: ${d.detectedGame}` : ''}`;
+      case 'context-response': {
+        const desc = d.description as string | undefined;
+        return desc
+          ? `${desc.slice(0, 80)}${desc.length > 80 ? '...' : ''}${d.game_name ? ` [${d.game_name}]` : ''}`
+          : '(empty)';
+      }
       case 'error':
         return `${d.step ? `[${d.step}] ` : ''}${d.message}`;
       case 'info':
@@ -197,6 +241,124 @@
       </div>
     </section>
 
+    <!-- Context Analysis -->
+    <section class="card">
+      <h2>Context Analysis</h2>
+
+      <div class="field">
+        <label class="checkbox-row">
+          <input
+            type="checkbox"
+            checked={debug.contextEnabled}
+            onchange={(e) => setContextEnabled((e.target as HTMLInputElement).checked)}
+          />
+          <span>Enable context analysis</span>
+        </label>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="context-interval">Context Interval</label>
+        <div class="range-row">
+          <input
+            id="context-interval"
+            type="range"
+            value={debug.contextInterval}
+            min="1"
+            max="15"
+            step="1"
+            oninput={(e) => setContextInterval(parseInt((e.target as HTMLInputElement).value, 10))}
+          />
+          <span class="range-value">{debug.contextInterval}s</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="context-buffer-size">Buffer Size</label>
+        <div class="range-row">
+          <input
+            id="context-buffer-size"
+            type="range"
+            value={debug.contextBufferSize}
+            min="1"
+            max="50"
+            step="1"
+            oninput={(e) => setContextBufferSize(parseInt((e.target as HTMLInputElement).value, 10))}
+          />
+          <span class="range-value">{debug.contextBufferSize}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Voice Input -->
+    <section class="card">
+      <h2>Voice Input</h2>
+
+      <div class="field">
+        <label class="field-label">Speech Mode</label>
+        <div class="radio-group">
+          <label class="radio-row">
+            <input type="radio" name="speech-mode" value="off" checked={debug.speechMode === 'off'} onchange={() => setSpeechMode('off')} />
+            <span>Off</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="speech-mode" value="push-to-talk" checked={debug.speechMode === 'push-to-talk'} onchange={() => setSpeechMode('push-to-talk')} />
+            <span>Push to Talk</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="speech-mode" value="always-on" checked={debug.speechMode === 'always-on'} onchange={() => setSpeechMode('always-on')} />
+            <span>Always On</span>
+          </label>
+        </div>
+      </div>
+
+      {#if debug.speechMode === 'push-to-talk'}
+        <div class="field">
+          <label class="field-label">Push-to-Talk Key</label>
+          <button class="ptt-key-btn" onclick={startPttCapture}>
+            {#if capturingPttKey}
+              <span class="ptt-capture-hint">Press any key...</span>
+            {:else}
+              {formatKeyCode(debug.pttKey)}
+            {/if}
+          </button>
+        </div>
+      {/if}
+
+      {#if debug.speechMode === 'always-on'}
+        <div class="field">
+          <label class="field-label" for="vad-sensitivity">VAD Sensitivity</label>
+          <div class="range-row">
+            <input
+              id="vad-sensitivity"
+              type="range"
+              value={debug.vadThreshold}
+              min="0.005"
+              max="0.1"
+              step="0.005"
+              oninput={(e) => setVadThreshold(parseFloat((e.target as HTMLInputElement).value))}
+            />
+            <span class="range-value">{debug.vadThreshold.toFixed(3)}</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="vad-silence">Silence Duration</label>
+          <div class="range-row">
+            <input
+              id="vad-silence"
+              type="range"
+              value={debug.vadSilenceMs}
+              min="500"
+              max="5000"
+              step="100"
+              oninput={(e) => setVadSilenceMs(parseInt((e.target as HTMLInputElement).value, 10))}
+            />
+            <span class="range-value">{debug.vadSilenceMs}ms</span>
+          </div>
+        </div>
+      {/if}
+    </section>
+
     <!-- Stats -->
     <section class="card">
       <h2>Session Stats</h2>
@@ -220,6 +382,18 @@
         <div class="stat">
           <span class="stat-label">Tokens Out</span>
           <span class="stat-value">{debug.totalOutputTokens.toLocaleString()}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Context Calls</span>
+          <span class="stat-value">{debug.totalContextCalls}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">STT Calls</span>
+          <span class="stat-value">{debug.totalSttCalls}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Detected Game</span>
+          <span class="stat-value" style="font-size: var(--font-sm);">{debug.detectedGame || '--'}</span>
         </div>
         <div class="stat">
           <span class="stat-label">Log Entries</span>
@@ -354,8 +528,27 @@
       <img src={lightboxFrame.b64} alt="Frame {lightboxFrame.id}" class="lightbox-img" />
       <div class="lightbox-meta">
         <span class="lightbox-time">{formatTime(lightboxFrame.timestamp)}</span>
+        {#if lightboxFrame.detectedGame}
+          <div class="lightbox-game">
+            <span class="lightbox-game-label">Game:</span>
+            <span class="lightbox-game-value">{lightboxFrame.detectedGame}</span>
+          </div>
+        {/if}
         {#if lightboxFrame.aiResponse}
           <p class="lightbox-response" style="user-select: text;">{lightboxFrame.aiResponse}</p>
+        {/if}
+        {#if lightboxFrame.sceneContext && lightboxFrame.sceneContext.length > 0}
+          <div class="lightbox-scene-history">
+            <span class="lightbox-scene-label">Scene History ({lightboxFrame.sceneContext.length})</span>
+            <ul class="lightbox-scene-list">
+              {#each lightboxFrame.sceneContext as scene}
+                <li>
+                  <span class="lightbox-scene-time">{formatTime(scene.timestamp)}</span>
+                  <span class="lightbox-scene-desc">{scene.description}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
         {/if}
       </div>
       <button class="lightbox-close" onclick={() => { lightboxFrame = null; }}>&times;</button>
@@ -422,6 +615,50 @@
     font-size: var(--font-sm);
     font-weight: 500;
     color: var(--color-text-secondary);
+  }
+
+  /* ── Radio & PTT key ── */
+  .radio-group {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .radio-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+    cursor: pointer;
+    font-size: var(--font-base);
+    color: var(--color-text-primary);
+  }
+
+  .radio-row input[type="radio"] {
+    accent-color: var(--color-teal);
+  }
+
+  .ptt-key-btn {
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a15);
+    background: var(--white-a6);
+    color: var(--color-text-primary);
+    font-size: var(--font-base);
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 140px;
+    text-align: center;
+    transition: background var(--transition-base), border-color var(--transition-base);
+  }
+
+  .ptt-key-btn:hover {
+    background: var(--white-a10);
+    border-color: var(--white-a20);
+  }
+
+  .ptt-capture-hint {
+    color: var(--color-teal);
+    animation: pulse 1s ease-in-out infinite;
   }
 
   .text-input {
@@ -924,5 +1161,70 @@
 
   .lightbox-close:hover {
     background: rgba(0, 0, 0, 0.8);
+  }
+
+  /* ── Lightbox scene context ── */
+  .lightbox-game {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .lightbox-game-label {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .lightbox-game-value {
+    font-size: var(--font-base);
+    color: #5bc0be;
+    font-weight: 600;
+  }
+
+  .lightbox-scene-history {
+    margin-top: var(--space-2);
+    border-top: 1px solid var(--white-a8);
+    padding-top: var(--space-2);
+  }
+
+  .lightbox-scene-label {
+    font-size: var(--font-xs);
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .lightbox-scene-list {
+    list-style: none;
+    margin: var(--space-1-5) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 120px;
+    overflow-y: auto;
+  }
+
+  .lightbox-scene-list li {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    font-size: var(--font-sm);
+  }
+
+  .lightbox-scene-time {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-2xs);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lightbox-scene-desc {
+    color: var(--color-text-primary);
+    line-height: 1.4;
   }
 </style>

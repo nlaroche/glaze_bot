@@ -4,6 +4,10 @@ export type DebugEntryType =
   | 'llm-response'
   | 'tts-request'
   | 'tts-response'
+  | 'context-request'
+  | 'context-response'
+  | 'stt-request'
+  | 'stt-response'
   | 'error'
   | 'info';
 
@@ -14,11 +18,18 @@ export interface DebugEntry {
   data: unknown;
 }
 
+export interface SceneSnapshot {
+  timestamp: Date;
+  description: string;
+}
+
 export interface FrameCapture {
   id: number;
   timestamp: Date;
   b64: string;
   aiResponse?: string;
+  sceneContext?: SceneSnapshot[];
+  detectedGame?: string;
 }
 
 const MAX_ENTRIES = 100;
@@ -37,6 +48,21 @@ let totalInputTokens = $state(0);
 let totalOutputTokens = $state(0);
 let startedAt = $state<Date | null>(null);
 
+// Speech input state
+let speechMode = $state<'off' | 'push-to-talk' | 'always-on'>('push-to-talk');
+let pttKey = $state('ShiftLeft');
+let vadThreshold = $state(0.02);
+let vadSilenceMs = $state(1500);
+let totalSttCalls = $state(0);
+
+// Context analysis state
+let detectedGame = $state('');
+let sceneHistory = $state<SceneSnapshot[]>([]);
+let totalContextCalls = $state(0);
+let contextEnabled = $state(true);
+let contextInterval = $state(3);
+let contextBufferSize = $state(10);
+
 export function getDebugStore() {
   return {
     get entries() { return entries; },
@@ -49,6 +75,17 @@ export function getDebugStore() {
     get totalInputTokens() { return totalInputTokens; },
     get totalOutputTokens() { return totalOutputTokens; },
     get startedAt() { return startedAt; },
+    get detectedGame() { return detectedGame; },
+    get sceneHistory() { return sceneHistory; },
+    get totalContextCalls() { return totalContextCalls; },
+    get contextEnabled() { return contextEnabled; },
+    get contextInterval() { return contextInterval; },
+    get contextBufferSize() { return contextBufferSize; },
+    get speechMode() { return speechMode; },
+    get pttKey() { return pttKey; },
+    get vadThreshold() { return vadThreshold; },
+    get vadSilenceMs() { return vadSilenceMs; },
+    get totalSttCalls() { return totalSttCalls; },
   };
 }
 
@@ -64,6 +101,55 @@ export function setCustomSystemInstructions(value: string) {
   customSystemInstructions = value;
 }
 
+export function setDetectedGame(value: string) {
+  detectedGame = value;
+}
+
+export function pushSceneSnapshot(description: string, bufferSize?: number) {
+  const max = bufferSize ?? contextBufferSize;
+  const snapshot: SceneSnapshot = { timestamp: new Date(), description };
+  sceneHistory = [...sceneHistory.slice(-(max - 1)), snapshot];
+}
+
+export function clearSceneHistory() {
+  sceneHistory = [];
+  detectedGame = '';
+}
+
+export function setFrameSceneContext(frameId: number, scenes: SceneSnapshot[], game: string) {
+  recentFrames = recentFrames.map((f) =>
+    f.id === frameId ? { ...f, sceneContext: scenes, detectedGame: game } : f,
+  );
+}
+
+export function setContextEnabled(value: boolean) {
+  contextEnabled = value;
+}
+
+export function setContextInterval(value: number) {
+  contextInterval = Math.max(1, Math.min(30, value));
+}
+
+export function setContextBufferSize(value: number) {
+  contextBufferSize = Math.max(1, Math.min(50, value));
+}
+
+export function setSpeechMode(value: 'off' | 'push-to-talk' | 'always-on') {
+  speechMode = value;
+}
+
+export function setPttKey(value: string) {
+  pttKey = value;
+}
+
+export function setVadThreshold(value: number) {
+  vadThreshold = Math.max(0.005, Math.min(0.1, value));
+}
+
+export function setVadSilenceMs(value: number) {
+  vadSilenceMs = Math.max(500, Math.min(5000, value));
+}
+
 export function logDebug(type: DebugEntryType, data: unknown) {
   const entry: DebugEntry = {
     id: nextId++,
@@ -75,6 +161,8 @@ export function logDebug(type: DebugEntryType, data: unknown) {
 
   if (type === 'llm-request') totalLlmCalls++;
   if (type === 'tts-request') totalTtsCalls++;
+  if (type === 'context-request') totalContextCalls++;
+  if (type === 'stt-request') totalSttCalls++;
   if (type === 'llm-response' && data && typeof data === 'object') {
     const d = data as Record<string, unknown>;
     if (d.usage && typeof d.usage === 'object') {
@@ -94,7 +182,11 @@ export function resetDebugStats() {
   totalTtsCalls = 0;
   totalInputTokens = 0;
   totalOutputTokens = 0;
+  totalContextCalls = 0;
+  totalSttCalls = 0;
   startedAt = null;
+  detectedGame = '';
+  sceneHistory = [];
 }
 
 export function markStarted() {

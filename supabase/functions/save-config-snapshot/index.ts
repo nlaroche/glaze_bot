@@ -25,12 +25,23 @@ Deno.serve(async (req: Request) => {
     }
 
     const serviceClient = getServiceClient();
+    const isActive = body.is_active === true;
+
+    // If marking as active, clear all existing active snapshots first
+    if (isActive) {
+      await serviceClient
+        .from("config_snapshots")
+        .update({ is_active: false })
+        .eq("is_active", true);
+    }
+
     const { data, error } = await serviceClient
       .from("config_snapshots")
       .insert({
         config: body.config,
         name: body.name ?? "",
         comments: body.comments ?? "",
+        is_active: isActive,
       })
       .select()
       .single();

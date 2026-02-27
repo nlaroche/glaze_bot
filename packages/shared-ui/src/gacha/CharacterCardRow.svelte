@@ -90,7 +90,7 @@
 
     <div class="info">
       <span class="name">{character.name}</span>
-      <span class="desc">{character.description}</span>
+      <span class="desc">{character.tagline || character.description}</span>
     </div>
 
     {#if onremove}

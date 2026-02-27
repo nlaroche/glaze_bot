@@ -61,6 +61,7 @@ interface CommentaryRequest {
   player_text?: string;
   react_to?: { name: string; text: string };
   game_hint?: string;
+  scene_context?: { game_name?: string; descriptions: string[] };
 }
 
 /** Build personality modifier string from trait values (ported from brain.py) */
@@ -111,6 +112,7 @@ Deno.serve(async (req: Request) => {
       player_text,
       react_to,
       game_hint,
+      scene_context,
     } = body;
 
     if (!frame_b64) {
@@ -175,7 +177,17 @@ Deno.serve(async (req: Request) => {
 
     // Build text context for the user message
     const textParts: string[] = [];
-    if (game_hint) {
+    if (scene_context) {
+      if (scene_context.game_name) {
+        textParts.push(`Game detected: ${scene_context.game_name}`);
+      }
+      if (scene_context.descriptions.length > 0) {
+        textParts.push("Recent scene context:");
+        for (const desc of scene_context.descriptions) {
+          textParts.push(`- ${desc}`);
+        }
+      }
+    } else if (game_hint) {
       textParts.push(`Game: ${game_hint}`);
     }
     if (react_to) {
@@ -185,6 +197,9 @@ Deno.serve(async (req: Request) => {
     }
     if (player_text) {
       textParts.push(`Player said: "${player_text}"`);
+      const interactionInstruction = (commentary.interactionInstruction as string) ??
+        'When the player speaks to you, respond directly and conversationally. Acknowledge what they said, stay in character. Keep it brief.';
+      textParts.push(`[${interactionInstruction}]`);
     }
     textParts.push(`[${nudge}]`);
     textParts.push("/no_think");

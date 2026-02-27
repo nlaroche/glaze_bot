@@ -12,6 +12,7 @@
   const auth = getAuthState();
 
   const isOverlay = $derived(page.url.pathname.startsWith('/overlay'));
+  const isTrayMenu = $derived(page.url.pathname.startsWith('/tray-menu'));
 
   // Map routes to scene indices for parallax camera shift
   const sceneIndex = $derived((() => {
@@ -25,7 +26,7 @@
   })());
 
   onMount(() => {
-    if (!isOverlay) {
+    if (!isOverlay && !isTrayMenu) {
       initializeAuth();
     }
   });
@@ -37,7 +38,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 </svelte:head>
 
-{#if isOverlay}
+{#if isOverlay || isTrayMenu}
   {@render children()}
 {:else}
   <NightSkyBackground {sceneIndex} />

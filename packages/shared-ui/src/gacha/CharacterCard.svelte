@@ -143,7 +143,7 @@
         <!-- Bottom info overlay -->
         <div class="info-overlay">
           <h3 class="name" data-testid="character-name">{character.name}</h3>
-          <p class="description">{character.description}</p>
+          <p class="description">{character.tagline || character.description}</p>
         </div>
       </div>
     </div>

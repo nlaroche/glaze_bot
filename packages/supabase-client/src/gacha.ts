@@ -524,6 +524,7 @@ export interface ConfigSnapshot {
   comments: string;
   config: Record<string, unknown>;
   is_favorite: boolean;
+  is_active: boolean;
   created_at: string;
 }
 
@@ -532,11 +533,13 @@ export async function saveConfigSnapshot(
   config: Record<string, unknown>,
   name?: string,
   comments?: string,
+  is_active?: boolean,
 ): Promise<ConfigSnapshot> {
   return callEdgeFunction<ConfigSnapshot>("save-config-snapshot", {
     config,
     ...(name !== undefined ? { name } : {}),
     ...(comments !== undefined ? { comments } : {}),
+    ...(is_active !== undefined ? { is_active } : {}),
   });
 }
 
@@ -548,7 +551,7 @@ export async function listConfigSnapshots(): Promise<ConfigSnapshot[]> {
 /** Update a config snapshot's metadata (admin) */
 export async function updateConfigSnapshot(
   id: string,
-  fields: { name?: string; comments?: string; is_favorite?: boolean },
+  fields: { name?: string; comments?: string; is_favorite?: boolean; is_active?: boolean },
 ): Promise<ConfigSnapshot> {
   return callEdgeFunction<ConfigSnapshot>("update-config-snapshot", {
     id,
