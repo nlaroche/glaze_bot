@@ -31,6 +31,8 @@
   import yaml from 'js-yaml';
   import { Spotlight, CardViewer } from '@glazebot/shared-ui';
   import type { GachaCharacter, CharacterRarity, GenerationMetadata } from '@glazebot/shared-types';
+  import { validateConfig } from '@glazebot/shared-types';
+  import { toast } from '$lib/stores/toast.svelte';
 
   import Card from '$lib/components/ui/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
@@ -85,7 +87,6 @@
   let rawJson: string = $state('');
   let loading: boolean = $state(true);
   let saving: boolean = $state(false);
-  let saveMsg: string = $state('');
   let jsonError: string = $state('');
 
   let model = $state('qwen-plus');
@@ -584,8 +585,6 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let previewSnapshot: ConfigSnapshot | null = $state(null);
   let previewOpen = $state(false);
   let previewSchemaError = $state('');
-  let importError = $state('');
-  let importSuccess = $state('');
   let importFileInput: HTMLInputElement | null = $state(null);
 
   // ─── State: Generate ──────────────────────────────────────────────
@@ -1059,27 +1058,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   const paginated = $derived(sorted.slice((page - 1) * pageSize, page * pageSize));
 
   // ─── Config Schema Validation ────────────────────────────────────
-  const EXPECTED_TOP_KEYS = [
-    'dropRates', 'baseTemperature', 'model', 'cardGenProvider', 'cardGenModel',
-    'packsPerDay', 'cardsPerPack', 'generationPrompt', 'imageSystemInfo',
-    'imageProvider', 'imageModel', 'imageConfig',
-    'tokenPools', 'traitRanges', 'promptQuality', 'rarityGuidance', 'commentary',
-  ];
-  const EXPECTED_COMMENTARY_KEYS = [
-    'visionProvider', 'visionModel', 'directive', 'maxTokens', 'temperature',
-    'presencePenalty', 'frequencyPenalty', 'styleNudges', 'responseInstruction',
-    'interactionInstruction', 'context',
-  ];
-
+  // Uses validateConfig() from @glazebot/shared-types — walks DEFAULT_CONFIG
+  // recursively so new fields are automatically caught.
   function validateConfigSchema(cfg: Record<string, unknown>): string | null {
-    const missingTop = EXPECTED_TOP_KEYS.filter(k => !(k in cfg));
-    const commentary = cfg.commentary as Record<string, unknown> | undefined;
-    const missingCommentary = commentary
-      ? EXPECTED_COMMENTARY_KEYS.filter(k => !(k in commentary))
-      : EXPECTED_COMMENTARY_KEYS;
-    const missing = [...missingTop.map(k => k), ...missingCommentary.map(k => `commentary.${k}`)];
-    if (missing.length === 0) return null;
-    return `Missing keys: ${missing.join(', ')}`;
+    return validateConfig(cfg);
   }
 
   // ─── Snapshot Derived Chain ────────────────────────────────────────
@@ -1126,7 +1108,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
 
   async function applySnapshot(snapshot: ConfigSnapshot) {
     const err = validateConfigSchema(snapshot.config);
-    if (err) return;
+    if (err) {
+      toast.error(`Snapshot has invalid schema: ${err}`);
+      return;
+    }
     config = structuredClone(snapshot.config);
     rawJson = JSON.stringify(config, null, 2);
     syncFromConfig();
@@ -1197,17 +1182,27 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         'Step 7: Parse JSON response, clamp personality traits to traitRanges min/max',
         'Step 8: Output fields: name, description, backstory, system_prompt, tagline, personality (6 traits 0-100: energy, positivity, formality, talkativeness, attitude, humor)',
         'Step 9: Voice assigned randomly from Fish Audio library',
-        'Step 10: Sprite generated via PixelLab using imageSystemInfo + character description',
+        'Step 10: Sprite generated via imageProvider (pixellab/gemini) using imageSystemInfo + character description',
       ],
 
       _commentary_flow: [
         'Step 1: System prompt = character.system_prompt + commentary.directive + buildPersonalityModifier(personality)',
         'Step 2: Personality modifier — traits outside the 30-55 neutral range add behavioral instructions (e.g. energy > 70 → "Be very high-energy and hyped up")',
-        'Step 3: Random style nudge picked from commentary.styleNudges array',
-        'Step 4: User message = game_hint + player_transcript + co-caster_reaction + [style nudge] + responseInstruction',
-        'Step 5: Screenshot attached as vision input to the LLM',
-        'Step 6: LLM call with commentary provider/model/temperature/maxTokens/presencePenalty/frequencyPenalty',
-        'Step 7: If response is "[SILENCE]" → skip TTS; otherwise → Fish Audio TTS → audio playback',
+        'Step 3: Block scheduler — weighted random pick from commentary.blockWeights (solo_observation, emotional_reaction, question, backstory_reference, quip_banter, callback, hype_chain, silence)',
+        'Step 4: Block-specific prompt injected from commentary.blockPrompts[selectedBlock]',
+        'Step 5: Style nudge picked from commentary.styleNudges array',
+        'Step 6: Character memory — if commentary.memory.enabled, recent memories injected into system prompt (commentary.memory.memoriesPerPrompt memories, extracted every commentary.memory.extractionIntervalMinutes minutes)',
+        'Step 7: User message = game_hint + player_transcript + co-caster_reaction + [block prompt] + [style nudge] + responseInstruction',
+        'Step 8: Screenshot attached as vision input to the LLM',
+        'Step 9: LLM call with commentary provider/model/temperature/maxTokens/presencePenalty/frequencyPenalty',
+        'Step 10: If response is "[SILENCE]" → skip TTS; otherwise → Fish Audio TTS → audio playback',
+      ],
+
+      _image_generation_flow: [
+        'Step 1: Provider selected from imageProvider (pixellab or gemini)',
+        'Step 2: Model from imageModel (e.g. gemini-2.0-flash-preview-image-generation)',
+        'Step 3: Image size from imageConfig.imageSize (e.g. 1024x1024), aspect ratio from imageConfig.aspectRatio',
+        'Step 4: Prompt built from imageSystemInfo + character description',
       ],
 
       config: cfg,
@@ -1235,8 +1230,6 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   }
 
   function handleImportFile(e: Event) {
-    importError = '';
-    importSuccess = '';
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -1246,14 +1239,13 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
         const cfgData = (parsed?.config ?? parsed) as Record<string, unknown>;
         const err = validateConfigSchema(cfgData);
         if (err) {
-          importError = `Schema validation failed: ${err}`;
+          toast.error(`Schema validation failed: ${err}`);
           return;
         }
         config = structuredClone(cfgData);
         rawJson = JSON.stringify(config, null, 2);
         syncFromConfig();
-        importSuccess = 'Config imported — review and Save when ready.';
-        setTimeout(() => importSuccess = '', 4000);
+        toast.success('Config imported — review and Save when ready.');
         activeTab = 'config';
         // Fire-and-forget: save an import snapshot
         const importName = file.name.replace(/\.(yaml|yml)$/i, '');
@@ -1261,7 +1253,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
           if (snapshotsLoaded) snapshots = [snap, ...snapshots];
         }).catch(() => {});
       } catch (ex) {
-        importError = ex instanceof Error ? ex.message : 'Failed to parse YAML';
+        toast.error(ex instanceof Error ? ex.message : 'Failed to parse YAML');
       }
     };
     reader.readAsText(file);
@@ -1414,6 +1406,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   }
 
   function syncToConfig() {
+    // Preserve algorithm fields (blockWeights, blockPrompts, memory) that
+    // are managed by AlgorithmPanel — they live inside commentary but have
+    // no standalone state vars on this page.
+    const existingCommentary = (config.commentary as Record<string, unknown>) ?? {};
     config = {
       ...config,
       dropRates: { ...dropRates },
@@ -1430,6 +1426,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       imageConfig: { imageSize, aspectRatio: '1:1' },
       tokenPools,
       commentary: {
+        ...existingCommentary,
         visionProvider: commentaryVisionProvider,
         visionModel: commentaryVisionModel,
         directive: commentaryDirective,
@@ -1480,18 +1477,16 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
 
   async function saveConfig() {
     saving = true;
-    saveMsg = '';
     try {
       syncToConfig();
       await updateGachaConfig(config);
-      saveMsg = 'Saved!';
-      setTimeout(() => saveMsg = '', 2000);
+      toast.success('Config saved');
       // Fire-and-forget snapshot — mark as active
       saveConfigSnapshot(JSON.parse(JSON.stringify(config)), undefined, undefined, true).then(snap => {
         if (snapshotsLoaded) snapshots = [snap, ...snapshots.map(s => ({ ...s, is_active: false }))];
       }).catch(() => {});
     } catch (e) {
-      saveMsg = e instanceof Error ? e.message : 'Save failed';
+      toast.error(e instanceof Error ? e.message : 'Save failed');
     } finally {
       saving = false;
     }
@@ -2529,9 +2524,6 @@ The player said: "nice shot!"</pre>
 
         <!-- Save -->
         <div class="cfg-save">
-          {#if saveMsg}
-            <span class="save-msg" class:error={saveMsg !== 'Saved!'} data-testid="save-msg">{saveMsg}</span>
-          {/if}
           <Button variant="primary" loading={saving} disabled={!!jsonError} onclick={saveConfig} testid="save-config-btn">
             {saving ? 'Saving...' : 'Save Config'}
           </Button>
@@ -2589,9 +2581,6 @@ The player said: "nice shot!"</pre>
 
         <!-- Save -->
         <div class="cfg-save">
-          {#if saveMsg}
-            <span class="save-msg" class:error={saveMsg !== 'Saved!'} data-testid="save-msg">{saveMsg}</span>
-          {/if}
           <Button variant="primary" loading={saving} disabled={!!jsonError} onclick={saveConfig} testid="save-config-btn">
             {saving ? 'Saving...' : 'Save Config'}
           </Button>
@@ -2937,13 +2926,6 @@ The player said: "nice shot!"</pre>
             />
           </div>
         </div>
-
-        {#if importError}
-          <p class="error" data-testid="import-error">{importError}</p>
-        {/if}
-        {#if importSuccess}
-          <p class="save-msg" data-testid="import-success">{importSuccess}</p>
-        {/if}
 
         {#if snapshots.length === 0}
           <p class="muted">No snapshots yet. Snapshots are created automatically each time you save the config.</p>
@@ -4408,8 +4390,6 @@ The player said: "nice shot!"</pre>
 
   .error { color: var(--color-error); font-size: var(--font-sm); margin-top: var(--space-1); }
 
-  .save-msg { font-size: var(--font-base); color: var(--color-teal); }
-  .save-msg.error { color: var(--color-error); }
 
   @media (max-width: 800px) {
     .cfg-row-2col { grid-template-columns: 1fr; }

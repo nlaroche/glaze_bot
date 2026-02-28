@@ -6,6 +6,7 @@
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
   import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
   import SidebarIcon from '$lib/components/SidebarIcon.svelte';
+  import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
   let { children } = $props();
   const auth = getAuthState();
@@ -35,6 +36,7 @@
 </script>
 
 <NightSkyBackground />
+<ToastContainer />
 
 {#if auth.loading}
   <div class="loading-screen">

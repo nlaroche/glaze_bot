@@ -135,14 +135,18 @@ export class MessagePipeline {
         });
       } else if (data.text) {
         // Fallback: attribute entire response to primary character
-        lines = [{
-          characterId: character.id,
-          characterName: character.name,
-          voiceId: character.voice_id,
-          text: data.text,
-          avatarUrl: character.avatar_url,
-          rarity: character.rarity,
-        }];
+        // Guard: never show raw JSON to the user
+        const trimmed = (data.text as string).trim();
+        if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+          lines = [{
+            characterId: character.id,
+            characterName: character.name,
+            voiceId: character.voice_id,
+            text: data.text,
+            avatarUrl: character.avatar_url,
+            rarity: character.rarity,
+          }];
+        }
       }
 
       if (lines.length === 0) {

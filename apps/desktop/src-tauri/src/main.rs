@@ -131,6 +131,7 @@ fn main() {
             oauth::wait_for_oauth_callback,
             overlay::show_overlay,
             overlay::hide_overlay,
+            overlay::set_overlay_interactive,
             close_tray_menu,
             tray_menu_action,
             ptt::start_ptt_listener,

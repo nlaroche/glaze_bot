@@ -2,19 +2,19 @@ import type { GachaCharacter } from '@glazebot/shared-types';
 import type { BlockType, BlockWeights, BlockPrompts, ScheduledBlock, HistoryEntry } from './types';
 
 export const DEFAULT_BLOCK_WEIGHTS: BlockWeights = {
-  solo_observation: 30,
-  emotional_reaction: 15,
-  question: 10,
+  solo_observation: 35,
+  emotional_reaction: 20,
+  question: 12,
   backstory_reference: 8,
-  quip_banter: 12,
+  quip_banter: 4,
   callback: 5,
-  hype_chain: 5,
-  silence: 15,
+  hype_chain: 2,
+  silence: 14,
 };
 
 export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
   solo_observation: 'React to what you see on screen. Be specific about ONE thing.',
-  emotional_reaction: 'Express a pure emotional reaction. Don\'t describe the screen. Just FEEL it.',
+  emotional_reaction: 'Express a pure emotional reaction. Don\'t describe the screen. Just FEEL it. Use emote_burst or screen_flash if it fits the moment.',
   question: 'Ask the player a question or wonder something aloud about what\'s happening.',
   backstory_reference: 'Subtly reference your own backstory or lore in the context of what you see.',
   quip_banter: 'Have a quick back-and-forth exchange with your co-caster about what just happened.',

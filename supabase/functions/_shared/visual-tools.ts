@@ -256,6 +256,24 @@ const VISUAL_TOOL_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
+// ── Search tool (intercepted in generate-commentary, not parsed as visual) ──
+
+const SEARCH_TOOL_DEFINITION: ToolDefinition = {
+  name: "request_search",
+  description:
+    "Search the web for game info when the player asks a factual question (builds, items, tier lists, patch notes, strategies, lore). The results appear in a floating panel.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "Focused search query to answer the player's question",
+      },
+    },
+    required: ["query"],
+  },
+};
+
 // ── Public API ─────────────────────────────────────────────────────
 
 /** Get all visual tool definitions in MCP-compatible format */
@@ -263,13 +281,19 @@ export function getVisualToolDefinitions(): ToolDefinition[] {
   return VISUAL_TOOL_DEFINITIONS;
 }
 
-/** Convert tool definitions to provider-specific format */
+/** Convert tool definitions to provider-specific format.
+ *  When `includeSearch` is true, the request_search tool is appended. */
 export function toProviderTools(
   provider: "dashscope" | "anthropic" | "gemini",
+  includeSearch = false,
 ): unknown[] {
+  const defs = includeSearch
+    ? [...VISUAL_TOOL_DEFINITIONS, SEARCH_TOOL_DEFINITION]
+    : VISUAL_TOOL_DEFINITIONS;
+
   if (provider === "anthropic") {
     // Anthropic Messages API tool format
-    return VISUAL_TOOL_DEFINITIONS.map((t) => ({
+    return defs.map((t) => ({
       name: t.name,
       description: t.description,
       input_schema: t.inputSchema,
@@ -277,7 +301,7 @@ export function toProviderTools(
   }
 
   // Dashscope and Gemini use OpenAI-compatible format
-  return VISUAL_TOOL_DEFINITIONS.map((t) => ({
+  return defs.map((t) => ({
     type: "function",
     function: {
       name: t.name,
@@ -346,10 +370,46 @@ export function parseToolCalls(
   return visuals;
 }
 
+/** Extract a request_search tool call from the raw LLM response (not parsed by parseToolCalls) */
+export function extractSearchToolCall(
+  provider: "dashscope" | "anthropic" | "gemini",
+  // deno-lint-ignore no-explicit-any
+  responseData: any,
+): { query: string } | null {
+  if (provider === "anthropic") {
+    const blocks = responseData.content ?? [];
+    for (const block of blocks) {
+      if (block.type === "tool_use" && block.name === "request_search") {
+        const query = block.input?.query;
+        if (typeof query === "string" && query.length > 0) return { query };
+      }
+    }
+  } else {
+    const toolCalls = responseData.choices?.[0]?.message?.tool_calls ?? [];
+    for (const tc of toolCalls) {
+      if (tc.function?.name === "request_search") {
+        try {
+          const args = typeof tc.function.arguments === "string"
+            ? JSON.parse(tc.function.arguments)
+            : (tc.function.arguments ?? {});
+          if (typeof args.query === "string" && args.query.length > 0) {
+            return { query: args.query };
+          }
+        } catch { /* skip malformed */ }
+      }
+    }
+  }
+  return null;
+}
+
 /** Build the system prompt addendum when visuals are enabled */
 export function buildVisualSystemAddendum(frameDims?: { width: number; height: number }): string {
   const gridHint = frameDims
-    ? `\nThe screenshot is ${frameDims.width}x${frameDims.height} pixels. It has a subtle yellow grid overlay: lines at every 0.1 interval (10%, 20%, ..., 90%) and small crosshair markers at (0.25, 0.25), (0.5, 0.5), (0.75, 0.75) etc. Use these gridlines as reference points to estimate coordinates accurately.`
+    ? `\nThe screenshot is ${frameDims.width}x${frameDims.height} pixels. It has a coordinate grid overlay to help you estimate positions:
+- Tick marks with labels (0.1, 0.2, ..., 0.9) along all four edges
+- Dashed gridlines at 0.25 intervals with coordinate labels at intersections (e.g. "25,50" means x=0.25 y=0.50)
+- "0,0" label at top-left corner, "1,1" at bottom-right corner
+STRATEGY: First identify which grid quadrant the target is in (e.g., between 0.25 and 0.50 horizontally, between 0.50 and 0.75 vertically), then estimate the precise position within that quadrant using the edge tick marks as guides.`
     : '';
 
   return `
@@ -357,9 +417,26 @@ export function buildVisualSystemAddendum(frameDims?: { width: number; height: n
 You have visual tools available to draw on the player's screen overlay.
 
 WHEN TO USE VISUALS:
-- When the player ASKS you a question about the screen (e.g. "where should I go?", "which button?", "what's that?") — ALWAYS use arrow/circle/highlight_rect to point at the answer. This is the #1 use case. If you can see the answer on screen, POINT AT IT.
-- When something dramatic happens — emote_burst or screen_flash for hype moments.
-- For auto-commentary, use visuals SPARINGLY (most auto-commentary should be text-only).
+
+1. PLAYER QUESTIONS (MANDATORY): When the player asks you ANYTHING about the screen — "where is X?", "what's that?", "which one?", "should I go left or right?", "what button do I press?" — you MUST use arrow or circle to point at the answer. Do NOT just describe it in words. POINT AT IT. This is your #1 job when the player talks to you. If you can see the thing they're asking about, call the arrow or circle tool.
+
+2. EMOTIONAL REACTIONS: When something dramatic, hilarious, or devastating happens — use emote_burst (fire, skull, heart, etc.) or screen_flash. These are great for hype moments, deaths, clutch plays, or big fails.
+
+3. GAME RESEARCH: When the player asks a factual/meta question about the game (builds, items, tier lists, patch notes, strategies, lore), call request_search with a specific search query. Still give a verbal response — the search results appear as a separate panel with source links.
+
+3. AUTO-COMMENTARY: For routine auto-commentary where the player didn't ask anything, visuals are optional. Use them only when they'd genuinely add something.
+
+EXAMPLE — Player asks "where's my health bar?":
+Your text response: "It's right up there in the top left, you're at like half HP."
+AND you call: arrow(from: {x: 0.3, y: 0.3}, to: {x: 0.1, y: 0.05}, label: "Health bar")
+
+EXAMPLE — Player asks "which enemy should I focus?":
+Your text response: "That big one on the right is about to wreck you."
+AND you call: circle(center: {x: 0.7, y: 0.4}, radius: 0.06, label: "This guy")
+
+EXAMPLE — Player gets a triple kill:
+Your text response: "TRIPLE KILL LET'S GO"
+AND you call: emote_burst(emote: "fire", origin: {x: 0.5, y: 0.5}, count: 15)
 
 HOW TO USE COORDINATES:
 - All coordinates are normalized 0-1 (0,0 = top-left, 1,1 = bottom-right).${gridHint}
@@ -371,9 +448,11 @@ HOW TO USE COORDINATES:
 TOOL TIPS:
 - arrow: draw FROM a neutral area TO the thing you're pointing at. Keep the "from" point away from the target so the arrow is visible.
 - circle: highlight a specific UI element, character, or item. Use radius 0.02-0.05 for small elements, 0.05-0.15 for larger areas.
-- highlight_rect: highlight a larger rectangular area.
-- Max 1-2 visuals per response. Less is more.
-- Match your character personality: serious characters use clean annotations, chaotic characters use emotes and doodles.`;
+- highlight_rect: highlight a larger rectangular area like an inventory panel or map section.
+- emote_burst: burst of emoji particles — use for reactions to big moments.
+- screen_flash: quick full-screen flash — use sparingly for truly dramatic moments (deaths, wins).
+- Max 2 visuals per response.
+- Match your character personality: serious characters use clean arrows/circles, chaotic characters use emotes and doodles.`;
 }
 
 /** @deprecated Use buildVisualSystemAddendum() instead */

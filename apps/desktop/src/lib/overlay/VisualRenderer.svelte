@@ -13,6 +13,7 @@
   import InfoTableRenderer from './renderers/InfoTableRenderer.svelte';
   import FloatingTextRenderer from './renderers/FloatingTextRenderer.svelte';
   import StampRenderer from './renderers/StampRenderer.svelte';
+  import SearchPanelRenderer from './renderers/SearchPanelRenderer.svelte';
 
   // Canvas renderers
   import EmoteBurstRenderer from './renderers/EmoteBurstRenderer.svelte';
@@ -21,7 +22,7 @@
   let visuals = $derived(getActiveVisuals());
 
   const SVG_PRIMITIVES = new Set(['arrow', 'circle', 'highlight_rect']);
-  const HTML_PRIMITIVES = new Set(['stat_comparison', 'info_table', 'floating_text', 'stamp']);
+  const HTML_PRIMITIVES = new Set(['stat_comparison', 'info_table', 'floating_text', 'stamp', 'search_panel']);
   const CANVAS_PRIMITIVES = new Set(['emote_burst', 'screen_flash']);
 
   let svgVisuals = $derived(visuals.filter((v) => SVG_PRIMITIVES.has(v.primitive)));
@@ -62,6 +63,8 @@
           <FloatingTextRenderer command={cmd as any} />
         {:else if cmd.primitive === 'stamp'}
           <StampRenderer command={cmd as any} />
+        {:else if cmd.primitive === 'search_panel'}
+          <SearchPanelRenderer command={cmd as any} />
         {/if}
       {/each}
     </div>

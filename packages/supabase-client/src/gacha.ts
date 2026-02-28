@@ -1,4 +1,4 @@
-import type { GachaCharacter, CharacterTemplate, BoosterPackResult } from "@glazebot/shared-types";
+import type { GachaCharacter, CharacterTemplate, BoosterPackResult, GlazeBotConfig } from "@glazebot/shared-types";
 import { createSupabaseClient } from "./client.js";
 import {
   FunctionsHttpError,

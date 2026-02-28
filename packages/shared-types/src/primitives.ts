@@ -125,6 +125,22 @@ export interface FloatingTextCommand extends VisualCommandBase {
   animation: FloatingTextAnimation;
 }
 
+// ── Search Primitives ─────────────────────────────────────────────
+
+export interface SearchSource {
+  title: string;
+  uri: string;
+}
+
+export interface SearchPanelCommand extends VisualCommandBase {
+  primitive: 'search_panel';
+  query: string;
+  summary: string;
+  sources: SearchSource[];
+  position: AnchorPosition;
+  pinned: boolean;
+}
+
 // ── Drawing Primitives ─────────────────────────────────────────────
 
 export interface FreehandPathCommand extends VisualCommandBase {
@@ -167,7 +183,8 @@ export type VisualCommand =
   | ScreenFlashCommand
   | FloatingTextCommand
   | FreehandPathCommand
-  | StampCommand;
+  | StampCommand
+  | SearchPanelCommand;
 
 export type VisualPrimitive = VisualCommand['primitive'];
 
@@ -183,4 +200,5 @@ export const VISUAL_PRIMITIVES: VisualPrimitive[] = [
   'floating_text',
   'freehand_path',
   'stamp',
+  'search_panel',
 ];

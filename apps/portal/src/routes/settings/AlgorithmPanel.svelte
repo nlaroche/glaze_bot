@@ -25,8 +25,8 @@
   ] as const;
 
   const DEFAULT_WEIGHTS: Record<string, number> = {
-    solo_observation: 30, emotional_reaction: 15, question: 10,
-    backstory_reference: 8, quip_banter: 12, callback: 5, hype_chain: 5, silence: 15,
+    solo_observation: 35, emotional_reaction: 20, question: 12,
+    backstory_reference: 8, quip_banter: 4, callback: 5, hype_chain: 2, silence: 14,
   };
 
   const DEFAULT_PROMPTS: Record<string, string> = {
