@@ -200,7 +200,10 @@
     if (session.overlayOn) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
+        const { emitTo } = await import('@tauri-apps/api/event');
         await invoke('show_overlay');
+        // Reset overlay state from any previous session
+        await emitTo('overlay', 'overlay-reset', {});
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
         const webview = getCurrentWebview();
         await new Promise<void>((resolve) => {
@@ -263,8 +266,11 @@
 
     try {
       const { invoke } = await import('@tauri-apps/api/core');
+      const { emitTo } = await import('@tauri-apps/api/event');
       if (session.overlayOn) {
         await invoke('show_overlay');
+        // Reset overlay state so "Waiting for commentary..." shows again
+        await emitTo('overlay', 'overlay-reset', {});
         const { getCurrentWebview } = await import('@tauri-apps/api/webview');
         const webview = getCurrentWebview();
         await new Promise<void>((resolve) => {

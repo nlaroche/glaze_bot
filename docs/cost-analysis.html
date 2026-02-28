@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GlazeBot API Cost Analysis</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0e18;
+    --surface: #111827;
+    --surface-2: #1a2236;
+    --border: rgba(255,255,255,0.08);
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --teal: #3b9797;
+    --teal-dim: rgba(59,151,151,0.15);
+    --purple: #b06aff;
+    --purple-dim: rgba(176,106,255,0.15);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.15);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.15);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.15);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.15);
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 40px;
+    max-width: 1440px;
+    margin: 0 auto;
+    font-size: 15px;
+  }
+
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { color: var(--text-muted); font-size: 1rem; margin-bottom: 36px; }
+
+  h2 {
+    font-size: 1.3rem; font-weight: 600; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 32px; margin-bottom: 28px;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+  @media (max-width: 900px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Controls ── */
+  .controls { display: flex; flex-wrap: wrap; gap: 20px; align-items: end; margin-bottom: 28px; }
+  .control-group { display: flex; flex-direction: column; gap: 6px; }
+  .control-group label {
+    font-size: 0.85rem; font-weight: 600; color: var(--text);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  select, input[type="number"] {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 10px 14px; font-family: 'Inter', sans-serif;
+    font-size: 0.95rem; outline: none; min-width: 170px;
+  }
+  select:focus, input:focus { border-color: var(--teal); }
+  select optgroup { font-weight: 600; color: var(--text-muted); }
+
+  /* ── Pricing table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  th {
+    text-align: left; font-weight: 600; color: var(--text); padding: 12px 14px;
+    border-bottom: 1px solid var(--border); font-size: 0.85rem;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
+
+  /* ── Stat cards ── */
+  .stat {
+    background: var(--surface-2); border-radius: 12px; padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-label {
+    font-size: 0.85rem; font-weight: 600; color: var(--text);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; }
+  .stat-detail { font-size: 0.9rem; color: var(--text-muted); }
+
+  .teal { color: var(--teal); }
+  .purple { color: var(--purple); }
+  .amber { color: var(--amber); }
+  .red { color: var(--red); }
+  .green { color: var(--green); }
+  .blue { color: var(--blue); }
+
+  /* ── Badge ── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 5px;
+    font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .badge-teal { background: var(--teal-dim); color: var(--teal); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); }
+  .badge-amber { background: var(--amber-dim); color: var(--amber); }
+  .badge-red { background: var(--red-dim); color: var(--red); }
+  .badge-green { background: var(--green-dim); color: var(--green); }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); }
+  .badge-best { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+
+  /* ── Charts ── */
+  .chart-container { position: relative; height: 340px; width: 100%; }
+
+  /* ── Tier cards ── */
+  .tier-card {
+    background: var(--surface-2); border-radius: 12px; padding: 24px;
+    border: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px;
+  }
+  .tier-name { font-weight: 700; font-size: 1.15rem; }
+  .tier-price { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700; }
+  .tier-details { font-size: 0.95rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; }
+  .tier-cost { font-size: 0.95rem; padding: 12px 16px; border-radius: 8px; }
+  .tier-margin { font-weight: 600; font-size: 1rem; }
+
+  .divider { height: 1px; background: var(--border); margin: 8px 0; }
+
+  .note {
+    font-size: 0.95rem; color: var(--text); padding: 16px 20px;
+    background: var(--surface-2); border-radius: 10px; border-left: 4px solid var(--teal); margin-top: 20px;
+    line-height: 1.7;
+  }
+  .note-warn { border-left-color: var(--amber); }
+  .note-good { border-left-color: var(--green); }
+
+  .section-gap { margin-top: 48px; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+  /* ── Recommendation cards ── */
+  .rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+  .rec-card {
+    background: var(--surface-2); border-radius: 12px; padding: 22px 26px;
+    border: 1px solid var(--border);
+  }
+  .rec-card h4 { font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+  .rec-card p { font-size: 0.95rem; color: var(--text); line-height: 1.6; }
+  .rec-card ul { font-size: 0.95rem; color: var(--text); padding-left: 18px; margin-top: 8px; line-height: 1.7; }
+  .rec-card .mono { font-size: 0.85rem; }
+
+  /* ── Model price tag ── */
+  .model-price {
+    display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+    padding: 1px 6px; border-radius: 3px; background: var(--surface); margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>GlazeBot API Cost Analysis</h1>
+<p class="subtitle">Interactive cost calculator with per-model pricing — February 2026</p>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: Model Reference Table                          -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card">
+  <h2><span class="dot" style="background:var(--teal)"></span> Model Pricing Reference</h2>
+  <table>
+    <thead>
+      <tr><th>Provider</th><th>Model</th><th>Input / 1M tok</th><th>Output / 1M tok</th><th>Image Tokens (1080p)</th><th>Cost / Vision Call</th><th>Notes</th></tr>
+    </thead>
+    <tbody id="modelRefTable"></tbody>
+  </table>
+  <div class="note" style="margin-top:16px">
+    <strong>Gemini Search grounding:</strong> On 3.x models: 5,000 prompts/month free, then <strong>$14/1K queries</strong>.
+    On 2.5 models: 1,500/day free, then $35/1K queries. With 5-min cooldown, single users stay in free tier easily.
+    <strong>Fish Audio TTS:</strong> $15/1M UTF-8 bytes. A ~20-word quip (100 bytes) costs <strong>$0.0015/call</strong>.
+    At 120 calls/hr, TTS = ~$0.14/hr — this is the <strong>#1 cost driver</strong>, not the LLM.
+    <strong>Gemini 2.0 models deprecated</strong> — retiring June 1, 2026. Use 2.5+ only.
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: Session Cost Calculator                        -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card section-gap">
+  <h2><span class="dot" style="background:var(--purple)"></span> Session Cost Calculator</h2>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Commentary Model</label>
+      <select id="commentaryModel"></select>
+    </div>
+    <div class="control-group">
+      <label>Context Model</label>
+      <select id="contextModel"></select>
+    </div>
+    <div class="control-group">
+      <label>Session Length (hrs)</label>
+      <input type="number" id="sessionHours" value="1" min="0.5" max="8" step="0.5">
+    </div>
+    <div class="control-group">
+      <label>Commentary Gap (sec)</label>
+      <input type="number" id="commentaryGap" value="30" min="30" max="120" step="5">
+    </div>
+    <div class="control-group">
+      <label>Context Interval (sec)</label>
+      <input type="number" id="contextInterval" value="15" min="5" max="60" step="5">
+    </div>
+    <div class="control-group">
+      <label>User Questions / Hour</label>
+      <input type="number" id="questionsPerHour" value="8" min="0" max="30" step="1">
+    </div>
+    <div class="control-group">
+      <label>TTS Avg Bytes / Quip</label>
+      <input type="number" id="ttsAvgBytes" value="100" min="30" max="500" step="10">
+      <span style="font-size:0.8rem;color:var(--text-muted)">~20 words = 100 bytes</span>
+    </div>
+    <div class="control-group">
+      <label>TTS Rate (% spoken aloud)</label>
+      <input type="number" id="ttsRate" value="70" min="10" max="100" step="5">
+      <span style="font-size:0.8rem;color:var(--text-muted)">Rest = text-only on screen</span>
+    </div>
+  </div>
+
+  <div class="grid-4" id="sessionStats"></div>
+
+  <div style="margin-top:24px">
+    <h2 style="margin-bottom:12px"><span class="dot" style="background:var(--amber)"></span> Per-Session Cost Breakdown</h2>
+    <div class="grid-2">
+      <div class="chart-container"><canvas id="sessionPieChart"></canvas></div>
+      <div class="chart-container"><canvas id="sessionBarChart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="sessionCallSummary" style="margin-top:16px"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: Monthly Projections                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card section-gap">
+  <h2><span class="dot" style="background:var(--amber)"></span> Monthly Cost Projections</h2>
+  <p style="font-size:0.95rem;color:var(--text);margin-bottom:16px">
+    Assumes gamers play evenings on weekdays and longer sessions on weekends.
+  </p>
+
+  <div class="controls">
+    <div class="control-group">
+      <label>Weekday Sessions / Week</label>
+      <input type="number" id="weekdaySessions" value="4" min="0" max="5" step="1">
+    </div>
+    <div class="control-group">
+      <label>Weekday Session (hrs)</label>
+      <input type="number" id="weekdayLength" value="2.5" min="0.5" max="6" step="0.5">
+    </div>
+    <div class="control-group">
+      <label>Weekend Sessions / Week</label>
+      <input type="number" id="weekendSessions" value="2" min="0" max="4" step="1">
+    </div>
+    <div class="control-group">
+      <label>Weekend Session (hrs)</label>
+      <input type="number" id="weekendLength" value="3.5" min="0.5" max="8" step="0.5">
+    </div>
+  </div>
+
+  <div class="grid-3" id="monthlyUserStats"></div>
+
+  <div style="margin-top:24px">
+    <h2 style="margin-bottom:12px"><span class="dot" style="background:var(--teal)"></span> Monthly Cost by User Count</h2>
+    <div class="chart-container" style="height:350px"><canvas id="monthlyChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: SaaS Tier Model                                -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card section-gap">
+  <h2><span class="dot" style="background:var(--green)"></span> SaaS Tier Model & Rate Limiting</h2>
+
+  <!-- Active model indicator -->
+  <div id="activeModelIndicator" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px"></div>
+
+  <table style="margin-bottom:24px" id="tierConfigTable">
+    <thead>
+      <tr>
+        <th>Setting</th>
+        <th style="text-align:center">Trial (7 days)</th>
+        <th style="text-align:center">Plus</th>
+        <th style="text-align:center">Pro</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Price ($/mo)</td>
+        <td style="text-align:center"><span class="mono" style="color:var(--text-muted)">$0 (7 days)</span></td>
+        <td style="text-align:center"><input type="number" id="tierPricePlus" value="9.99" min="0" max="50" step="0.5" style="width:80px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierPricePro" value="29.99" min="0" max="100" step="1" style="width:80px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Monthly Hour Cap</td>
+        <td style="text-align:center"><input type="number" id="tierHoursFree" value="5" min="1" max="50" step="1" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierHoursPlus" value="40" min="10" max="200" step="5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierHoursPro" value="100" min="20" max="500" step="10" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Commentary Gap (sec)</td>
+        <td style="text-align:center"><input type="number" id="tierGapFree" value="60" min="30" max="120" step="5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierGapPlus" value="45" min="15" max="120" step="5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierGapPro" value="30" min="15" max="120" step="5" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Context Interval (sec)</td>
+        <td style="text-align:center"><input type="number" id="tierCtxFree" value="30" min="5" max="60" step="5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierCtxPlus" value="15" min="5" max="60" step="5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierCtxPro" value="10" min="5" max="60" step="5" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Questions / Hour</td>
+        <td style="text-align:center"><input type="number" id="tierQFree" value="3" min="0" max="30" step="1" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierQPlus" value="10" min="0" max="60" step="1" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierQPro" value="20" min="0" max="100" step="5" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Sessions / Day</td>
+        <td style="text-align:center"><input type="number" id="tierSessFree" value="1" min="1" max="10" step="1" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierSessPlus" value="3" min="1" max="10" step="1" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierSessPro" value="10" min="1" max="20" step="1" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Max Session (hrs)</td>
+        <td style="text-align:center"><input type="number" id="tierMaxHrFree" value="1" min="0.5" max="4" step="0.5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierMaxHrPlus" value="3" min="1" max="8" step="0.5" style="width:60px;text-align:center"></td>
+        <td style="text-align:center"><input type="number" id="tierMaxHrPro" value="6" min="1" max="12" step="1" style="width:60px;text-align:center"></td>
+      </tr>
+      <tr>
+        <td>Reactions</td>
+        <td style="text-align:center"><select id="tierReactFree" style="width:70px;text-align:center"><option value="0" selected>No</option><option value="1">Yes</option></select></td>
+        <td style="text-align:center"><select id="tierReactPlus" style="width:70px;text-align:center"><option value="0">No</option><option value="1" selected>Yes</option></select></td>
+        <td style="text-align:center"><select id="tierReactPro" style="width:70px;text-align:center"><option value="0">No</option><option value="1" selected>Yes</option></select></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid-3" id="tierCards"></div>
+
+  <div style="margin-top:24px">
+    <h2 style="margin-bottom:12px"><span class="dot" style="background:var(--purple)"></span> Profitability by User Count (Paying Users Only)</h2>
+    <p style="margin-bottom:12px;color:var(--text)">Free = 7-day trial only. These are <strong>paying subscribers</strong> after trial ends. Adjust the Plus/Pro split below.</p>
+    <div class="controls">
+      <div class="control-group">
+        <label>Trial Users (cost only, no revenue)</label>
+        <input type="number" id="distTrial" value="50" min="0" max="500" step="10" style="width:80px;text-align:center">
+        <span style="font-size:0.85rem;color:var(--text-muted)">concurrent trialists</span>
+      </div>
+      <div class="control-group">
+        <label>Plus % of paying</label>
+        <input type="number" id="distPlus" value="70" min="0" max="100" step="5" style="width:70px;text-align:center">
+      </div>
+      <div class="control-group">
+        <label>Pro % of paying</label>
+        <input type="number" id="distPro" value="30" min="0" max="100" step="5" style="width:70px;text-align:center">
+      </div>
+    </div>
+    <div id="profitSummaryBar" style="margin:16px 0"></div>
+    <div class="chart-container" style="height:350px"><canvas id="profitChart"></canvas></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: All-Model Comparison                           -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card section-gap">
+  <h2><span class="dot" style="background:var(--red)"></span> All Models Compared (1 hr session cost)</h2>
+  <div class="chart-container" style="height:350px"><canvas id="allModelsChart"></canvas></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- SECTION 6: Recommendations                                -->
+<!-- ══════════════════════════════════════════════════════════ -->
+
+<div class="card section-gap">
+  <h2><span class="dot" style="background:var(--blue)"></span> Recommendations</h2>
+
+  <div class="rec-grid">
+    <div class="rec-card">
+      <h4><span class="badge badge-red">Key Insight</span> TTS Is the #1 Cost Driver</h4>
+      <p>Fish Audio TTS at <strong>$0.0015/call</strong> is 8x more expensive than a Dashscope LLM call ($0.0002). TTS accounts for <strong>70-80% of total API costs</strong>. The LLM model choice barely matters — what matters is how many TTS calls you make.</p>
+      <ul>
+        <li><strong>TTS Rate slider</strong> — not every quip needs to be spoken. Show text-only 30-40% of the time</li>
+        <li><strong>Commentary gap</strong> — 45s instead of 30s cuts TTS calls by 33%</li>
+        <li><strong>Reactions as visuals only</strong> — skip TTS for reaction calls (overlay text + emotes)</li>
+        <li><strong>Consider cheaper TTS providers</strong> or self-hosted (Piper, Kokoro) for massive savings</li>
+      </ul>
+    </div>
+
+    <div class="rec-card">
+      <h4><span class="badge badge-best">Best Value</span> Profitable Model Mix</h4>
+      <p>Use <strong>Dashscope qwen3-vl-flash</strong> for both commentary and context. LLM cost is negligible (~$0.05/hr). Control profitability through TTS rate and hour caps.</p>
+      <ul>
+        <li>LLM: <code>qwen3-vl-flash</code> for everything — $0.0002/call</li>
+        <li>TTS rate: 70% (30% text-only) — saves ~$0.05/hr</li>
+        <li>Plus: 45s gap, 40hr cap → ~$6.60/mo cost, $9.99 revenue, <strong>34% margin</strong></li>
+        <li>Pro: 30s gap, 100hr cap → ~$25/mo cost, $29.99 revenue, <strong>15% margin</strong></li>
+      </ul>
+    </div>
+
+    <div class="rec-card">
+      <h4><span class="badge badge-amber">Rate Limits</span> Recommended Tier Limits</h4>
+      <p>Rate limits should throttle the <strong>commentary gap</strong> (controls TTS volume) and <strong>monthly hours</strong> (caps total spend). LLM cost is so low it doesn't need aggressive limiting.</p>
+      <ul>
+        <li><strong>Trial (7 days):</strong> 60s gap, 3 questions/hr, 1 session/day (1hr max), 5hr total</li>
+        <li><strong>Plus ($9.99):</strong> 45s gap, 10 questions/hr, 3 sessions/day (3hr max), 40hr/mo</li>
+        <li><strong>Pro ($29.99):</strong> 30s gap, 20 questions/hr, unlimited sessions (6hr max), 100hr/mo</li>
+        <li>All tiers: server-side enforcement via edge function</li>
+      </ul>
+    </div>
+
+    <div class="rec-card">
+      <h4><span class="badge badge-teal">Architecture</span> Cost Control Strategy</h4>
+      <p>Key architectural decisions to keep costs manageable at scale:</p>
+      <ul>
+        <li><strong>#1 priority: Control TTS volume</strong> — this is 70-80% of costs. Smart skip logic, shorter quips, visual-only reactions</li>
+        <li><strong>Monthly hour budget per user</strong> — hard cap prevents runaway costs (Trial: 5hr, Plus: 40hr, Pro: 100hr)</li>
+        <li><strong>Server-side rate enforcement</strong> — don't trust the client's commentary gap</li>
+        <li><strong>Dashscope for all LLM</strong> — Anthropic/Gemini add negligible quality for 10-15x more cost</li>
+        <li><strong>Future: self-hosted TTS</strong> — Piper/Kokoro eliminate TTS API cost entirely (GPU required)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note note-warn" style="margin-top:20px">
+    <strong>The biggest cost surprise: TTS, not LLM.</strong> Fish Audio at $0.0015/call accounts for <strong>70-80% of total API cost</strong>.
+    A commentary call every 30s = 120 TTS calls/hr = <strong>$0.18/hr just for voice</strong>. The LLM vision call costs only $0.02/hr.
+    Use the <strong>TTS Rate slider</strong> and <strong>Commentary Gap</strong> to find the sweet spot between quality and cost.
+  </div>
+  <div class="note note-good" style="margin-top:8px">
+    <strong>Path to profitability:</strong> With Dashscope, 45s commentary gap, 70% TTS rate, and 40hr Plus / 100hr Pro caps:
+    Plus costs ~<strong>$6.60/mo</strong> (margin: 34%), Pro costs ~<strong>$25/mo</strong> (margin: 15%).
+    Long-term: self-hosted TTS (Piper/Kokoro) eliminates the TTS cost entirely, pushing margins to <strong>90%+</strong>.
+  </div>
+</div>
+
+<div class="note" style="margin-top:24px">
+  <strong>Data sources:</strong> Alibaba Cloud Model Studio pricing, Google AI Gemini pricing page,
+  Anthropic Claude API pricing, Fish Audio developer docs. All prices as of Feb 2026.
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// MODEL CATALOG
+// ══════════════════════════════════════════════════════════
+
+const MODELS = {
+  // ── Dashscope (Alibaba Cloud) ──
+  'ds-qwen3-vl-flash': {
+    provider: 'Dashscope', name: 'qwen3-vl-flash', badge: 'badge-amber',
+    inputPerMTok: 0.05, outputPerMTok: 0.40, imageTokens: 2645,
+    vision: true, notes: 'Cheapest vision — best value',
+  },
+  'ds-qwen-vl-max': {
+    provider: 'Dashscope', name: 'qwen-vl-max', badge: 'badge-amber',
+    inputPerMTok: 0.80, outputPerMTok: 3.20, imageTokens: 2645,
+    vision: true, notes: 'Best Dashscope vision',
+  },
+  'ds-qwen-plus': {
+    provider: 'Dashscope', name: 'qwen-plus', badge: 'badge-amber',
+    inputPerMTok: 0.40, outputPerMTok: 1.20, imageTokens: 0,
+    vision: false, notes: 'Text only, mid-tier',
+  },
+  'ds-qwen-turbo': {
+    provider: 'Dashscope', name: 'qwen-turbo', badge: 'badge-amber',
+    inputPerMTok: 0.05, outputPerMTok: 0.20, imageTokens: 0,
+    vision: false, notes: 'Text only, cheapest',
+  },
+  'ds-qwen-max': {
+    provider: 'Dashscope', name: 'qwen-max', badge: 'badge-amber',
+    inputPerMTok: 1.60, outputPerMTok: 6.40, imageTokens: 0,
+    vision: false, notes: 'Text only, best quality',
+  },
+  // ── Google Gemini ──
+  'gm-3-flash': {
+    provider: 'Gemini', name: 'gemini-3-flash-preview', badge: 'badge-teal',
+    inputPerMTok: 0.50, outputPerMTok: 3.00, imageTokens: 1300,
+    vision: true, notes: 'Latest Flash — preview',
+  },
+  'gm-31-pro': {
+    provider: 'Gemini', name: 'gemini-3.1-pro-preview', badge: 'badge-teal',
+    inputPerMTok: 2.00, outputPerMTok: 12.00, imageTokens: 1300,
+    vision: true, notes: 'Flagship — expensive',
+  },
+  'gm-25-flash': {
+    provider: 'Gemini', name: 'gemini-2.5-flash', badge: 'badge-teal',
+    inputPerMTok: 0.30, outputPerMTok: 2.50, imageTokens: 1300,
+    vision: true, notes: 'Stable, great value',
+  },
+  'gm-25-flash-lite': {
+    provider: 'Gemini', name: 'gemini-2.5-flash-lite', badge: 'badge-teal',
+    inputPerMTok: 0.10, outputPerMTok: 0.40, imageTokens: 1300,
+    vision: true, notes: 'Budget Gemini vision',
+  },
+  'gm-25-pro': {
+    provider: 'Gemini', name: 'gemini-2.5-pro', badge: 'badge-teal',
+    inputPerMTok: 1.25, outputPerMTok: 10.00, imageTokens: 1300,
+    vision: true, notes: 'Stable Pro, premium',
+  },
+  // ── Anthropic ──
+  'an-haiku': {
+    provider: 'Anthropic', name: 'claude-haiku-4.5', badge: 'badge-purple',
+    inputPerMTok: 1.00, outputPerMTok: 5.00, imageTokens: 1843,
+    vision: true, notes: 'Good quality, pricey',
+  },
+  'an-sonnet': {
+    provider: 'Anthropic', name: 'claude-sonnet-4.6', badge: 'badge-purple',
+    inputPerMTok: 3.00, outputPerMTok: 15.00, imageTokens: 1843,
+    vision: true, notes: 'Premium quality',
+  },
+};
+
+const FISH_AUDIO_PER_BYTE = 15.0 / 1_000_000; // $15 per 1M UTF-8 bytes
+const TOKENS = {
+  commentary: { systemPrompt: 400, outputTokens: 80 },
+  context:    { systemPrompt: 200, outputTokens: 100 },
+  userMsg:    { systemPrompt: 400, outputTokens: 120 },
+};
+
+// ══════════════════════════════════════════════════════════
+// INIT DROPDOWNS
+// ══════════════════════════════════════════════════════════
+
+const DEFAULT_MODEL = 'ds-qwen3-vl-flash';
+
+function populateModelDropdowns() {
+  const commentarySelect = document.getElementById('commentaryModel');
+  const contextSelect = document.getElementById('contextModel');
+  const providers = ['Dashscope', 'Gemini', 'Anthropic'];
+
+  for (const sel of [commentarySelect, contextSelect]) {
+    sel.innerHTML = '';
+    for (const prov of providers) {
+      const group = document.createElement('optgroup');
+      group.label = `── ${prov} ──`;
+      let hasItems = false;
+      for (const [key, m] of Object.entries(MODELS)) {
+        if (m.provider !== prov) continue;
+        if (!m.vision && sel === contextSelect) continue;
+        const opt = document.createElement('option');
+        opt.value = key;
+        const inP = m.inputPerMTok < 1 ? '$' + m.inputPerMTok : '$' + m.inputPerMTok.toFixed(1);
+        const outP = m.outputPerMTok < 1 ? '$' + m.outputPerMTok : '$' + m.outputPerMTok.toFixed(1);
+        opt.textContent = `${m.name}  [in: ${inP} / out: ${outP}]`;
+        if (key === DEFAULT_MODEL) opt.selected = true;
+        group.appendChild(opt);
+        hasItems = true;
+      }
+      if (hasItems) sel.appendChild(group);
+    }
+  }
+
+  // Belt-and-suspenders: also set .value explicitly
+  commentarySelect.value = DEFAULT_MODEL;
+  contextSelect.value = DEFAULT_MODEL;
+
+  // Verify and warn if it didn't stick
+  if (commentarySelect.value !== DEFAULT_MODEL) {
+    console.warn('Commentary dropdown default failed! Got:', commentarySelect.value, 'expected:', DEFAULT_MODEL);
+  }
+  if (contextSelect.value !== DEFAULT_MODEL) {
+    console.warn('Context dropdown default failed! Got:', contextSelect.value, 'expected:', DEFAULT_MODEL);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// COST CALCULATIONS
+// ══════════════════════════════════════════════════════════
+
+function costPerCall(modelKey, callType) {
+  const m = MODELS[modelKey];
+  if (!m) return 0;
+  const t = TOKENS[callType];
+  const imgTokens = m.vision ? m.imageTokens : 0;
+  const inputTokens = t.systemPrompt + imgTokens;
+  const outputTokens = t.outputTokens;
+  return (inputTokens / 1_000_000) * m.inputPerMTok + (outputTokens / 1_000_000) * m.outputPerMTok;
+}
+
+function getTtsBytes() { return parseInt(document.getElementById('ttsAvgBytes')?.value) || 100; }
+function getTtsRate() { return (parseFloat(document.getElementById('ttsRate')?.value) || 100) / 100; }
+function ttsCostPerCall() { return getTtsBytes() * FISH_AUDIO_PER_BYTE; }
+
+function calculateSession() {
+  const commentaryModel = document.getElementById('commentaryModel').value;
+  const contextModel = document.getElementById('contextModel').value;
+  const sessionHours = parseFloat(document.getElementById('sessionHours').value) || 1;
+  const commentaryGap = parseInt(document.getElementById('commentaryGap').value) || 30;
+  const contextInterval = parseInt(document.getElementById('contextInterval').value) || 15;
+  const questionsPerHour = parseInt(document.getElementById('questionsPerHour').value) || 0;
+  const sessionSec = sessionHours * 3600;
+
+  const commentaryCalls = Math.floor(sessionSec / commentaryGap);
+  const reactionCalls = Math.floor(commentaryCalls * 0.25);
+  const rawContextCalls = Math.floor(sessionSec / contextInterval);
+  const contextCalls = Math.max(0, rawContextCalls - commentaryCalls);
+  const userQuestions = Math.floor(questionsPerHour * sessionHours);
+
+  const gameSearchCalls = Math.min(Math.ceil(sessionHours * 12) + 3, contextCalls);
+  const ttsRate = getTtsRate();
+
+  const commentaryCost = commentaryCalls * costPerCall(commentaryModel, 'commentary');
+  const reactionCost = reactionCalls * costPerCall(commentaryModel, 'commentary');
+  const contextCost = contextCalls * costPerCall(contextModel, 'context');
+  const userMsgCost = userQuestions * costPerCall(commentaryModel, 'userMsg');
+  const rawTtsCalls = commentaryCalls + reactionCalls + userQuestions;
+  const totalTtsCalls = Math.floor(rawTtsCalls * ttsRate);
+  const totalTtsCost = totalTtsCalls * ttsCostPerCall();
+  const gameSearchCost = 0; // Free tier
+
+  const totalCost = commentaryCost + reactionCost + contextCost + userMsgCost + totalTtsCost;
+  const totalApiCalls = commentaryCalls + reactionCalls + contextCalls + userQuestions + totalTtsCalls + gameSearchCalls;
+
+  return {
+    commentaryCalls, reactionCalls, contextCalls, userQuestions, gameSearchCalls,
+    totalTtsCalls, totalApiCalls,
+    commentaryCost, reactionCost, contextCost, userMsgCost, totalTtsCost, gameSearchCost,
+    totalCost, sessionHours, commentaryModel, contextModel,
+    breakdown: {
+      'Commentary LLM': commentaryCost,
+      'Reactions LLM': reactionCost,
+      'Context Vision': contextCost,
+      'User Messages': userMsgCost,
+      'TTS': totalTtsCost,
+    },
+    calls: {
+      'Commentary': commentaryCalls,
+      'Reactions': reactionCalls,
+      'Context': contextCalls,
+      'User Msgs': userQuestions,
+      'TTS': totalTtsCalls,
+    }
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDERING
+// ══════════════════════════════════════════════════════════
+
+let sessionPieChart, sessionBarChart, monthlyChart, profitChart, allModelsChart;
+
+function fmt(n) {
+  if (n < 0.0001) return '$' + n.toFixed(6);
+  if (n < 0.001) return '$' + n.toFixed(5);
+  if (n < 0.01) return '$' + n.toFixed(4);
+  if (n < 1) return '$' + n.toFixed(3);
+  if (n < 100) return '$' + n.toFixed(2);
+  return '$' + Math.round(n).toLocaleString();
+}
+
+function renderModelRefTable() {
+  const tbody = document.getElementById('modelRefTable');
+  tbody.innerHTML = Object.entries(MODELS).map(([key, m]) => {
+    const imgTok = m.vision ? m.imageTokens.toLocaleString() : '—';
+    const callCost = m.vision ? costPerCall(key, 'commentary') : costPerCall(key, 'commentary');
+    return `<tr>
+      <td><span class="badge ${m.badge}">${m.provider}</span></td>
+      <td class="mono">${m.name}</td>
+      <td class="mono">$${m.inputPerMTok}</td>
+      <td class="mono">$${m.outputPerMTok}</td>
+      <td class="mono">${imgTok}</td>
+      <td class="mono teal">${fmt(callCost)}</td>
+      <td style="font-size:0.8rem;color:var(--text-muted)">${m.notes}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSessionStats(s) {
+  const cmName = MODELS[s.commentaryModel]?.name ?? '?';
+  const cxName = MODELS[s.contextModel]?.name ?? '?';
+
+  document.getElementById('sessionStats').innerHTML = `
+    <div class="stat">
+      <span class="stat-label">Total Session Cost</span>
+      <span class="stat-value teal">${fmt(s.totalCost)}</span>
+      <span class="stat-detail">${s.sessionHours}hr · ${cmName} + ${cxName}</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Cost / Minute</span>
+      <span class="stat-value purple">${fmt(s.totalCost / (s.sessionHours * 60))}</span>
+      <span class="stat-detail">amortized</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Total API Calls</span>
+      <span class="stat-value amber">${s.totalApiCalls}</span>
+      <span class="stat-detail">${Math.round(s.totalApiCalls / (s.sessionHours * 60))}/min avg</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">LLM Calls</span>
+      <span class="stat-value">${s.commentaryCalls + s.reactionCalls + s.contextCalls + s.userQuestions}</span>
+      <span class="stat-detail">${s.commentaryCalls} cmnt + ${s.reactionCalls} react + ${s.contextCalls} ctx + ${s.userQuestions} user</span>
+    </div>
+  `;
+
+  // Summary table
+  const callMap = { 'Commentary LLM': 'Commentary', 'Reactions LLM': 'Reactions', 'Context Vision': 'Context', 'User Messages': 'User Msgs', 'TTS': 'TTS' };
+  document.getElementById('sessionCallSummary').innerHTML = `
+    <table>
+      <thead><tr><th>Call Type</th><th>Count</th><th>Cost / Call</th><th>Subtotal</th><th>% of Total</th></tr></thead>
+      <tbody>
+        ${Object.entries(s.breakdown).map(([k, v]) => {
+          const cnt = s.calls[callMap[k]] ?? 0;
+          return `<tr>
+            <td>${k}</td>
+            <td class="mono">${cnt}</td>
+            <td class="mono">${cnt ? fmt(v / cnt) : '—'}</td>
+            <td class="mono teal">${fmt(v)}</td>
+            <td class="mono">${s.totalCost > 0 ? (v / s.totalCost * 100).toFixed(1) + '%' : '0%'}</td>
+          </tr>`;
+        }).join('')}
+        <tr style="border-top:2px solid var(--border)">
+          <td><strong>Total</strong></td>
+          <td class="mono"><strong>${s.totalApiCalls}</strong></td>
+          <td></td>
+          <td class="mono teal"><strong>${fmt(s.totalCost)}</strong></td>
+          <td class="mono"><strong>100%</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+
+const CHART_COLORS = ['#3b9797', '#b06aff', '#f59e0b', '#22c55e', '#ef4444', '#6366f1'];
+
+function renderSessionCharts(s) {
+  const labels = Object.keys(s.breakdown);
+  const data = Object.values(s.breakdown);
+
+  if (sessionPieChart) sessionPieChart.destroy();
+  sessionPieChart = new Chart(document.getElementById('sessionPieChart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: CHART_COLORS, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmt(c.raw)}` } },
+      },
+    },
+  });
+
+  if (sessionBarChart) sessionBarChart.destroy();
+  sessionBarChart = new Chart(document.getElementById('sessionBarChart'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(s.calls),
+      datasets: [{ label: 'API Calls', data: Object.values(s.calls), backgroundColor: CHART_COLORS, borderRadius: 4 }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#e2e8f0', font: { size: 12 } }, grid: { display: false } },
+        y: { ticks: { color: '#e2e8f0', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      },
+    },
+  });
+}
+
+function calculateMonthly() {
+  const s = calculateSession();
+  const weekdaySessions = parseInt(document.getElementById('weekdaySessions').value) || 0;
+  const weekdayLength = parseFloat(document.getElementById('weekdayLength').value) || 0;
+  const weekendSessions = parseInt(document.getElementById('weekendSessions').value) || 0;
+  const weekendLength = parseFloat(document.getElementById('weekendLength').value) || 0;
+  const weeksPerMonth = 4.33;
+  const totalHoursPerMonth = (weekdaySessions * weekdayLength + weekendSessions * weekendLength) * weeksPerMonth;
+  const costPerHour = s.totalCost / s.sessionHours;
+  const costPerUserPerMonth = costPerHour * totalHoursPerMonth;
+  return { costPerHour, costPerUserPerMonth, totalHoursPerMonth, s };
+}
+
+function renderMonthly() {
+  const m = calculateMonthly();
+  const userCounts = [10, 25, 50, 100, 250, 500, 1000];
+
+  document.getElementById('monthlyUserStats').innerHTML = `
+    <div class="stat">
+      <span class="stat-label">Hours / User / Month</span>
+      <span class="stat-value teal">${m.totalHoursPerMonth.toFixed(0)}</span>
+      <span class="stat-detail">based on play schedule</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Cost / User / Month</span>
+      <span class="stat-value purple">${fmt(m.costPerUserPerMonth)}</span>
+      <span class="stat-detail">${fmt(m.costPerHour)}/hr</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Cost / User / Hour</span>
+      <span class="stat-value amber">${fmt(m.costPerHour)}</span>
+      <span class="stat-detail">all API calls combined</span>
+    </div>
+  `;
+
+  const tc = m.s.totalCost;
+  const ratios = {
+    commentary: tc > 0 ? m.s.commentaryCost / tc : 0,
+    reactions: tc > 0 ? m.s.reactionCost / tc : 0,
+    context: tc > 0 ? m.s.contextCost / tc : 0,
+    userMsg: tc > 0 ? m.s.userMsgCost / tc : 0,
+    tts: tc > 0 ? m.s.totalTtsCost / tc : 0,
+  };
+
+  if (monthlyChart) monthlyChart.destroy();
+  monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: userCounts.map(n => `${n} users`),
+      datasets: [
+        { label: 'Commentary', data: userCounts.map(n => n * m.costPerUserPerMonth * ratios.commentary), backgroundColor: '#3b9797', borderRadius: 4 },
+        { label: 'Reactions', data: userCounts.map(n => n * m.costPerUserPerMonth * ratios.reactions), backgroundColor: '#b06aff', borderRadius: 4 },
+        { label: 'Context', data: userCounts.map(n => n * m.costPerUserPerMonth * ratios.context), backgroundColor: '#f59e0b', borderRadius: 4 },
+        { label: 'User Msgs', data: userCounts.map(n => n * m.costPerUserPerMonth * ratios.userMsg), backgroundColor: '#22c55e', borderRadius: 4 },
+        { label: 'TTS', data: userCounts.map(n => n * m.costPerUserPerMonth * ratios.tts), backgroundColor: '#ef4444', borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e2e8f0', font: { size: 13 } } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}` } },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#e2e8f0', font: { size: 12 } }, grid: { display: false } },
+        y: { stacked: true, ticks: { color: '#e2e8f0', font: { size: 12 }, callback: (v) => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      },
+    },
+  });
+}
+
+// ── SaaS Tiers ──
+
+function readTierConfig() {
+  return [
+    {
+      name: '7-Day Trial', price: 0, color: 'var(--text-muted)', badge: 'badge-teal',
+      limits: {
+        monthlyHoursCap: parseFloat(document.getElementById('tierHoursFree').value) || 5,
+        commentaryGap: parseInt(document.getElementById('tierGapFree').value) || 60,
+        contextInterval: parseInt(document.getElementById('tierCtxFree').value) || 30,
+        questionsPerHour: parseInt(document.getElementById('tierQFree').value) || 3,
+        sessionsPerDay: parseInt(document.getElementById('tierSessFree').value) || 1,
+        sessionMaxHours: parseFloat(document.getElementById('tierMaxHrFree').value) || 1,
+        reactions: document.getElementById('tierReactFree').value === '1',
+      },
+    },
+    {
+      name: 'Plus',
+      price: parseFloat(document.getElementById('tierPricePlus').value) || 9.99,
+      color: 'var(--teal)', badge: 'badge-teal',
+      limits: {
+        monthlyHoursCap: parseFloat(document.getElementById('tierHoursPlus').value) || 60,
+        commentaryGap: parseInt(document.getElementById('tierGapPlus').value) || 30,
+        contextInterval: parseInt(document.getElementById('tierCtxPlus').value) || 15,
+        questionsPerHour: parseInt(document.getElementById('tierQPlus').value) || 10,
+        sessionsPerDay: parseInt(document.getElementById('tierSessPlus').value) || 3,
+        sessionMaxHours: parseFloat(document.getElementById('tierMaxHrPlus').value) || 3,
+        reactions: document.getElementById('tierReactPlus').value === '1',
+      },
+    },
+    {
+      name: 'Pro',
+      price: parseFloat(document.getElementById('tierPricePro').value) || 29.99,
+      color: 'var(--purple)', badge: 'badge-purple',
+      limits: {
+        monthlyHoursCap: parseFloat(document.getElementById('tierHoursPro').value) || 150,
+        commentaryGap: parseInt(document.getElementById('tierGapPro').value) || 30,
+        contextInterval: parseInt(document.getElementById('tierCtxPro').value) || 10,
+        questionsPerHour: parseInt(document.getElementById('tierQPro').value) || 20,
+        sessionsPerDay: parseInt(document.getElementById('tierSessPro').value) || 10,
+        sessionMaxHours: parseFloat(document.getElementById('tierMaxHrPro').value) || 6,
+        reactions: document.getElementById('tierReactPro').value === '1',
+      },
+    },
+  ];
+}
+
+function calcTierHourlyCost(limits) {
+  const sessionSec = 3600;
+  const commentaryCalls = Math.floor(sessionSec / limits.commentaryGap);
+  const reactionCalls = limits.reactions ? Math.floor(commentaryCalls * 0.25) : 0;
+  const contextCalls = Math.max(0, Math.floor(sessionSec / limits.contextInterval) - commentaryCalls);
+  const userQuestions = limits.questionsPerHour;
+  const rawTtsCalls = commentaryCalls + reactionCalls + userQuestions;
+  const ttsCallsHr = Math.floor(rawTtsCalls * getTtsRate());
+
+  const cm = document.getElementById('commentaryModel').value;
+  const cx = document.getElementById('contextModel').value;
+
+  return commentaryCalls * costPerCall(cm, 'commentary') +
+    reactionCalls * costPerCall(cm, 'commentary') +
+    contextCalls * costPerCall(cx, 'context') +
+    userQuestions * costPerCall(cm, 'userMsg') +
+    ttsCallsHr * ttsCostPerCall();
+}
+
+function renderActiveModelIndicator() {
+  const cm = document.getElementById('commentaryModel').value;
+  const cx = document.getElementById('contextModel').value;
+  const cmModel = MODELS[cm];
+  const cxModel = MODELS[cx];
+  const cmCost = costPerCall(cm, 'commentary');
+  const cxCost = costPerCall(cx, 'context');
+
+  document.getElementById('activeModelIndicator').innerHTML = `
+    <div style="padding:16px 20px;border-radius:10px;background:var(--surface-2);border:2px solid var(--teal)">
+      <div style="font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--teal);margin-bottom:6px">Commentary Model (selected above)</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--text)">${cmModel?.name ?? '?'}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:var(--teal);margin-top:4px">${fmt(cmCost)} per call</div>
+      <div style="font-size:0.9rem;color:var(--text);margin-top:4px">${cmModel?.provider} &middot; in: $${cmModel?.inputPerMTok}/MTok &middot; out: $${cmModel?.outputPerMTok}/MTok</div>
+    </div>
+    <div style="padding:16px 20px;border-radius:10px;background:var(--surface-2);border:2px solid var(--purple)">
+      <div style="font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--purple);margin-bottom:6px">Context Model (selected above)</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--text)">${cxModel?.name ?? '?'}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:1rem;color:var(--purple);margin-top:4px">${fmt(cxCost)} per call</div>
+      <div style="font-size:0.9rem;color:var(--text);margin-top:4px">${cxModel?.provider} &middot; in: $${cxModel?.inputPerMTok}/MTok &middot; out: $${cxModel?.outputPerMTok}/MTok</div>
+    </div>
+  `;
+}
+
+function renderTiers() {
+  const tiers = readTierConfig();
+
+  const tierData = tiers.map(t => {
+    const hourCost = calcTierHourlyCost(t.limits);
+    const l = t.limits;
+    const sessionsPerMonth = l.sessionsPerDay * 30 * 0.6; // 60% active days
+    const hoursPerMonth = Math.min(sessionsPerMonth * l.sessionMaxHours * 0.7, l.monthlyHoursCap);
+    const monthlyCost = hourCost * hoursPerMonth;
+    return { ...t, cost: { hourCost, hoursPerMonth, monthlyCost } };
+  });
+
+  document.getElementById('tierCards').innerHTML = tierData.map(t => {
+    const margin = t.price > 0 ? ((t.price - t.cost.monthlyCost) / t.price * 100) : 0;
+    const marginColor = margin > 60 ? 'green' : margin > 30 ? 'amber' : 'red';
+    const isTrial = t.price === 0;
+    return `
+      <div class="tier-card">
+        <div class="flex-between">
+          <span class="tier-name">${t.name}</span>
+          <span class="badge ${t.badge}">${isTrial ? 'TRIAL' : t.name}</span>
+        </div>
+        <div class="tier-price" style="color:${t.color}">${isTrial ? 'Free (7 days)' : '$' + t.price.toFixed(2) + '/mo'}</div>
+        <div class="tier-details">
+          <span>${t.limits.sessionsPerDay} session${t.limits.sessionsPerDay !== 1 ? 's' : ''}/day · max ${t.limits.sessionMaxHours}hr each</span>
+          <span>Commentary every ${t.limits.commentaryGap}s · Context every ${t.limits.contextInterval}s</span>
+          <span>${t.limits.questionsPerHour} questions/hr · Reactions: ${t.limits.reactions ? 'Yes' : 'No'}</span>
+          <span>${isTrial ? '7-day cap: ' + t.limits.monthlyHoursCap + 'hr total' : 'Monthly cap: ' + t.limits.monthlyHoursCap + 'hr'}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="tier-cost" style="background:${!isTrial && margin < 30 ? 'var(--red-dim)' : 'var(--surface)'}">
+          <div class="stat-label">${isTrial ? 'Est. Cost / Trialist (7 days)' : 'Est. Cost / User / Month'}</div>
+          <div class="mono" style="font-size:1.1rem;font-weight:600;margin-top:4px">${fmt(t.cost.monthlyCost)}</div>
+          <div style="font-size:0.85rem;color:var(--text-muted)">${t.cost.hoursPerMonth.toFixed(0)}hr × ${fmt(t.cost.hourCost)}/hr</div>
+        </div>
+        ${!isTrial ? `
+          <div class="tier-margin ${marginColor}">
+            Margin: ${margin.toFixed(0)}% · Profit: ${fmt(t.price - t.cost.monthlyCost)}/user/mo
+          </div>
+        ` : `
+          <div class="tier-margin" style="color:var(--text-muted)">Converts to Plus or Pro after 7 days</div>
+        `}
+      </div>
+    `;
+  }).join('');
+
+  // ── Active model indicator ──
+  renderActiveModelIndicator();
+
+  // ── Profitability chart ──
+  // X-axis = paying subscribers (Plus + Pro). Trial users are a separate fixed cost.
+  const payingCounts = [10, 25, 50, 100, 250, 500, 1000, 2000];
+
+  const trialUsers = parseInt(document.getElementById('distTrial').value) || 50;
+  const dPlus = (parseFloat(document.getElementById('distPlus').value) || 70) / 100;
+  const dPro  = (parseFloat(document.getElementById('distPro').value)  || 30) / 100;
+  const dTotal = dPlus + dPro;
+  const dist = { plus: dPlus / dTotal, pro: dPro / dTotal };
+
+  // Trial cost is fixed (doesn't scale with paying users)
+  const trialCostFixed = trialUsers * tierData[0].cost.monthlyCost;
+
+  const revenueData = payingCounts.map(n => {
+    const p = Math.round(n * dist.plus), pr = n - p;
+    return p * tierData[1].price + pr * tierData[2].price;
+  });
+
+  const costData = payingCounts.map(n => {
+    const p = Math.round(n * dist.plus), pr = n - p;
+    return trialCostFixed + p * tierData[1].cost.monthlyCost + pr * tierData[2].cost.monthlyCost;
+  });
+
+  const profitData = payingCounts.map((_, i) => revenueData[i] - costData[i]);
+
+  // Summary bar at a reference point (100 paying users)
+  const refIdx = payingCounts.indexOf(100);
+  const refRev = revenueData[refIdx];
+  const refCost = costData[refIdx];
+  const refProfit = profitData[refIdx];
+  document.getElementById('profitSummaryBar').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:16px;padding:20px;background:var(--surface-2);border-radius:12px;border:1px solid var(--border)">
+      <div>
+        <div style="font-size:0.85rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text)">At 100 Paying Users</div>
+        <div style="font-size:0.85rem;color:var(--text-muted);margin-top:4px">${Math.round(100 * dist.plus)} Plus + ${Math.round(100 * dist.pro)} Pro + ${trialUsers} trialists</div>
+      </div>
+      <div>
+        <div style="font-size:0.85rem;font-weight:600;color:var(--blue)">Revenue</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--blue)">${fmt(refRev)}<span style="font-size:0.8rem;font-weight:400">/mo</span></div>
+      </div>
+      <div>
+        <div style="font-size:0.85rem;font-weight:600;color:var(--red)">API Cost</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--red)">${fmt(refCost)}<span style="font-size:0.8rem;font-weight:400">/mo</span></div>
+      </div>
+      <div>
+        <div style="font-size:0.85rem;font-weight:600;color:${refProfit >= 0 ? 'var(--green)' : 'var(--red)'}">Profit</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:${refProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${refProfit >= 0 ? '+' : ''}${fmt(refProfit)}<span style="font-size:0.8rem;font-weight:400">/mo</span></div>
+      </div>
+    </div>
+  `;
+
+  if (profitChart) profitChart.destroy();
+  profitChart = new Chart(document.getElementById('profitChart'), {
+    type: 'line',
+    data: {
+      labels: payingCounts.map(n => n.toLocaleString()),
+      datasets: [
+        {
+          label: 'Revenue', data: revenueData,
+          borderColor: '#3b82f6', backgroundColor: '#3b82f620', fill: false, tension: 0.3, borderWidth: 3, borderDash: [8, 4],
+          pointRadius: 5, pointHoverRadius: 8,
+        },
+        {
+          label: 'API Cost (incl. trialists)', data: costData,
+          borderColor: '#ef4444', backgroundColor: '#ef444420', fill: false, tension: 0.3, borderWidth: 3, borderDash: [5, 5],
+          pointRadius: 5, pointHoverRadius: 8,
+        },
+        {
+          label: 'Profit', data: profitData,
+          borderColor: '#22c55e', backgroundColor: '#22c55e20', fill: true, tension: 0.3, borderWidth: 4,
+          pointRadius: 5, pointHoverRadius: 8,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e2e8f0', font: { size: 13, weight: '600' } } },
+        tooltip: {
+          titleFont: { size: 14 },
+          bodyFont: { size: 13 },
+          callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}` },
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Paying Subscribers', color: '#e2e8f0', font: { size: 14, weight: '600' } },
+          ticks: { color: '#e2e8f0', font: { size: 12 } },
+          grid: { display: false },
+        },
+        y: {
+          title: { display: true, text: 'Monthly ($)', color: '#e2e8f0', font: { size: 14, weight: '600' } },
+          ticks: { color: '#e2e8f0', font: { size: 12 }, callback: (v) => '$' + v.toLocaleString() },
+          grid: { color: 'rgba(255,255,255,0.06)' },
+        },
+      },
+    },
+  });
+}
+
+// ── All-Models Comparison ──
+
+function renderAllModelsChart() {
+  const gap = parseInt(document.getElementById('commentaryGap').value) || 30;
+  const ctxInt = parseInt(document.getElementById('contextInterval').value) || 15;
+  const qph = parseInt(document.getElementById('questionsPerHour').value) || 8;
+  const sessionSec = 3600;
+
+  const commentaryCalls = Math.floor(sessionSec / gap);
+  const reactionCalls = Math.floor(commentaryCalls * 0.25);
+  const contextCalls = Math.max(0, Math.floor(sessionSec / ctxInt) - commentaryCalls);
+  const ttsTotal = Math.floor((commentaryCalls + reactionCalls + qph) * getTtsRate());
+  const ttsCostTotal = ttsTotal * ttsCostPerCall();
+
+  // Only vision models
+  const visionModels = Object.entries(MODELS).filter(([_, m]) => m.vision);
+
+  const labels = visionModels.map(([_, m]) => `${m.provider}\n${m.name}`);
+  const commentaryData = visionModels.map(([k]) => commentaryCalls * costPerCall(k, 'commentary'));
+  const reactionData = visionModels.map(([k]) => reactionCalls * costPerCall(k, 'commentary'));
+  const contextData = visionModels.map(([k]) => contextCalls * costPerCall(k, 'context'));
+  const userMsgData = visionModels.map(([k]) => qph * costPerCall(k, 'userMsg'));
+  const ttsData = visionModels.map(() => ttsCostTotal);
+
+  if (allModelsChart) allModelsChart.destroy();
+  allModelsChart = new Chart(document.getElementById('allModelsChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Commentary', data: commentaryData, backgroundColor: '#3b9797', borderRadius: 4 },
+        { label: 'Reactions', data: reactionData, backgroundColor: '#b06aff', borderRadius: 4 },
+        { label: 'Context', data: contextData, backgroundColor: '#f59e0b', borderRadius: 4 },
+        { label: 'User Msgs', data: userMsgData, backgroundColor: '#22c55e', borderRadius: 4 },
+        { label: 'TTS', data: ttsData, backgroundColor: '#ef4444', borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e2e8f0', font: { size: 13 } } },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}` } },
+        title: { display: true, text: 'If this model were used for EVERYTHING (commentary + context)', color: '#94a3b8', font: { size: 12 } },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#e2e8f0', font: { size: 11 } }, grid: { display: false } },
+        y: { stacked: true, ticks: { color: '#e2e8f0', font: { size: 12 }, callback: (v) => '$' + v.toFixed(2) }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      },
+    },
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// EVENT WIRING
+// ══════════════════════════════════════════════════════════
+
+function renderAll() {
+  const s = calculateSession();
+  renderSessionStats(s);
+  renderSessionCharts(s);
+  renderMonthly();
+  renderTiers();
+  renderAllModelsChart();
+}
+
+populateModelDropdowns();
+renderModelRefTable();
+
+document.querySelectorAll('select, input').forEach(el => {
+  el.addEventListener('change', renderAll);
+  el.addEventListener('input', renderAll);
+});
+
+renderAll();
+</script>
+</body>
+</html>

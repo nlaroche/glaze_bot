@@ -66,7 +66,7 @@ let detectedGame = $state('');
 let sceneHistory = $state<SceneSnapshot[]>([]);
 let totalContextCalls = $state(0);
 let contextEnabled = $state(true);
-let contextInterval = $state(3);
+let contextInterval = $state(15);
 let contextBufferSize = $state(10);
 
 export function getDebugStore() {

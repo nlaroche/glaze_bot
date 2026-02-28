@@ -119,6 +119,18 @@
           requestDismiss();
         });
 
+        await webview.listen('overlay-reset', () => {
+          bubbles = [];
+          hasReceivedMessage = false;
+          dismissRequested = false;
+          pttActive = false;
+          if (masterInterval) {
+            clearInterval(masterInterval);
+            masterRunning = false;
+            masterInterval = null;
+          }
+        });
+
         await webview.listen('party-updated', () => {});
 
         // Listen for global PTT events from Rust (works regardless of engine state)

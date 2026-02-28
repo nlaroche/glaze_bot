@@ -40,6 +40,10 @@ interface FrameResult {
 const MAX_HISTORY = 10; // 10 turns = 20 messages
 const POLL_INTERVAL_MS = 2000;
 const REACT_CHANCE = 0.25;
+/** Skip context tick if a frame was grabbed within this window (ms) */
+const CONTEXT_FRAME_DEDUP_MS = 5000;
+/** After detecting a game, wait this long before re-checking with Gemini search (ms) */
+const GAME_SEARCH_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 interface HistoryEntry {
   role: 'user' | 'assistant';
@@ -87,6 +91,10 @@ export class CommentaryEngine {
   private detectedGame = '';
   private sceneHistory: { timestamp: number; description: string }[] = [];
   private contextRunning = false;
+  /** Timestamp of last frame grab (shared between commentary + context to avoid redundant calls) */
+  private lastFrameGrabTime = 0;
+  /** Timestamp when game was last detected via Gemini search */
+  private gameDetectedAt = 0;
 
   // User message queue
   private userMessageQueue: string[] = [];
@@ -125,6 +133,8 @@ export class CommentaryEngine {
     this.detectedGame = '';
     this.sceneHistory = [];
     this.contextRunning = false;
+    this.lastFrameGrabTime = 0;
+    this.gameDetectedAt = 0;
     resetDebugStats();
     clearLogFile();
     markStarted();
@@ -354,6 +364,7 @@ export class CommentaryEngine {
         const frame = await invoke<FrameResult>('grab_frame', { sourceId: this.sourceId, withGrid: true });
         frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
         frameDims = { width: frame.width, height: frame.height };
+        this.lastFrameGrabTime = Date.now();
       } catch (err) {
         logDebug('error', {
           step: 'grab_frame (user message)',
@@ -550,6 +561,14 @@ export class CommentaryEngine {
     const debugStore = getDebugStore();
     if (!debugStore.contextEnabled) return;
 
+    // Skip this tick if commentary just grabbed a frame recently — avoid redundant vision calls
+    const sinceLast = Date.now() - this.lastFrameGrabTime;
+    if (sinceLast < CONTEXT_FRAME_DEDUP_MS) {
+      logDebug('info', { message: `Context tick skipped — frame grabbed ${(sinceLast / 1000).toFixed(1)}s ago` });
+      this.scheduleContextTick();
+      return;
+    }
+
     this.contextRunning = true;
 
     try {
@@ -558,9 +577,13 @@ export class CommentaryEngine {
       const frame = await invoke<FrameResult>('grab_frame', { sourceId: this.sourceId });
       const frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
 
+      // Determine if Gemini search should be skipped (cooldown after detection)
+      const gameSearchOnCooldown = this.detectedGame && (Date.now() - this.gameDetectedAt < GAME_SEARCH_COOLDOWN_MS);
+
       logDebug('context-request', {
         sceneHistoryLength: this.sceneHistory.length,
         detectedGame: this.detectedGame,
+        gameSearchOnCooldown,
       });
 
       // Get session for auth
@@ -586,7 +609,8 @@ export class CommentaryEngine {
           body: JSON.stringify({
             frame_b64: frameB64,
             previous_description: previousDescription,
-            game_name: this.detectedGame || undefined,
+            // Pass game_name to suppress Gemini search when on cooldown
+            game_name: (this.detectedGame && gameSearchOnCooldown) ? this.detectedGame : undefined,
           }),
         },
       );
@@ -612,6 +636,7 @@ export class CommentaryEngine {
       // Update detected game (allow it to change if the user switches apps/games)
       if (data.game_name && data.game_name !== this.detectedGame) {
         this.detectedGame = data.game_name;
+        this.gameDetectedAt = Date.now();
         setDetectedGame(data.game_name);
       }
 
@@ -716,6 +741,7 @@ export class CommentaryEngine {
       // Strip data URI prefix — API expects raw base64
       frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
       frameDims = { width: frame.width, height: frame.height };
+      this.lastFrameGrabTime = Date.now();
       logDebug('frame', { size: frameB64.length, width: frame.width, height: frame.height });
       // Store the full data URI for display in debug frames
       frameId = captureFrame(frame.data_uri);
