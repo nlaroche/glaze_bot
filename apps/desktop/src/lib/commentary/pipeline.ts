@@ -375,7 +375,7 @@ export class MessagePipeline {
       const shouldOverlay = trigger !== 'direct';
       let overlayShown = false;
 
-      if (shouldOverlay && (responseText || hasVisuals)) {
+      if (shouldOverlay && responseText) {
         this.events.emit('overlay-show', {
           bubbleId: requestId,
           name: character.name,

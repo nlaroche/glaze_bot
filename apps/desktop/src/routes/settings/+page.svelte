@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, setTtsStreaming, clearTtsTimings, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
-  import type { DebugEntry, FrameCapture, TtsTiming } from '$lib/stores/debug.svelte';
+  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, setTtsStreaming, clearTtsTimings, clearDebugLog, clearFrames, clearErrors } from '$lib/stores/debug.svelte';
+  import type { DebugEntry, ErrorEntry, FrameCapture, TtsTiming } from '$lib/stores/debug.svelte';
   import { SliderInput, ToggleSwitch } from '@glazebot/shared-ui';
   const debug = getDebugStore();
 
@@ -16,6 +16,10 @@
   let autoScroll = $state(true);
   let logContainer: HTMLDivElement | undefined = $state();
   let expandedEntryId = $state<number | null>(null);
+  let showErrorsOnly = $state(false);
+  let filteredEntries = $derived(
+    showErrorsOnly ? debug.entries.filter((e) => e.type === 'error') : debug.entries
+  );
   let lightboxFrame = $state<FrameCapture | null>(null);
 
   // Vertical split between event log (top) and frames (bottom) in the right column
@@ -360,8 +364,31 @@
           <span class="stat-label">Log Entries</span>
           <span class="stat-value">{debug.entries.length}</span>
         </div>
+        <div class="stat" class:stat-error={debug.errorCount > 0}>
+          <span class="stat-label">Errors</span>
+          <span class="stat-value">{debug.errorCount}</span>
+        </div>
       </div>
     </section>
+
+    <!-- Recent Errors -->
+    {#if debug.recentErrors.length > 0}
+      <section class="card error-card">
+        <div class="timing-header">
+          <h2>Recent Errors ({debug.recentErrors.length})</h2>
+          <button class="clear-btn" onclick={clearErrors}>Clear</button>
+        </div>
+        <div class="error-list">
+          {#each [...debug.recentErrors].reverse().slice(0, 15) as err (err.id)}
+            <div class="error-item">
+              <span class="error-source">{err.source}</span>
+              <span class="error-time">{formatTime(err.timestamp)}</span>
+              <span class="error-msg">{err.message}</span>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
 
     <!-- TTS Timing -->
     <section class="card">
@@ -448,19 +475,30 @@
       <div class="log-header">
         <h2>Event Log</h2>
         <div class="log-controls">
+          <button
+            class="error-filter-btn"
+            class:error-filter-active={showErrorsOnly}
+            onclick={() => { showErrorsOnly = !showErrorsOnly; }}
+          >
+            Errors{#if debug.errorCount > 0}<span class="error-badge">{debug.errorCount}</span>{/if}
+          </button>
           <ToggleSwitch label="Auto-scroll" bind:checked={autoScroll} />
-          <button class="clear-btn" onclick={clearDebugLog}>Clear</button>
+          <button class="clear-btn" onclick={() => { clearDebugLog(); clearErrors(); }}>Clear</button>
         </div>
       </div>
 
       <div class="log-container" bind:this={logContainer}>
-        {#if debug.entries.length === 0}
+        {#if filteredEntries.length === 0}
           <div class="log-empty">
-            <p>No events yet.</p>
-            <p class="log-empty-hint">Start commentary to see debug output.</p>
+            {#if showErrorsOnly}
+              <p>No errors.</p>
+            {:else}
+              <p>No events yet.</p>
+              <p class="log-empty-hint">Start commentary to see debug output.</p>
+            {/if}
           </div>
         {:else}
-          {#each debug.entries as entry (entry.id)}
+          {#each filteredEntries as entry (entry.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
@@ -760,6 +798,14 @@
     font-variant-numeric: tabular-nums;
   }
 
+  .stat-error .stat-value {
+    color: var(--color-error);
+  }
+
+  .stat-error .stat-label {
+    color: var(--color-error);
+  }
+
   /* ── Resize handle ── */
   .resize-handle {
     width: 8px;
@@ -850,6 +896,50 @@
     background: var(--error-a15);
     color: var(--color-error);
     border-color: var(--error-a20);
+  }
+
+  /* ── Error filter button ── */
+  .error-filter-btn {
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--white-a8);
+    border-radius: var(--radius-md);
+    background: var(--white-a4);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--font-xs);
+    font-weight: 500;
+    transition: background var(--transition-base), color var(--transition-base), border-color var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1-5);
+  }
+
+  .error-filter-btn:hover {
+    background: var(--error-a15);
+    color: var(--color-error);
+    border-color: var(--error-a20);
+  }
+
+  .error-filter-active {
+    background: var(--error-a15);
+    color: var(--color-error);
+    border-color: var(--error-a20);
+  }
+
+  .error-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--color-error);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
   }
 
   /* ── Vertical resize handle ── */
@@ -1343,6 +1433,54 @@
   }
 
   /* ── TTS Timing ── */
+  /* ── Error panel ── */
+  .error-card {
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  .error-card h2 {
+    color: var(--color-error) !important;
+  }
+
+  .error-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .error-item {
+    display: grid;
+    grid-template-columns: 70px 70px 1fr;
+    gap: var(--space-2);
+    padding: var(--space-1-5) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: rgba(239, 68, 68, 0.06);
+    font-size: var(--font-sm);
+    align-items: baseline;
+  }
+
+  .error-source {
+    color: var(--color-error);
+    font-weight: 600;
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .error-time {
+    color: var(--color-text-muted);
+    font-size: var(--font-xs);
+  }
+
+  .error-msg {
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .timing-header {
     display: flex;
     align-items: center;

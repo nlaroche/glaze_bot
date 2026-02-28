@@ -576,6 +576,14 @@
       {/if}
     </div>
 
+    <!-- Error banner (shows when there are recent errors) -->
+    {#if debug.errorCount > 0}
+      <button class="error-banner" onclick={() => import('$app/navigation').then(m => m.goto('/settings'))}>
+        <span class="error-banner-dot"></span>
+        <span>{debug.errorCount} error{debug.errorCount > 1 ? 's' : ''} — click to view in Settings</span>
+      </button>
+    {/if}
+
     <!-- Text input bar (always visible, disabled when not running) -->
     <div class="input-bar" class:input-bar-disabled={!hasParty}>
         {#if session.sttBubbleText}
@@ -1374,6 +1382,40 @@
   }
 
   /* ── Text input bar ── */
+  .error-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1-5) var(--space-4);
+    margin: 0 var(--space-4) var(--space-1);
+    border-radius: var(--radius-md);
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    color: #f87171;
+    font-size: var(--font-sm);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .error-banner:hover {
+    background: rgba(239, 68, 68, 0.2);
+  }
+
+  .error-banner-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    flex-shrink: 0;
+    animation: error-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes error-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
   .input-bar {
     flex-shrink: 0;
     padding: var(--space-2) var(--space-5);

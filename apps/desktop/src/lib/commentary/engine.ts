@@ -336,6 +336,11 @@ export class CommentaryEngine {
         // Expected — user message preempted timed cycle
       } else {
         this.consecutiveErrors++;
+        const msg = err instanceof Error ? err.message : String(err);
+        this.events.emit('pipeline:llm-error', { requestId: '', error: msg });
+        if (this.consecutiveErrors >= 3) {
+          this.events.emit('system-message', { text: `Commentary error (${this.consecutiveErrors} in a row): ${msg}` });
+        }
       }
     } finally {
       this.transition('idle');

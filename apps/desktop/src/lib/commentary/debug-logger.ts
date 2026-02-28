@@ -1,6 +1,7 @@
 import type { EngineEventBus, EngineEventMap } from './events';
 import {
   logDebug,
+  pushError,
   pushTtsTiming,
   captureFrame,
   setFrameResponse,
@@ -42,6 +43,7 @@ export class DebugLogger {
 
     this.sub('pipeline:frame-error', (d) => {
       logDebug('error', { step: 'grab_frame', message: d.error });
+      pushError('Frame Capture', d.error);
     });
 
     this.sub('pipeline:llm-start', (d) => {
@@ -64,6 +66,7 @@ export class DebugLogger {
 
     this.sub('pipeline:llm-error', (d) => {
       logDebug('error', { step: 'generate-commentary', status: d.status, message: d.error });
+      pushError('LLM', d.status ? `HTTP ${d.status}: ${d.error}` : d.error, { status: d.status });
     });
 
     this.sub('pipeline:silence', () => {
@@ -123,6 +126,7 @@ export class DebugLogger {
 
     this.sub('pipeline:tts-error', (d) => {
       logDebug('error', { step: 'tts', message: d.error });
+      pushError('TTS', d.error);
     });
 
     this.sub('pipeline:end', (d) => {
@@ -148,10 +152,17 @@ export class DebugLogger {
 
     this.sub('context:error', (d) => {
       logDebug('error', { step: 'context', message: d.error });
+      pushError('Context', d.error);
     });
 
     this.sub('context:skipped', (d) => {
       logDebug('info', { message: `Context tick skipped — ${d.reason}` });
+    });
+
+    // Memory
+    this.sub('memory:extraction-error', (d) => {
+      logDebug('error', { step: 'memory-extraction', message: d.error });
+      pushError('Memory', d.error);
     });
 
     // STT

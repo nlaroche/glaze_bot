@@ -2,7 +2,10 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { signOut } from '@glazebot/supabase-client';
+  import { getDebugStore } from '$lib/stores/debug.svelte';
   import SidebarIcon from './SidebarIcon.svelte';
+
+  const debug = getDebugStore();
 
   const navItems: { name: 'home' | 'user' | 'settings' | 'pack' | 'collection'; path: string; label: string }[] = [
     { name: 'home', path: '/', label: 'Home' },
@@ -44,6 +47,9 @@
       title="Settings"
     >
       <SidebarIcon name="settings" />
+      {#if debug.errorCount > 0}
+        <span class="error-dot" title="{debug.errorCount} error{debug.errorCount > 1 ? 's' : ''}"></span>
+      {/if}
     </button>
     <button
       class="icon-btn logout-btn"
@@ -131,5 +137,22 @@
 
   .logout-btn:hover::before {
     background: var(--color-error);
+  }
+
+  .error-dot {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-error);
+    box-shadow: 0 0 6px var(--color-error);
+    animation: error-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes error-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 </style>

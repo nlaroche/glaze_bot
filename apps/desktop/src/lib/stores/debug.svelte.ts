@@ -67,6 +67,19 @@ let ttsStreaming = $state(true);
 // Block scheduler stats
 let blockStats = $state<Record<string, number>>({});
 
+// Error tracking
+export interface ErrorEntry {
+  id: number;
+  timestamp: Date;
+  source: string;
+  message: string;
+  details?: unknown;
+}
+
+const MAX_ERRORS = 50;
+let nextErrorId = 1;
+let recentErrors = $state<ErrorEntry[]>([]);
+
 export interface TtsTiming {
   id: string;
   mode: 'streaming' | 'buffered';
@@ -118,6 +131,8 @@ export function getDebugStore() {
     get ttsStreaming() { return ttsStreaming; },
     get ttsTimings() { return ttsTimings; },
     get blockStats() { return blockStats; },
+    get recentErrors() { return recentErrors; },
+    get errorCount() { return recentErrors.length; },
   };
 }
 
@@ -222,6 +237,21 @@ export function clearDebugLog() {
   entries = [];
 }
 
+export function pushError(source: string, message: string, details?: unknown) {
+  const entry: ErrorEntry = {
+    id: nextErrorId++,
+    timestamp: new Date(),
+    source,
+    message,
+    details,
+  };
+  recentErrors = [...recentErrors.slice(-(MAX_ERRORS - 1)), entry];
+}
+
+export function clearErrors() {
+  recentErrors = [];
+}
+
 export function incrementBlockStat(blockType: string) {
   blockStats = { ...blockStats, [blockType]: (blockStats[blockType] ?? 0) + 1 };
 }
@@ -237,6 +267,7 @@ export function resetDebugStats() {
   detectedGame = '';
   sceneHistory = [];
   blockStats = {};
+  recentErrors = [];
 }
 
 export function markStarted() {
