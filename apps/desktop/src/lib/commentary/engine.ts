@@ -271,7 +271,9 @@ export class CommentaryEngine {
       const memories = await this.loadMemoriesForCharacter(block.primaryCharacter.id);
 
       // Multi-character blocks (quip_banter, hype_chain)
+      // Cap at 2 participants — a back-and-forth is 2 people, not the whole party
       if ((blockType === 'quip_banter' || blockType === 'hype_chain') && block.participants && block.participants.length >= 2) {
+        const cappedParticipants = block.participants.slice(0, 2);
         const request = this.buildRequest({
           character: block.primaryCharacter,
           trigger: 'timed',
@@ -283,7 +285,7 @@ export class CommentaryEngine {
           debugFrameId,
           blockType,
           blockPrompt,
-          participants: block.participants,
+          participants: cappedParticipants,
           memories,
         });
 
@@ -291,7 +293,9 @@ export class CommentaryEngine {
         this.consecutiveErrors = 0;
 
         if (result.lines.length > 0) {
-          this.lastSpokeTime = Date.now();
+          // Push lastSpokeTime further out after multi-character blocks
+          // so they don't fire back-to-back with the next solo comment
+          this.lastSpokeTime = Date.now() + 15_000;
           for (const line of result.lines) {
             this.charactersThatSpoke.add(line.characterId);
           }

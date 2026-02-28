@@ -314,7 +314,16 @@ Deno.serve(async (req: Request) => {
     // Build full system prompt: character persona + commentary instructions
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
 
-    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective
+    // Block-type-specific system instruction — makes each block feel distinct
+    const blockInstruction = block_type ? ({
+      solo_observation: "\n[MODE: OBSERVATION] Describe one specific thing happening on screen right now. Be concrete.",
+      emotional_reaction: "\n[MODE: EMOTIONAL] Express a raw emotional reaction — excitement, frustration, shock, awe. Don't describe the screen. Just FEEL it.",
+      question: "\n[MODE: QUESTION] Ask the player or yourself a question about what's happening. Be curious or skeptical.",
+      backstory_reference: "\n[MODE: BACKSTORY] Subtly connect what you see to your own backstory or past experiences. Don't force it.",
+      callback: "\n[MODE: CALLBACK] Reference something from earlier in this session. Connect past to present.",
+    } as Record<string, string>)[block_type] ?? "" : "";
+
+    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective + blockInstruction
       + `\n\n[HARD RULE — OUTPUT LENGTH]\n${responseInstruction}\nThis is a TTS line spoken aloud. Brevity is mandatory. Exceeding 2 sentences or 30 words is a failure.`;
 
     // Inject memories from past sessions
@@ -372,11 +381,13 @@ Deno.serve(async (req: Request) => {
         textParts.push('[IMPORTANT: The player is talking to you. If they are asking about ANYTHING on screen, you MUST use arrow or circle to point at it. Do not just describe it — call the tool.]');
       }
     }
-    // Inject block-type-specific prompt (overrides style nudge when present)
+    // Block prompt and style nudge are mutually exclusive — sending both
+    // creates competing instructions that the model ignores.
     if (block_prompt) {
-      textParts.push(`[${block_prompt}]`);
+      textParts.push(`[TASK: ${block_prompt}]`);
+    } else {
+      textParts.push(`[Style hint: ${nudge}]`);
     }
-    textParts.push(`[${nudge}]`);
     textParts.push("/no_think");
     textParts.push(responseInstruction);
 
