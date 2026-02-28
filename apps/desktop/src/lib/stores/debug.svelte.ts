@@ -61,6 +61,26 @@ let vadThreshold = $state(0.02);
 let vadSilenceMs = $state(1500);
 let totalSttCalls = $state(0);
 
+// TTS streaming state
+let ttsStreaming = $state(true);
+
+export interface TtsTiming {
+  id: string;
+  mode: 'streaming' | 'buffered';
+  timestamp: Date;
+  llmDuration: number;
+  ttsRequestDuration: number;
+  ttsTransferDuration: number;
+  ttsFirstAudio: number;
+  playbackDuration: number;
+  totalDuration: number;
+  audioSize: number;
+  characterName: string;
+}
+
+const MAX_TTS_TIMINGS = 50;
+let ttsTimings = $state<TtsTiming[]>([]);
+
 // Context analysis state
 let detectedGame = $state('');
 let sceneHistory = $state<SceneSnapshot[]>([]);
@@ -92,6 +112,8 @@ export function getDebugStore() {
     get vadThreshold() { return vadThreshold; },
     get vadSilenceMs() { return vadSilenceMs; },
     get totalSttCalls() { return totalSttCalls; },
+    get ttsStreaming() { return ttsStreaming; },
+    get ttsTimings() { return ttsTimings; },
   };
 }
 
@@ -105,6 +127,18 @@ export function setGameHint(value: string) {
 
 export function setCustomSystemInstructions(value: string) {
   customSystemInstructions = value;
+}
+
+export function setTtsStreaming(value: boolean) {
+  ttsStreaming = value;
+}
+
+export function pushTtsTiming(timing: TtsTiming) {
+  ttsTimings = [...ttsTimings.slice(-(MAX_TTS_TIMINGS - 1)), timing];
+}
+
+export function clearTtsTimings() {
+  ttsTimings = [];
 }
 
 export function setDetectedGame(value: string) {

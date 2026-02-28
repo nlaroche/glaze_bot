@@ -1,6 +1,7 @@
 import type { GachaCharacter } from '@glazebot/shared-types';
 import type { CaptureSource } from '@glazebot/shared-ui';
-import { CommentaryEngine, type ChatLogEntry } from '../commentary/engine';
+import { CommentaryEngine } from '../commentary/engine';
+import type { ChatLogEntry } from '../commentary/types';
 import { createSession, persistMessage } from './chatHistory';
 
 // Module-level singleton state — survives SvelteKit navigation
@@ -121,18 +122,19 @@ async function ensureSession(): Promise<string> {
   }
 }
 
-// Wire engine callbacks once at module level
-engine.onChatMessage = (entry) => {
+// Wire engine event bus subscriptions once at module level
+engine.events.on('chat-message', (entry) => {
   chatLog = [...chatLog, entry];
   // Persist to IndexedDB (fire-and-forget)
   ensureSession().then((sid) => persistMessage(entry, sid)).catch(() => {});
-};
+});
 
-engine.onOverlayMessage = async (msg) => {
+engine.events.on('overlay-show', async (msg) => {
   if (!_overlayOnRaw) return;
   try {
     const { emitTo } = await import('@tauri-apps/api/event');
     await emitTo('overlay', 'chat-message', {
+      bubbleId: msg.bubbleId,
       name: msg.name,
       rarity: msg.rarity,
       text: msg.text,
@@ -142,17 +144,31 @@ engine.onOverlayMessage = async (msg) => {
   } catch (e) {
     console.error('Failed to emit to overlay:', e);
   }
-};
+});
 
-engine.onOverlayDismiss = async () => {
+engine.events.on('overlay-dismiss', async (msg) => {
   if (!_overlayOnRaw) return;
   try {
     const { emitTo } = await import('@tauri-apps/api/event');
-    await emitTo('overlay', 'chat-dismiss', {});
+    await emitTo('overlay', 'chat-dismiss', { bubbleId: msg.bubbleId });
   } catch (e) {
     console.error('Failed to emit dismiss to overlay:', e);
   }
-};
+});
+
+engine.events.on('system-message', (msg) => {
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const entry: ChatLogEntry = {
+    id: `${Date.now()}-system`,
+    characterId: 'system',
+    name: 'System',
+    rarity: 'common',
+    text: msg.text,
+    time: timeStr,
+    timestamp: new Date().toISOString(),
+  };
+  chatLog = [...chatLog, entry];
+});
 
 export function getSessionStore() {
   return {

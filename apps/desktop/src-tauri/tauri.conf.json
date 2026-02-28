@@ -31,7 +31,8 @@
         "maximized": true,
         "resizable": false,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "focus": false
       },
       {
         "label": "tray-menu",

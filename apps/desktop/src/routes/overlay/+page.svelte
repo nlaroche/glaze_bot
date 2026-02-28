@@ -5,6 +5,7 @@
 
   interface Bubble {
     id: number;
+    bubbleId: string;  // unique ID from pipeline, used for targeted dismiss
     name: string;
     rarity: string;
     text: string;
@@ -15,7 +16,10 @@
     charIndex: number;
     typingDone: boolean;
     holdUntil: number;
+    createdAt: number;  // timestamp for safety net auto-dismiss
   }
+
+  const AUTO_DISMISS_MS = 30_000; // safety net: auto-dismiss bubbles older than 30s
 
   const rarityColors: Record<string, string> = {
     common: '#A0AEC0',
@@ -31,27 +35,50 @@
   let hasReceivedMessage = $state(false);
   let pttActive = $state(false);
 
-  function addBubble(name: string, rarity: string, text: string, image?: string) {
+  function addBubble(bubbleId: string, name: string, rarity: string, text: string, image?: string) {
     const id = Date.now() + Math.random();
+    const now = Date.now();
+
+    // Auto-dismiss any existing finished bubbles when a new one arrives
+    for (const b of bubbles) {
+      if (b.typingDone && !b.exiting) {
+        b.exiting = true;
+        b.visible = false;
+        b.holdUntil = now + 300; // quick exit for old bubbles
+      }
+    }
+
     bubbles = [...bubbles, {
-      id, name, rarity, text, image,
+      id, bubbleId, name, rarity, text, image,
       visible: true,
       exiting: false,
       displayedText: '',
       charIndex: 0,
       typingDone: false,
       holdUntil: 0,
+      createdAt: now,
     }];
     tick++;
     hasReceivedMessage = true;
     ensureMasterLoop();
   }
 
-  let dismissRequested = $state(false);
-
-  function requestDismiss() {
+  function requestDismiss(targetBubbleId?: string) {
     // Dismiss after 1s delay so the bubble lingers briefly after audio ends
-    setTimeout(() => { dismissRequested = true; }, 1000);
+    setTimeout(() => {
+      const now = Date.now();
+      for (const b of bubbles) {
+        if (b.exiting) continue;
+        // If a specific bubbleId was given, only dismiss that one
+        if (targetBubbleId && b.bubbleId !== targetBubbleId) continue;
+        if (b.typingDone) {
+          b.exiting = true;
+          b.visible = false;
+          b.holdUntil = now + 500;
+        }
+      }
+      tick++;
+    }, 1000);
   }
 
   function ensureMasterLoop() {
@@ -69,15 +96,14 @@
             changed = true;
           } else {
             b.typingDone = true;
-            // No fixed holdUntil — wait for dismiss signal
             b.holdUntil = 0;
             changed = true;
           }
-        } else if (!b.exiting && dismissRequested) {
+        } else if (!b.exiting && (now - b.createdAt > AUTO_DISMISS_MS)) {
+          // Safety net: auto-dismiss bubbles older than 30s
           b.exiting = true;
           b.visible = false;
           b.holdUntil = now + 500;
-          dismissRequested = false;
           changed = true;
         } else if (b.exiting && now >= b.holdUntil) {
           b.holdUntil = -1;
@@ -109,26 +135,28 @@
 
         await webview.listen('chat-message', (event: any) => {
           const p = event.payload;
-          addBubble(p.name, p.rarity, p.text, p.image);
+          addBubble(p.bubbleId ?? '', p.name, p.rarity, p.text, p.image);
           if (p.visuals?.length) {
             pushVisuals(p.visuals);
           }
         });
 
-        await webview.listen('chat-dismiss', () => {
-          requestDismiss();
+        await webview.listen('chat-dismiss', (event: any) => {
+          const p = event.payload;
+          requestDismiss(p?.bubbleId);
         });
 
-        await webview.listen('overlay-reset', () => {
+        await webview.listen('overlay-reset', async () => {
           bubbles = [];
           hasReceivedMessage = false;
-          dismissRequested = false;
           pttActive = false;
           if (masterInterval) {
             clearInterval(masterInterval);
             masterRunning = false;
             masterInterval = null;
           }
+          // Signal readiness back to main — toggleOverlay waits on this
+          await emitTo('main', 'overlay-ready', {});
         });
 
         await webview.listen('party-updated', () => {});
@@ -167,7 +195,7 @@
           <span class="ptt-dot"></span>
         </div>
       </div>
-    {:else if !hasReceivedMessage && bubbles.length === 0}
+    {:else if bubbles.length === 0}
       <div class="waiting-indicator">
         <span class="waiting-dot"></span>
         <span class="waiting-text">Waiting for commentary...</span>

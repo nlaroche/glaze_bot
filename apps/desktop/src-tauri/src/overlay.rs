@@ -13,6 +13,9 @@ pub fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     let _ = overlay.set_ignore_cursor_events(true);
     let _ = overlay.show();
 
+    // Re-assert always-on-top — Windows can lose z-order after hide/show
+    let _ = overlay.set_always_on_top(true);
+
     Ok(())
 }
 

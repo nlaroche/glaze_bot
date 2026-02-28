@@ -10,7 +10,9 @@
     "build:frontend": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "clean": "rm -rf .svelte-kit dist"
+    "clean": "rm -rf .svelte-kit dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@glazebot/shared-types": "workspace:*",
@@ -28,6 +30,7 @@
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.7.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
   }
 }

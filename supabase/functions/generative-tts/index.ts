@@ -15,6 +15,8 @@ interface GenerativeTtsRequest {
   top_p?: number;
   repetition_penalty?: number;
   speed?: number;
+  stream?: boolean;
+  latency?: "normal" | "balanced";
 }
 
 Deno.serve(async (req: Request) => {
@@ -26,7 +28,7 @@ Deno.serve(async (req: Request) => {
     if ("error" in auth) return auth.error;
 
     const body: GenerativeTtsRequest = await req.json();
-    const { text, reference_id, temperature, top_p, repetition_penalty, speed } = body;
+    const { text, reference_id, temperature, top_p, repetition_penalty, speed, stream, latency } = body;
 
     if (!text) {
       return errorResponse("text is required", 400);
@@ -57,6 +59,9 @@ Deno.serve(async (req: Request) => {
     if (speed !== undefined) {
       ttsBody.prosody = { speed };
     }
+    if (stream) {
+      ttsBody.latency = latency ?? "balanced";
+    }
 
     const ttsRes = await fetch("https://api.fish.audio/v1/tts", {
       method: "POST",
@@ -74,6 +79,18 @@ Deno.serve(async (req: Request) => {
       return errorResponse(`Fish Audio API error (${ttsRes.status}): ${errText}`, 502);
     }
 
+    // Streaming mode: pipe Fish Audio's ReadableStream directly to the client
+    if (stream && ttsRes.body) {
+      return new Response(ttsRes.body, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "audio/mpeg",
+        },
+      });
+    }
+
+    // Buffered mode (default): read full response then return
     const audioData = await ttsRes.arrayBuffer();
 
     return new Response(audioData, {

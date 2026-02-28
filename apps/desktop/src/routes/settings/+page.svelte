@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
-  import type { DebugEntry, FrameCapture } from '$lib/stores/debug.svelte';
+  import { getDebugStore, setCommentaryGap, setGameHint, setCustomSystemInstructions, setContextEnabled, setContextInterval, setContextBufferSize, setSpeechMode, setPttKey, setVadThreshold, setVadSilenceMs, setTtsStreaming, clearTtsTimings, clearDebugLog, clearFrames } from '$lib/stores/debug.svelte';
+  import type { DebugEntry, FrameCapture, TtsTiming } from '$lib/stores/debug.svelte';
   import { SliderInput, ToggleSwitch } from '@glazebot/shared-ui';
   const debug = getDebugStore();
 
@@ -11,6 +11,7 @@
   let vadThreshold = $state(debug.vadThreshold);
   let vadSilenceMs = $state(debug.vadSilenceMs);
   let contextEnabled = $state(debug.contextEnabled);
+  let ttsStreaming = $state(debug.ttsStreaming);
 
   let autoScroll = $state(true);
   let logContainer: HTMLDivElement | undefined = $state();
@@ -163,6 +164,28 @@
     return entryColors[type] ?? 'var(--color-text-secondary)';
   }
 
+  function timingSummary(timings: TtsTiming[]): { avgTTFB: number; avgFirstAudio: number; avgTotal: number; avgSize: number } | null {
+    if (timings.length === 0) return null;
+    const avg = (arr: number[]) => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+    return {
+      avgTTFB: avg(timings.map(t => t.ttsRequestDuration)),
+      avgFirstAudio: avg(timings.map(t => t.ttsFirstAudio)),
+      avgTotal: avg(timings.map(t => t.totalDuration)),
+      avgSize: avg(timings.map(t => t.audioSize)),
+    };
+  }
+
+  function fmtMs(ms: number): string {
+    if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${ms}ms`;
+  }
+
+  function fmtBytes(bytes: number): string {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+    return `${bytes}B`;
+  }
+
   function summarize(entry: DebugEntry): string {
     const d = entry.data as Record<string, unknown> | undefined;
     if (!d) return '';
@@ -178,9 +201,9 @@
           ? `${d.character}: "${(d.text as string).slice(0, 80)}${(d.text as string).length > 80 ? '...' : ''}"`
           : `${d.character}: [SILENCE]`;
       case 'tts-request':
-        return `${d.character} → ${(d.voiceId as string)?.slice(0, 8)}... (${d.textLength} chars)`;
+        return `${d.character} → ${(d.voiceId as string)?.slice(0, 8)}... (${d.textLength} chars) [${d.mode}]`;
       case 'tts-response':
-        return `${d.character}: ${((d.audioSize as number) / 1024).toFixed(0)}KB audio`;
+        return `${d.character}: ${d.totalMs}ms total, ${d.firstAudioMs}ms first audio, ${fmtBytes(d.audioSize as number)} [${d.mode}]`;
       case 'context-request':
         return `History: ${d.sceneHistoryLength}${d.detectedGame ? `, game: ${d.detectedGame}` : ''}`;
       case 'context-response': {
@@ -235,6 +258,13 @@
           rows="3"
         ></textarea>
       </div>
+    </section>
+
+    <!-- Voice Output -->
+    <section class="card">
+      <h2>Voice Output</h2>
+      <ToggleSwitch label="Stream TTS" bind:checked={ttsStreaming} onchange={() => setTtsStreaming(ttsStreaming)} />
+      <span class="field-hint">When enabled, audio streams in real-time for lower latency. Disable to buffer the full response before playback.</span>
     </section>
 
     <!-- Context Analysis -->
@@ -331,6 +361,73 @@
           <span class="stat-value">{debug.entries.length}</span>
         </div>
       </div>
+    </section>
+
+    <!-- TTS Timing -->
+    <section class="card">
+      <div class="timing-header">
+        <h2>TTS Timing</h2>
+        {#if debug.ttsTimings.length > 0}
+          <button class="clear-btn" onclick={clearTtsTimings}>Clear</button>
+        {/if}
+      </div>
+
+      {#if debug.ttsTimings.length === 0}
+        <p class="timing-empty">No TTS timing data yet. Start commentary to collect metrics.</p>
+      {:else}
+        {@const summary = timingSummary(debug.ttsTimings)}
+        {#if summary}
+          <div class="timing-summary">
+            <div class="timing-summary-stat">
+              <span class="timing-summary-label">Avg TTFB</span>
+              <span class="timing-summary-value">{fmtMs(summary.avgTTFB)}</span>
+            </div>
+            <div class="timing-summary-stat">
+              <span class="timing-summary-label">Avg First Audio</span>
+              <span class="timing-summary-value">{fmtMs(summary.avgFirstAudio)}</span>
+            </div>
+            <div class="timing-summary-stat">
+              <span class="timing-summary-label">Avg Total</span>
+              <span class="timing-summary-value">{fmtMs(summary.avgTotal)}</span>
+            </div>
+            <div class="timing-summary-stat">
+              <span class="timing-summary-label">Avg Size</span>
+              <span class="timing-summary-value">{fmtBytes(summary.avgSize)}</span>
+            </div>
+          </div>
+        {/if}
+
+        <div class="timing-table-wrap">
+          <table class="timing-table">
+            <thead>
+              <tr>
+                <th>Character</th>
+                <th>Mode</th>
+                <th>TTFB</th>
+                <th>1st Audio</th>
+                <th>Transfer</th>
+                <th>Playback</th>
+                <th>Total</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each [...debug.ttsTimings].reverse().slice(0, 20) as timing (timing.id)}
+                <tr class={timing.mode === 'streaming' ? 'timing-row-streaming' : ''}>
+                  <td class="timing-char">{timing.characterName}</td>
+                  <td><span class="timing-mode timing-mode-{timing.mode}">{timing.mode}</span></td>
+                  <td class="timing-num">{fmtMs(timing.ttsRequestDuration)}</td>
+                  <td class="timing-num">{fmtMs(timing.ttsFirstAudio)}</td>
+                  <td class="timing-num">{fmtMs(timing.ttsTransferDuration)}</td>
+                  <td class="timing-num">{fmtMs(timing.playbackDuration)}</td>
+                  <td class="timing-num timing-total">{fmtMs(timing.totalDuration)}</td>
+                  <td class="timing-num">{fmtBytes(timing.audioSize)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
     </section>
   </div>
 
@@ -1236,5 +1333,132 @@
     right: 4px;
     font-size: var(--font-2xs);
     font-weight: 700;
+  }
+
+  /* ── Field hint ── */
+  .field-hint {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  /* ── TTS Timing ── */
+  .timing-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .timing-empty {
+    font-size: var(--font-base);
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .timing-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-2);
+  }
+
+  .timing-summary-stat {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--white-a3);
+    border: 1px solid var(--white-a6);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .timing-summary-label {
+    font-size: var(--font-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    font-weight: 600;
+  }
+
+  .timing-summary-value {
+    font-size: var(--font-lg);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timing-table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--white-a6);
+  }
+
+  .timing-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timing-table th {
+    padding: var(--space-1-5) var(--space-2);
+    text-align: left;
+    font-size: var(--font-2xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    border-bottom: 1px solid var(--white-a8);
+    white-space: nowrap;
+  }
+
+  .timing-table td {
+    padding: var(--space-1-5) var(--space-2);
+    color: var(--color-text-primary);
+    border-bottom: 1px solid var(--white-a4);
+  }
+
+  .timing-table tbody tr:hover {
+    background: var(--white-a4);
+  }
+
+  .timing-row-streaming {
+    background: rgba(94, 234, 212, 0.04);
+  }
+
+  .timing-char {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .timing-num {
+    text-align: right;
+    white-space: nowrap;
+    font-family: 'Courier New', 'Consolas', monospace;
+  }
+
+  .timing-total {
+    font-weight: 600;
+  }
+
+  .timing-mode {
+    display: inline-block;
+    padding: 1px var(--space-1-5);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-2xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .timing-mode-streaming {
+    background: rgba(94, 234, 212, 0.15);
+    color: var(--color-teal);
+  }
+
+  .timing-mode-buffered {
+    background: var(--white-a6);
+    color: var(--color-text-secondary);
   }
 </style>
