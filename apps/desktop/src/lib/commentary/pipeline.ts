@@ -3,7 +3,7 @@ import { getDebugStore } from '../stores/debug.svelte';
 import type { EngineEventBus } from './events';
 import type { ConversationHistory } from './history';
 import type { TtsPlayer } from './tts';
-import type { MessageRequest, PipelineResult } from './types';
+import type { MessageRequest, PipelineResult, MultiLineResult } from './types';
 
 /**
  * The single unified message flow. All 4 paths (timed, user, reaction, direct)
@@ -18,6 +18,209 @@ export class MessagePipeline {
     private history: ConversationHistory,
     private tts: TtsPlayer,
   ) {}
+
+  /**
+   * Process a multi-character block (quip_banter / hype_chain).
+   * Sends all participants to the edge function, gets back multiple lines,
+   * then plays each line sequentially with overlay + TTS.
+   */
+  async processMulti(request: MessageRequest): Promise<MultiLineResult> {
+    const { id: requestId, character, trigger, signal, participants } = request;
+
+    if (!participants || participants.length < 2) {
+      // Fallback to single-character
+      const result = await this.process({
+        ...request,
+        blockType: 'solo_observation',
+        blockPrompt: undefined,
+        participants: undefined,
+      });
+      if (!result.text) return { lines: [], usage: result.usage };
+      return {
+        lines: [{
+          characterId: character.id,
+          characterName: character.name,
+          voiceId: character.voice_id,
+          text: result.text,
+          avatarUrl: character.avatar_url,
+          rarity: character.rarity,
+        }],
+        usage: result.usage,
+      };
+    }
+
+    this.events.emit('pipeline:start', {
+      requestId,
+      trigger,
+      character: character.name,
+    });
+
+    try {
+      const session = await getSession();
+      if (!session) {
+        this.events.emit('pipeline:llm-error', { requestId, error: 'Not authenticated' });
+        return { lines: [] };
+      }
+
+      const supabaseUrl = getSupabaseUrl();
+
+      const body: Record<string, unknown> = {
+        system_prompt: character.system_prompt,
+        personality: character.personality,
+        block_type: request.blockType,
+        block_prompt: request.blockPrompt,
+        participants: participants.map((p) => ({
+          name: p.name,
+          system_prompt: p.system_prompt,
+          personality: p.personality,
+          voice_id: p.voice_id,
+          avatar_url: p.avatar_url,
+          rarity: p.rarity,
+          id: p.id,
+        })),
+      };
+
+      if (request.frameB64) {
+        body.frame_b64 = request.frameB64;
+        if (request.frameDims) body.frame_dims = request.frameDims;
+      }
+      if (request.sceneContext) body.scene_context = request.sceneContext;
+      if (request.memories && request.memories.length > 0) body.memories = request.memories;
+
+      this.events.emit('pipeline:llm-start', {
+        requestId,
+        character: character.name,
+        historyLength: 0,
+      });
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-commentary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        this.events.emit('pipeline:llm-error', { requestId, error: errText, status: res.status });
+        return { lines: [] };
+      }
+
+      const data = await res.json();
+
+      this.events.emit('pipeline:llm-end', {
+        requestId,
+        character: character.name,
+        text: data.text ?? '',
+        usage: data.usage,
+      });
+
+      // Parse multi-line response
+      let lines: MultiLineResult['lines'] = [];
+      if (data.lines && Array.isArray(data.lines)) {
+        // Edge function returned structured lines
+        lines = data.lines.map((l: { character: string; line: string }) => {
+          const participant = participants.find((p) => p.name === l.character) ?? character;
+          return {
+            characterId: participant.id,
+            characterName: participant.name,
+            voiceId: participant.voice_id,
+            text: l.line,
+            avatarUrl: participant.avatar_url,
+            rarity: participant.rarity,
+          };
+        });
+      } else if (data.text) {
+        // Fallback: attribute entire response to primary character
+        lines = [{
+          characterId: character.id,
+          characterName: character.name,
+          voiceId: character.voice_id,
+          text: data.text,
+          avatarUrl: character.avatar_url,
+          rarity: character.rarity,
+        }];
+      }
+
+      if (lines.length === 0) {
+        this.events.emit('pipeline:silence', { requestId });
+        this.events.emit('pipeline:end', { requestId, trigger });
+        return { lines: [], usage: data.usage };
+      }
+
+      // Play each line sequentially: chat → overlay → TTS → dismiss → delay
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (signal?.aborted) break;
+
+        const lineId = `${requestId}-${i}`;
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        // Emit chat message
+        this.events.emit('chat-message', {
+          id: `${Date.now()}-${line.characterId}`,
+          characterId: line.characterId,
+          name: line.characterName,
+          rarity: line.rarity,
+          text: line.text,
+          time: timeStr,
+          timestamp: new Date().toISOString(),
+          voiceId: line.voiceId,
+          image: line.avatarUrl,
+        });
+
+        // Overlay + TTS
+        this.events.emit('overlay-show', {
+          bubbleId: lineId,
+          name: line.characterName,
+          rarity: line.rarity,
+          text: line.text,
+          image: line.avatarUrl,
+        });
+
+        try {
+          if (line.voiceId) {
+            await this.tts.playTTS({
+              requestId: lineId,
+              text: line.text,
+              voiceId: line.voiceId,
+              accessToken: session.access_token,
+              characterName: line.characterName,
+              signal,
+            });
+          }
+        } finally {
+          this.events.emit('overlay-dismiss', { bubbleId: lineId });
+        }
+
+        // Brief delay between lines
+        if (i < lines.length - 1 && !signal?.aborted) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      }
+
+      // Update conversation history for primary character
+      const fullExchange = lines.map((l) => `${l.characterName}: ${l.text}`).join('\n');
+      this.history.append(character.id, '(screen only)', fullExchange);
+
+      this.events.emit('pipeline:end', { requestId, trigger });
+      return { lines, usage: data.usage };
+    } catch (err) {
+      if (signal?.aborted) {
+        this.events.emit('pipeline:abort', { requestId, reason: 'Multi-character cycle aborted' });
+      } else {
+        this.events.emit('pipeline:llm-error', {
+          requestId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      this.events.emit('pipeline:end', { requestId, trigger });
+      throw err;
+    }
+  }
 
   async process(request: MessageRequest): Promise<PipelineResult> {
     const { id: requestId, character, trigger, signal } = request;
@@ -69,6 +272,9 @@ export class MessagePipeline {
         body.game_hint = gameHint;
       }
       if (request.enableVisuals) body.enable_visuals = true;
+      if (request.blockType) body.block_type = request.blockType;
+      if (request.blockPrompt) body.block_prompt = request.blockPrompt;
+      if (request.memories && request.memories.length > 0) body.memories = request.memories;
 
       // 4. LLM call
       this.events.emit('pipeline:llm-start', {

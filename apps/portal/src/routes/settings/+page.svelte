@@ -48,6 +48,7 @@
   import type { Tag } from '$lib/components/ui/TagFilter.svelte';
   import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
   import PrimitivesPanel from './PrimitivesPanel.svelte';
+  import AlgorithmPanel from './AlgorithmPanel.svelte';
 
 
 
@@ -71,8 +72,8 @@
   let activeTags: string[] = $state([]);
 
   // ─── State: Panels ────────────────────────────────────────────────
-  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices' | 'history' | 'primitives';
-  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices', 'history', 'primitives'];
+  type AdminTab = 'config' | 'economy' | 'workshop' | 'voices' | 'history' | 'primitives' | 'algorithm';
+  const validTabs: AdminTab[] = ['config', 'economy', 'workshop', 'voices', 'history', 'primitives', 'algorithm'];
   const storedTab = (typeof localStorage !== 'undefined' ? localStorage.getItem('admin-active-tab') : null) as AdminTab | null;
   let activeTab: AdminTab = $state(storedTab && validTabs.includes(storedTab) ? storedTab : 'config');
   let detailPanelOpen = $state(false);
@@ -93,6 +94,9 @@
   let cardsPerPack = $state(3);
   let generationPrompt = $state('');
   let imageSystemInfo = $state('facing south, sitting at a table, 128x128 pixel art sprite, no background');
+  let imageProvider = $state<'pixellab' | 'gemini'>('pixellab');
+  let imageModel = $state('gemini-2.0-flash-preview-image-generation');
+  let imageSize = $state('1024x1024');
   let dropRates = $state({ common: 0.6, rare: 0.25, epic: 0.12, legendary: 0.03 });
 
   // ─── State: Commentary LLM ───────────────────────────────────────
@@ -1058,6 +1062,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   const EXPECTED_TOP_KEYS = [
     'dropRates', 'baseTemperature', 'model', 'cardGenProvider', 'cardGenModel',
     'packsPerDay', 'cardsPerPack', 'generationPrompt', 'imageSystemInfo',
+    'imageProvider', 'imageModel', 'imageConfig',
     'tokenPools', 'traitRanges', 'promptQuality', 'rarityGuidance', 'commentary',
   ];
   const EXPECTED_COMMENTARY_KEYS = [
@@ -1382,6 +1387,10 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     cardsPerPack = (config.cardsPerPack as number) ?? 3;
     generationPrompt = (config.generationPrompt as string) ?? '';
     imageSystemInfo = (config.imageSystemInfo as string) ?? 'facing south, sitting at a table, 128x128 pixel art sprite, no background';
+    imageProvider = ((config.imageProvider as string) ?? 'pixellab') as 'pixellab' | 'gemini';
+    imageModel = (config.imageModel as string) ?? 'gemini-2.0-flash-preview-image-generation';
+    const imgCfg = config.imageConfig as Record<string, string> | undefined;
+    imageSize = imgCfg?.imageSize ?? '1024x1024';
     tokenPools = (config.tokenPools as Record<string, TokenPool>) ?? structuredClone(DEFAULT_TOKEN_POOLS);
     const c = config.commentary as Record<string, unknown> | undefined;
     commentaryVisionProvider = (c?.visionProvider as string) ?? 'dashscope';
@@ -1416,6 +1425,9 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       cardsPerPack,
       generationPrompt,
       imageSystemInfo,
+      imageProvider,
+      imageModel,
+      imageConfig: { imageSize, aspectRatio: '1:1' },
       tokenPools,
       commentary: {
         visionProvider: commentaryVisionProvider,
@@ -1688,7 +1700,11 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     pipeline.step2 = 'running';
     stepErrors.step2 = '';
     try {
-      const result = await generateCharacterImage(workingCharacter.id, imagePrompt);
+      const result = await generateCharacterImage(workingCharacter.id, imagePrompt, {
+        provider: imageProvider,
+        model: imageProvider === 'gemini' ? imageModel : undefined,
+        imageConfig: imageProvider === 'gemini' ? { imageSize, aspectRatio: '1:1' } : undefined,
+      });
       workingCharacter = { ...workingCharacter, avatar_url: result.avatar_url };
       const { getCharacter } = await import('@glazebot/supabase-client');
       workingCharacter = await getCharacter(workingCharacter.id);
@@ -1988,6 +2004,12 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       onclick={() => activeTab = 'primitives'}
       data-testid="tab-primitives"
     >Primitives</button>
+    <button
+      class="top-tab"
+      class:active={activeTab === 'algorithm'}
+      onclick={() => activeTab = 'algorithm'}
+      data-testid="tab-algorithm"
+    >Algorithm</button>
   </div>
 
   <!-- ═══ TAB: WORKSHOP ═══ -->
@@ -2182,6 +2204,53 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
             </div>
             <div class="cfg-body">
               <TextArea bind:value={imageSystemInfo} rows={12} placeholder="facing south, sitting at a table..." onchange={() => { config = { ...config, imageSystemInfo }; rawJson = JSON.stringify(config, null, 2); }} testid="config-image-system-info" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Provider -->
+        <div class="cfg-card" data-testid="image-provider-card">
+          <div class="cfg-header">
+            <h3 class="cfg-title">Image Generation Provider</h3>
+            <p class="cfg-desc">Select which AI provider generates character portraits</p>
+          </div>
+          <div class="cfg-body global-config-body">
+            <div class="global-config-row">
+              <span class="global-config-label">Sprite Provider</span>
+              <div class="global-config-controls">
+                <Select
+                  label="Provider"
+                  bind:value={imageProvider}
+                  options={[
+                    { value: 'pixellab', label: 'PixelLab (128x128, transparent)' },
+                    { value: 'gemini', label: 'Gemini (higher res, with background)' },
+                  ]}
+                  onchange={() => { syncToConfig(); rawJson = JSON.stringify(config, null, 2); }}
+                  testid="config-image-provider"
+                />
+                {#if imageProvider === 'gemini'}
+                  <Select
+                    label="Model"
+                    bind:value={imageModel}
+                    options={[
+                      { value: 'gemini-2.0-flash-preview-image-generation', label: 'Gemini 2.0 Flash (Preview)' },
+                    ]}
+                    onchange={() => { syncToConfig(); rawJson = JSON.stringify(config, null, 2); }}
+                    testid="config-image-model"
+                  />
+                  <Select
+                    label="Resolution"
+                    bind:value={imageSize}
+                    options={[
+                      { value: '512x512', label: '512px' },
+                      { value: '1024x1024', label: '1K (1024px)' },
+                      { value: '2048x2048', label: '2K (2048px)' },
+                    ]}
+                    onchange={() => { syncToConfig(); rawJson = JSON.stringify(config, null, 2); }}
+                    testid="config-image-size"
+                  />
+                {/if}
+              </div>
             </div>
           </div>
         </div>
@@ -2940,6 +3009,10 @@ The player said: "nice shot!"</pre>
   <!-- ═══ TAB: PRIMITIVES ═══ -->
   {:else if activeTab === 'primitives'}
     <PrimitivesPanel />
+
+  <!-- ═══ TAB: ALGORITHM ═══ -->
+  {:else if activeTab === 'algorithm'}
+    <AlgorithmPanel {config} onsave={async (updated) => { config = updated; await saveConfig(); }} />
   {/if}
 </div>
 
@@ -3263,6 +3336,9 @@ The player said: "nice shot!"</pre>
                   rows={3}
                   testid="image-prompt"
                 />
+                <p class="provider-badge" data-testid="image-provider-badge">
+                  {imageProvider === 'gemini' ? `Gemini (${imageSize})` : 'PixelLab (128x128)'}
+                </p>
                 <Button
                   variant="primary"
                   loading={pipeline.step2 === 'running'}
@@ -4027,6 +4103,13 @@ The player said: "nice shot!"</pre>
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  .provider-badge {
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    text-align: center;
+    margin: 0;
   }
 
   .sprite-placeholder {

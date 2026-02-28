@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CharacterCardRow, ContextMenu, CardViewer, ScreenPicker } from '@glazebot/shared-ui';
+  import MemoryInspector from '$lib/components/MemoryInspector.svelte';
   import type { CaptureSource } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
   import { getCollection, getCharacter } from '@glazebot/supabase-client';
@@ -301,6 +302,9 @@
 
   // Card viewer state
   let viewerCharacter = $state<GachaCharacter | null>(null);
+
+  // Memory inspector state
+  let memoryInspectCharacter = $state<GachaCharacter | null>(null);
 
   const rarityNameColor: Record<string, string> = {
     common: 'var(--rarity-common)',
@@ -813,6 +817,11 @@
         icon: '🃏',
         onclick: () => { viewerCharacter = contextMenu!.character; },
       },
+      {
+        label: 'Inspect Memory',
+        icon: '🧠',
+        onclick: () => { memoryInspectCharacter = contextMenu!.character; },
+      },
       ...(contextMenu.inPartySlot !== undefined
         ? [
             { label: '', icon: '', onclick: () => {}, separator: true },
@@ -831,6 +840,11 @@
   character={viewerCharacter}
   image={viewerCharacter?.avatar_url}
   onclose={() => { viewerCharacter = null; }}
+/>
+
+<MemoryInspector
+  character={memoryInspectCharacter}
+  onclose={() => { memoryInspectCharacter = null; }}
 />
 
 <ScreenPicker

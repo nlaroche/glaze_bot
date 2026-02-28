@@ -42,6 +42,7 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   setFrameResponse: vi.fn(),
   setFrameSceneContext: vi.fn(),
   resetDebugStats: vi.fn(),
+  incrementBlockStat: vi.fn(),
   markStarted: vi.fn(),
   markStopped: vi.fn(),
   clearLogFile: vi.fn(),
@@ -50,6 +51,38 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   setDetectedGame: vi.fn(),
   pushSceneSnapshot: vi.fn(),
 }));
+
+vi.mock('$lib/stores/characterMemory', () => ({
+  getMemories: vi.fn(async () => []),
+  addMemory: vi.fn(async (m: unknown) => ({ id: 'mock-id', createdAt: new Date().toISOString(), ...m })),
+  formatMemoriesForPrompt: vi.fn(() => []),
+  deleteMemory: vi.fn(async () => {}),
+  clearCharacterMemories: vi.fn(async () => {}),
+  getMemoryCount: vi.fn(async () => 0),
+}));
+
+// Mock scheduler — round-robins through party members for deterministic character selection
+vi.mock('$lib/commentary/scheduler', () => {
+  const { DEFAULT_BLOCK_PROMPTS } = vi.importActual('$lib/commentary/scheduler') as Record<string, unknown>;
+  let pickCounter = 0;
+  return {
+    DEFAULT_BLOCK_WEIGHTS: {},
+    DEFAULT_BLOCK_PROMPTS,
+    BlockScheduler: class MockBlockScheduler {
+      pickBlock(party: Array<{ id: string; name: string }>) {
+        const idx = pickCounter++ % party.length;
+        return { type: 'solo_observation', primaryCharacter: party[idx] };
+      }
+      getPrompt(type: string) {
+        return (DEFAULT_BLOCK_PROMPTS as Record<string, string>)?.[type] ?? 'React to what you see.';
+      }
+      getDistribution() { return {}; }
+      updateWeights() {}
+      updatePrompts() {}
+      static _resetCounter() { pickCounter = 0; }
+    },
+  };
+});
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string) => {
@@ -533,18 +566,7 @@ describe('Engine concurrency', () => {
   });
 
   it('3-member party — all characters can be selected for commentary', async () => {
-    // Deterministic random: cycle through characters
-    // Math.random is called multiple times per cycle (character selection, reaction chance,
-    // request ID generation), so we cycle through a pattern that ensures each character
-    // gets picked. Values < 0.33 → idx 0, 0.33-0.66 → idx 1, 0.66+ → idx 2.
-    let randomIdx = 0;
-    vi.spyOn(Math, 'random').mockImplementation(() => {
-      // Cycle: pick char 0, skip reaction, pick char 1, skip reaction, pick char 2, skip reaction
-      // The 0.99 values are used for REACT_CHANCE (>0.25 = no reaction) and request ID
-      const vals = [0.0, 0.99, 0.99, 0.4, 0.99, 0.99, 0.8, 0.99, 0.99];
-      return vals[randomIdx++ % vals.length];
-    });
-
+    // The mock scheduler round-robins through party members deterministically
     await engine.start('src-1', [char1, char2, char3]);
 
     // Wait for 3 timed cycles — each takes ~2s poll interval

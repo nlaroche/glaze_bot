@@ -69,6 +69,10 @@ interface CommentaryRequest {
   game_hint?: string;
   scene_context?: { game_name?: string; descriptions: string[] };
   enable_visuals?: boolean;
+  block_type?: string;
+  block_prompt?: string;
+  memories?: string[];
+  participants?: Array<{ name: string; system_prompt: string; personality?: Personality; voice_id?: string; avatar_url?: string; rarity?: string; id?: string }>;
 }
 
 /** Build personality modifier string from trait values (ported from brain.py) */
@@ -122,6 +126,10 @@ Deno.serve(async (req: Request) => {
       game_hint,
       scene_context,
       enable_visuals,
+      block_type,
+      block_prompt,
+      memories,
+      participants,
     } = body;
 
     if (!frame_b64 && !player_text && !react_to) {
@@ -176,10 +184,116 @@ Deno.serve(async (req: Request) => {
       return errorResponse("Dashscope API key not configured", 500);
     }
 
+    // ── Handle multi-character blocks (quip_banter / hype_chain) ──
+    if ((block_type === "quip_banter" || block_type === "hype_chain") && participants && participants.length >= 2) {
+      const characterDescs = participants.map((p) => {
+        const mod = buildPersonalityModifier(p.personality);
+        return `- ${p.name}: ${p.system_prompt?.slice(0, 200) ?? "A commentator."}${mod}`;
+      }).join("\n");
+
+      const multiDirective = block_type === "quip_banter"
+        ? `You are writing a quick back-and-forth exchange between co-casters watching a game. Write 2-3 lines total. Each character should stay in their voice.\n\nCharacters:\n${characterDescs}`
+        : `You are writing rapid-fire reactions from co-casters watching a game. Each character gets ONE punchy line reacting to the same moment.\n\nCharacters:\n${characterDescs}`;
+
+      const multiSystemPrompt = `${multiDirective}\n\nReturn ONLY a JSON array of objects: [{\"character\": \"Name\", \"line\": \"their line\"}, ...]\nNo other text. No markdown fences. Just the JSON array.`;
+
+      const multiTextParts: string[] = [];
+      if (scene_context) {
+        if (scene_context.game_name) multiTextParts.push(`Game: ${scene_context.game_name}`);
+        if (scene_context.descriptions.length > 0) {
+          multiTextParts.push("Scene: " + scene_context.descriptions.join("; "));
+        }
+      }
+      if (block_prompt) multiTextParts.push(`[${block_prompt}]`);
+      if (memories && memories.length > 0) {
+        multiTextParts.push("[MEMORIES]\n" + memories.map((m) => `- ${m}`).join("\n"));
+      }
+      multiTextParts.push("Write the exchange now.");
+
+      const multiUserContent: Array<Record<string, unknown>> = [];
+      if (frame_b64) {
+        multiUserContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+      }
+      multiUserContent.push({ type: "text", text: multiTextParts.join("\n") });
+
+      const multiMessages = [
+        { role: "system", content: multiSystemPrompt },
+        { role: "user", content: multiUserContent },
+      ];
+
+      // Use the same provider dispatch, but with multi-character prompt
+      let multiResult: { text: string; usage: { input_tokens: number; output_tokens: number } };
+      const multiReqBody: Record<string, unknown> = {
+        model: visionModel,
+        messages: multiMessages,
+        max_tokens: Math.max(maxTokens, 200),
+        temperature,
+      };
+
+      if (visionProvider === "anthropic") {
+        // Anthropic format
+        const anthropicBlocks: Array<Record<string, unknown>> = [];
+        if (frame_b64) {
+          anthropicBlocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } });
+        }
+        anthropicBlocks.push({ type: "text", text: multiTextParts.join("\n") });
+
+        const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: visionModel, max_tokens: Math.max(maxTokens, 200), temperature, system: multiSystemPrompt, messages: [{ role: "user", content: anthropicBlocks }] }),
+        });
+        if (!anthropicRes.ok) {
+          const errText = await anthropicRes.text();
+          return errorResponse(`Multi-character API error: ${errText}`, 502);
+        }
+        const aData = await anthropicRes.json();
+        const aText = (aData.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join(" ").trim();
+        multiResult = { text: aText, usage: { input_tokens: aData.usage?.input_tokens ?? 0, output_tokens: aData.usage?.output_tokens ?? 0 } };
+      } else if (visionProvider === "gemini") {
+        const gRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
+          body: JSON.stringify(multiReqBody),
+        });
+        if (!gRes.ok) { const e = await gRes.text(); return errorResponse(`Multi-character API error: ${e}`, 502); }
+        const gData = await gRes.json();
+        multiResult = { text: gData.choices?.[0]?.message?.content?.trim() ?? "", usage: { input_tokens: gData.usage?.prompt_tokens ?? 0, output_tokens: gData.usage?.completion_tokens ?? 0 } };
+      } else {
+        const dRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
+          body: JSON.stringify({ ...multiReqBody, presence_penalty: presencePenalty, frequency_penalty: frequencyPenalty }),
+        });
+        if (!dRes.ok) { const e = await dRes.text(); return errorResponse(`Multi-character API error: ${e}`, 502); }
+        const dData = await dRes.json();
+        const dText = (dData.choices?.[0]?.message?.content?.trim() ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        multiResult = { text: dText, usage: { input_tokens: dData.usage?.prompt_tokens ?? 0, output_tokens: dData.usage?.completion_tokens ?? 0 } };
+      }
+
+      // Try to parse JSON array from response
+      try {
+        const jsonMatch = multiResult.text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as Array<{ character: string; line: string }>;
+          return jsonResponse({ lines: parsed, text: multiResult.text, usage: multiResult.usage });
+        }
+      } catch { /* fall through to text-only response */ }
+
+      // Fallback: return as plain text
+      return jsonResponse({ text: multiResult.text, usage: multiResult.usage });
+    }
+
     // Build full system prompt: character persona + commentary instructions
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
 
     let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective;
+
+    // Inject memories from past sessions
+    if (memories && memories.length > 0) {
+      fullSystemPrompt += "\n\n[MEMORIES FROM PAST SESSIONS]\n" + memories.map((m) => `- ${m}`).join("\n");
+    }
+
     if (enable_visuals) {
       fullSystemPrompt += buildVisualSystemAddendum(frame_dims);
     }
@@ -220,6 +334,10 @@ Deno.serve(async (req: Request) => {
       const interactionInstruction = (commentary.interactionInstruction as string) ??
         'When the player speaks to you, respond directly and conversationally. Acknowledge what they said, stay in character. Keep it brief.';
       textParts.push(`[${interactionInstruction}]`);
+    }
+    // Inject block-type-specific prompt (overrides style nudge when present)
+    if (block_prompt) {
+      textParts.push(`[${block_prompt}]`);
     }
     textParts.push(`[${nudge}]`);
     textParts.push("/no_think");

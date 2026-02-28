@@ -64,6 +64,9 @@ let totalSttCalls = $state(0);
 // TTS streaming state
 let ttsStreaming = $state(true);
 
+// Block scheduler stats
+let blockStats = $state<Record<string, number>>({});
+
 export interface TtsTiming {
   id: string;
   mode: 'streaming' | 'buffered';
@@ -114,6 +117,7 @@ export function getDebugStore() {
     get totalSttCalls() { return totalSttCalls; },
     get ttsStreaming() { return ttsStreaming; },
     get ttsTimings() { return ttsTimings; },
+    get blockStats() { return blockStats; },
   };
 }
 
@@ -218,6 +222,10 @@ export function clearDebugLog() {
   entries = [];
 }
 
+export function incrementBlockStat(blockType: string) {
+  blockStats = { ...blockStats, [blockType]: (blockStats[blockType] ?? 0) + 1 };
+}
+
 export function resetDebugStats() {
   totalLlmCalls = 0;
   totalTtsCalls = 0;
@@ -228,6 +236,7 @@ export function resetDebugStats() {
   startedAt = null;
   detectedGame = '';
   sceneHistory = [];
+  blockStats = {};
 }
 
 export function markStarted() {

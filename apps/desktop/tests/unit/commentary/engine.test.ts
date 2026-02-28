@@ -25,6 +25,7 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   setFrameResponse: vi.fn(),
   setFrameSceneContext: vi.fn(),
   resetDebugStats: vi.fn(),
+  incrementBlockStat: vi.fn(),
   markStarted: vi.fn(),
   markStopped: vi.fn(),
   clearLogFile: vi.fn(),
@@ -33,6 +34,35 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   setDetectedGame: vi.fn(),
   pushSceneSnapshot: vi.fn(),
 }));
+
+vi.mock('$lib/stores/characterMemory', () => ({
+  getMemories: vi.fn(async () => []),
+  addMemory: vi.fn(async (m: unknown) => ({ id: 'mock-id', createdAt: new Date().toISOString(), ...m })),
+  formatMemoriesForPrompt: vi.fn(() => []),
+  deleteMemory: vi.fn(async () => {}),
+  clearCharacterMemories: vi.fn(async () => {}),
+  getMemoryCount: vi.fn(async () => 0),
+}));
+
+// Mock scheduler to always return solo_observation (deterministic for tests)
+vi.mock('$lib/commentary/scheduler', () => {
+  const { DEFAULT_BLOCK_PROMPTS } = vi.importActual('$lib/commentary/scheduler') as Record<string, unknown>;
+  return {
+    DEFAULT_BLOCK_WEIGHTS: {},
+    DEFAULT_BLOCK_PROMPTS,
+    BlockScheduler: class MockBlockScheduler {
+      pickBlock(party: Array<{ id: string; name: string }>) {
+        return { type: 'solo_observation', primaryCharacter: party[0] };
+      }
+      getPrompt(type: string) {
+        return (DEFAULT_BLOCK_PROMPTS as Record<string, string>)?.[type] ?? 'React to what you see.';
+      }
+      getDistribution() { return {}; }
+      updateWeights() {}
+      updatePrompts() {}
+    },
+  };
+});
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(async (cmd: string) => {

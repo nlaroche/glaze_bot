@@ -19,6 +19,7 @@ const DASHSCOPE_BASE_URL =
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY") ?? "";
 const PIXELLAB_API_KEY = Deno.env.get("PIXELLAB_API_KEY") ?? "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
 interface GenerateRequest {
   rarity: string;
@@ -90,33 +91,102 @@ function buildSpritePrompt(description: string, rarity: string): string {
   return `A ${race} character, ${description}, ${accessory}, sitting at a gaming desk, ${rarityStyle[rarity] ?? "pixel art style"}, front-facing portrait, 128x128 sprite`;
 }
 
+function buildGeminiSpritePrompt(description: string, rarity: string): string {
+  const race = RACES[Math.floor(Math.random() * RACES.length)];
+  const accessory = ACCESSORIES[Math.floor(Math.random() * ACCESSORIES.length)];
+  const rarityStyle: Record<string, string> = {
+    common: "clean and simple design with solid colors",
+    rare: "polished design with a subtle glow effect around the character",
+    epic: "elaborate design with magical aura effects and vibrant, saturated colors",
+    legendary: "premium design with golden accents, radiant glow, and a legendary aura emanating from the character",
+  };
+  return `Generate a character portrait of a ${race}, ${description}, ${accessory}, sitting at a gaming desk. Style: ${rarityStyle[rarity] ?? "stylized character art"}. The portrait should be front-facing, centered, with a clean background. Pixel art style, suitable for a game avatar.`;
+}
+
+async function generateSpritePixelLab(
+  characterId: string,
+  prompt: string,
+): Promise<string | null> {
+  if (!PIXELLAB_API_KEY) return null;
+
+  const pixelRes = await fetch("https://api.pixellab.ai/v1/generate-image-pixflux", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${PIXELLAB_API_KEY}`,
+    },
+    body: JSON.stringify({ description: prompt, image_size: { width: 128, height: 128 }, no_background: true }),
+  });
+
+  if (!pixelRes.ok) return null;
+
+  const pixelData = await pixelRes.json();
+  const base64Str: string = pixelData.image?.base64 ?? "";
+  const raw = base64Str.includes(",") ? base64Str.split(",")[1] : base64Str;
+  const imageBytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+  const r2Key = characterPortraitKey(characterId);
+  return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
+}
+
+async function generateSpriteGemini(
+  characterId: string,
+  prompt: string,
+  geminiModel?: string,
+  imageConfig?: { imageSize?: string; aspectRatio?: string },
+): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null;
+
+  const model = geminiModel || "gemini-2.0-flash-preview-image-generation";
+  const imageSize = imageConfig?.imageSize ?? "1024x1024";
+  const aspectRatio = imageConfig?.aspectRatio ?? "1:1";
+
+  const geminiRequest = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseModalities: ["TEXT", "IMAGE"],
+      imageGenerationConfig: { imageSize, aspectRatio },
+    },
+  };
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+  const geminiRes = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(geminiRequest),
+  });
+
+  if (!geminiRes.ok) return null;
+
+  const geminiData = await geminiRes.json();
+  const parts = geminiData.candidates?.[0]?.content?.parts ?? [];
+  const imagePart = parts.find(
+    (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData?.mimeType?.startsWith("image/"),
+  );
+  if (!imagePart?.inlineData?.data) return null;
+
+  const imageBytes = Uint8Array.from(atob(imagePart.inlineData.data), (c) => c.charCodeAt(0));
+  const r2Key = characterPortraitKey(characterId);
+  return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
+}
+
 async function generateSprite(
   characterId: string,
   description: string,
   rarity: string,
+  config: Record<string, unknown>,
 ): Promise<string | null> {
-  if (!PIXELLAB_API_KEY) return null;
+  const imageProvider = (config.imageProvider as string) ?? "pixellab";
+  const imageModel = config.imageModel as string | undefined;
+  const imageConfig = config.imageConfig as { imageSize?: string; aspectRatio?: string } | undefined;
 
   try {
-    const prompt = buildSpritePrompt(description, rarity);
-    const pixelRes = await fetch("https://api.pixellab.ai/v1/generate-image-pixflux", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${PIXELLAB_API_KEY}`,
-      },
-      body: JSON.stringify({ description: prompt, image_size: { width: 128, height: 128 }, no_background: true }),
-    });
-
-    if (!pixelRes.ok) return null;
-
-    // PixelLab returns JSON with base64-encoded image
-    const pixelData = await pixelRes.json();
-    const base64Str: string = pixelData.image?.base64 ?? "";
-    const raw = base64Str.includes(",") ? base64Str.split(",")[1] : base64Str;
-    const imageBytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
-    const r2Key = characterPortraitKey(characterId);
-    return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
+    if (imageProvider === "gemini") {
+      const prompt = buildGeminiSpritePrompt(description, rarity);
+      return await generateSpriteGemini(characterId, prompt, imageModel, imageConfig);
+    } else {
+      const prompt = buildSpritePrompt(description, rarity);
+      return await generateSpritePixelLab(characterId, prompt);
+    }
   } catch {
     return null;
   }
@@ -271,11 +341,12 @@ Deno.serve(async (req: Request) => {
 
     if (insertError) return errorResponse(insertError.message);
 
-    // Generate sprite image via PixelLab (non-blocking — character is valid without it)
+    // Generate sprite image (non-blocking — character is valid without it)
     const avatarUrl = await generateSprite(
       inserted.id,
       (character.description as string) ?? "",
       rarity,
+      config,
     );
 
     const updateFields: Record<string, unknown> = {};

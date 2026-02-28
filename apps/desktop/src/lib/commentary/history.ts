@@ -24,6 +24,10 @@ export class ConversationHistory {
     this.histories.set(characterId, history);
   }
 
+  getAll(): Map<string, HistoryEntry[]> {
+    return this.histories;
+  }
+
   clear(): void {
     this.histories.clear();
   }

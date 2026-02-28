@@ -220,10 +220,18 @@ export async function generateCharacterText(
 export async function generateCharacterImage(
   characterId: string,
   prompt: string,
+  opts?: {
+    provider?: "pixellab" | "gemini";
+    model?: string;
+    imageConfig?: { imageSize?: string; aspectRatio?: string };
+  },
 ): Promise<{ avatar_url: string }> {
   return callEdgeFunction<{ avatar_url: string }>("generate-character-image", {
     character_id: characterId,
     prompt,
+    ...(opts?.provider ? { provider: opts.provider } : {}),
+    ...(opts?.model ? { model: opts.model } : {}),
+    ...(opts?.imageConfig ? { imageConfig: opts.imageConfig } : {}),
   });
 }
 

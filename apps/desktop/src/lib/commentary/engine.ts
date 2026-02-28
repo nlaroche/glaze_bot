@@ -1,18 +1,19 @@
 import type { GachaCharacter } from '@glazebot/shared-types';
-import { getDebugStore, resetDebugStats, markStarted, markStopped, clearLogFile, clearSceneHistory } from '../stores/debug.svelte';
+import { getDebugStore, resetDebugStats, incrementBlockStat, markStarted, markStopped, clearLogFile, clearSceneHistory } from '../stores/debug.svelte';
 import { EngineEventBus } from './events';
 import { DebugLogger } from './debug-logger';
 import { ConversationHistory } from './history';
 import { TtsPlayer } from './tts';
 import { MessagePipeline } from './pipeline';
 import { ContextLoop } from './context-loop';
-import type { EngineState, FrameResult, MessageRequest } from './types';
+import { BlockScheduler } from './scheduler';
+import { getMemories, addMemory, formatMemoriesForPrompt } from '../stores/characterMemory';
+import type { EngineState, FrameResult, MessageRequest, BlockType } from './types';
 
 // Re-export types that session store and other consumers need
 export type { ChatLogEntry } from './types';
 
 const POLL_INTERVAL_MS = 2000;
-const REACT_CHANCE = 0.25;
 const MAX_BACKOFF_MS = 60_000;
 
 /**
@@ -30,6 +31,8 @@ export class CommentaryEngine {
   private party: GachaCharacter[] = [];
   private consecutiveErrors = 0;
   private lastSpokeTime = 0;
+  private memoryExtractionTimer: ReturnType<typeof setInterval> | null = null;
+  private charactersThatSpoke = new Set<string>();
 
   // User message queue
   private userMessageQueue: string[] = [];
@@ -41,6 +44,7 @@ export class CommentaryEngine {
   private tts: TtsPlayer;
   private contextLoop: ContextLoop;
   private debugLogger: DebugLogger;
+  private scheduler: BlockScheduler;
 
   constructor() {
     this.history = new ConversationHistory();
@@ -49,6 +53,7 @@ export class CommentaryEngine {
     this.contextLoop = new ContextLoop(this.events);
     this.debugLogger = new DebugLogger(this.events);
     this.debugLogger.attach();
+    this.scheduler = new BlockScheduler();
   }
 
   get isRunning() { return this.state !== 'stopped' && this.state !== 'idle'; }
@@ -75,7 +80,9 @@ export class CommentaryEngine {
     this.transition('idle');
     this.events.emit('engine:started', {});
 
+    this.charactersThatSpoke.clear();
     this.contextLoop.start(sourceId);
+    this.startMemoryExtraction();
     this.scheduleNext();
   }
 
@@ -101,6 +108,9 @@ export class CommentaryEngine {
       clearTimeout(this.loopTimer);
       this.loopTimer = null;
     }
+    this.stopMemoryExtraction();
+    // Fire-and-forget: extract memories for all characters that spoke
+    this.extractMemoriesForAll().catch(() => {});
     this.contextLoop.stop();
     clearSceneHistory();
     markStopped();
@@ -207,6 +217,26 @@ export class CommentaryEngine {
     const signal = this.cycleAbort.signal;
 
     try {
+      // Use block scheduler to pick what kind of commentary to generate
+      const block = this.scheduler.pickBlock(this.party, this.history.getAll());
+      const blockType = block.type;
+      incrementBlockStat(blockType);
+
+      this.events.emit('pipeline:block-selected', {
+        requestId: '',
+        blockType,
+        character: block.primaryCharacter.name,
+        participants: block.participants?.map((c) => c.name),
+      });
+
+      // Handle silence block
+      if (blockType === 'silence') {
+        this.events.emit('pipeline:silence', { requestId: '' });
+        this.transition('idle');
+        this.cycleAbort = null;
+        return;
+      }
+
       // Grab frame
       let frameB64: string;
       let frameDims = { width: 1920, height: 1080 };
@@ -221,7 +251,6 @@ export class CommentaryEngine {
         this.events.emit('pipeline:frame', { requestId: '', size: frameB64.length, width: frame.width, height: frame.height });
         debugFrameId = this.debugLogger.recordFrame(frame.data_uri);
 
-        // Attach scene context to frame for debug UI
         const sceneContext = this.contextLoop.getSceneContext();
         if (sceneContext) {
           const debugScenes = sceneContext.descriptions.map((d) => ({
@@ -236,33 +265,66 @@ export class CommentaryEngine {
         throw err;
       }
 
-      // Pick random character
-      const character = this.party[Math.floor(Math.random() * this.party.length)];
+      const blockPrompt = this.scheduler.getPrompt(blockType);
 
-      const request = this.buildRequest({
-        character,
-        trigger: 'timed',
-        frameB64,
-        frameDims,
-        sceneContext: this.contextLoop.getSceneContext(),
-        enableVisuals: true,
-        signal,
-        debugFrameId,
-      });
+      // Load memories for primary character
+      const memories = await this.loadMemoriesForCharacter(block.primaryCharacter.id);
 
-      const result = await this.pipeline.process(request);
-      this.consecutiveErrors = 0;
+      // Multi-character blocks (quip_banter, hype_chain)
+      if ((blockType === 'quip_banter' || blockType === 'hype_chain') && block.participants && block.participants.length >= 2) {
+        const request = this.buildRequest({
+          character: block.primaryCharacter,
+          trigger: 'timed',
+          frameB64,
+          frameDims,
+          sceneContext: this.contextLoop.getSceneContext(),
+          enableVisuals: true,
+          signal,
+          debugFrameId,
+          blockType,
+          blockPrompt,
+          participants: block.participants,
+          memories,
+        });
 
-      if (result.text && debugFrameId !== undefined) {
-        this.debugLogger.recordFrameResponse(debugFrameId, result.text);
-      }
+        const result = await this.pipeline.processMulti(request);
+        this.consecutiveErrors = 0;
 
-      if (!signal.aborted && result.text) {
-        this.lastSpokeTime = Date.now();
+        if (result.lines.length > 0) {
+          this.lastSpokeTime = Date.now();
+          for (const line of result.lines) {
+            this.charactersThatSpoke.add(line.characterId);
+          }
+          if (debugFrameId !== undefined) {
+            this.debugLogger.recordFrameResponse(debugFrameId, result.lines.map((l) => `${l.characterName}: ${l.text}`).join('\n'));
+          }
+        }
+      } else {
+        // Single-character blocks
+        const request = this.buildRequest({
+          character: block.primaryCharacter,
+          trigger: 'timed',
+          frameB64,
+          frameDims,
+          sceneContext: this.contextLoop.getSceneContext(),
+          enableVisuals: true,
+          signal,
+          debugFrameId,
+          blockType,
+          blockPrompt,
+          memories,
+        });
 
-        // 25% chance of character reaction
-        if (this.party.length > 1 && Math.random() < REACT_CHANCE) {
-          await this.processReaction(character, result.text, frameB64!);
+        const result = await this.pipeline.process(request);
+        this.consecutiveErrors = 0;
+
+        if (result.text && debugFrameId !== undefined) {
+          this.debugLogger.recordFrameResponse(debugFrameId, result.text);
+        }
+
+        if (!signal.aborted && result.text) {
+          this.lastSpokeTime = Date.now();
+          this.charactersThatSpoke.add(block.primaryCharacter.id);
         }
       }
     } catch (err) {
@@ -274,7 +336,6 @@ export class CommentaryEngine {
     } finally {
       this.transition('idle');
       this.cycleAbort = null;
-      // Check for queued user messages
       if (this.userMessageQueue.length > 0 && !this._paused && this._running) {
         setTimeout(() => this.processNext(), 0);
       }
@@ -329,28 +390,109 @@ export class CommentaryEngine {
     }
   }
 
-  private async processReaction(
-    speaker: GachaCharacter,
-    spokenText: string,
-    frameB64: string,
-  ) {
-    const others = this.party.filter((c) => c.id !== speaker.id);
-    if (others.length === 0) return;
-    const reactor = others[Math.floor(Math.random() * others.length)];
+  // ── Memory Extraction ──────────────────────────────────────────
 
-    const request = this.buildRequest({
-      character: reactor,
-      trigger: 'reaction',
-      frameB64,
-      reactTo: { name: speaker.name, text: spokenText },
-      sceneContext: this.contextLoop.getSceneContext(),
-      enableVisuals: true,
-    });
+  private startMemoryExtraction() {
+    this.stopMemoryExtraction();
+    const intervalMinutes = 10;
+    this.memoryExtractionTimer = setInterval(
+      () => this.extractMemoriesForAll().catch(() => {}),
+      intervalMinutes * 60 * 1000,
+    );
+  }
+
+  private stopMemoryExtraction() {
+    if (this.memoryExtractionTimer) {
+      clearInterval(this.memoryExtractionTimer);
+      this.memoryExtractionTimer = null;
+    }
+  }
+
+  private async extractMemoriesForAll(): Promise<void> {
+    for (const charId of this.charactersThatSpoke) {
+      const char = this.party.find((c) => c.id === charId);
+      if (!char) continue;
+      try {
+        await this.extractMemories(char);
+      } catch {
+        // Errors emitted via event bus
+      }
+    }
+  }
+
+  private async extractMemories(character: GachaCharacter): Promise<void> {
+    const hist = this.history.get(character.id);
+    if (hist.length < 4) return; // need at least 2 turns
 
     try {
-      await this.pipeline.process(request);
+      const { getSupabaseUrl, getSession } = await import('@glazebot/supabase-client');
+      const session = await getSession();
+      if (!session) return;
+
+      const supabaseUrl = getSupabaseUrl();
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-commentary`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          system_prompt: character.system_prompt,
+          player_text: 'Extract memories from this conversation.',
+          block_type: 'extract_memories',
+          block_prompt: 'Review the conversation history and extract 1-3 key memories worth remembering. Return a JSON array of objects with fields: type (game_played|notable_moment|player_comment|question_asked|general), content (1-2 sentence summary), importance (1-5). Only return the JSON array, nothing else.',
+          history: hist,
+        }),
+      });
+
+      if (!res.ok) {
+        this.events.emit('memory:extraction-error', { error: `HTTP ${res.status}` });
+        return;
+      }
+
+      const data = await res.json();
+      const text = data.text ?? '';
+
+      // Try to parse JSON array from response
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return;
+
+      const parsed = JSON.parse(jsonMatch[0]) as Array<{
+        type: string;
+        content: string;
+        importance: number;
+      }>;
+
+      let count = 0;
+      for (const mem of parsed) {
+        if (!mem.content || !mem.type) continue;
+        await addMemory({
+          characterId: character.id,
+          type: mem.type as 'game_played' | 'notable_moment' | 'player_comment' | 'question_asked' | 'general',
+          content: mem.content,
+          importance: Math.max(1, Math.min(5, mem.importance ?? 3)),
+          gameName: this.contextLoop.getSceneContext()?.game_name,
+        });
+        count++;
+      }
+
+      if (count > 0) {
+        this.events.emit('memory:extracted', { characterId: character.id, count });
+      }
+    } catch (err) {
+      this.events.emit('memory:extraction-error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /** Load memories for a character and return formatted strings for prompt injection. */
+  private async loadMemoriesForCharacter(characterId: string): Promise<string[]> {
+    try {
+      const memories = await getMemories(characterId, 10);
+      return formatMemoriesForPrompt(memories);
     } catch {
-      // Errors already emitted by pipeline
+      return [];
     }
   }
 

@@ -1,4 +1,4 @@
-import type { EngineState, ChatLogEntry, MessageRequest } from './types';
+import type { EngineState, ChatLogEntry, MessageRequest, BlockType } from './types';
 
 export interface ChatMessageEvent extends ChatLogEntry {}
 
@@ -9,6 +9,9 @@ export type EngineEventMap = {
   'engine:paused': {};
   'engine:resumed': {};
   'state-change': { from: EngineState; to: EngineState };
+
+  // Block scheduler
+  'pipeline:block-selected': { requestId: string; blockType: BlockType; character: string; participants?: string[] };
 
   // Pipeline stage events
   'pipeline:start': { requestId: string; trigger: MessageRequest['trigger']; character: string; playerText?: string };
@@ -33,6 +36,10 @@ export type EngineEventMap = {
   // STT
   'stt:start': { mode: string; key?: string };
   'stt:end': { mode: string; text: string };
+
+  // Memory
+  'memory:extracted': { characterId: string; count: number };
+  'memory:extraction-error': { error: string };
 
   // UI-facing events
   'chat-message': ChatMessageEvent;
