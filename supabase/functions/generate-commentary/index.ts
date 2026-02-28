@@ -345,7 +345,7 @@ Deno.serve(async (req: Request) => {
     } as Record<string, string>)[block_type] ?? "" : "";
 
     let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective + blockInstruction
-      + `\n\n[HARD RULE — OUTPUT LENGTH]\n${responseInstruction}\nThis is a TTS line spoken aloud. Brevity is mandatory. Exceeding 2 sentences or 30 words is a failure.`;
+      + `\n\n[OUTPUT FORMAT]\nKeep responses to 1-2 short sentences. This is spoken aloud via TTS so be concise.\nOnly respond with [SILENCE] if the screen is completely static with zero activity — menus, loading screens, or idle lobbies. If ANYTHING is happening on screen, comment on it.`;
 
     // Inject memories from past sessions
     if (memories && memories.length > 0) {
