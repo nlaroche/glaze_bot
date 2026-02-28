@@ -189,14 +189,29 @@ Deno.serve(async (req: Request) => {
     if ((block_type === "quip_banter" || block_type === "hype_chain") && participants && participants.length >= 2) {
       const characterDescs = participants.map((p) => {
         const mod = buildPersonalityModifier(p.personality);
-        return `- ${p.name}: ${p.system_prompt?.slice(0, 200) ?? "A commentator."}${mod}`;
+        return `- ${p.name}: ${p.system_prompt?.slice(0, 300) ?? "A commentator."}${mod}`;
       }).join("\n");
 
-      const multiDirective = block_type === "quip_banter"
-        ? `You are writing a quick back-and-forth exchange between co-casters watching a game. Write 2-3 lines total. Each character should stay in their voice.\n\nCharacters:\n${characterDescs}`
-        : `You are writing rapid-fire reactions from co-casters watching a game. Each character gets ONE punchy line reacting to the same moment.\n\nCharacters:\n${characterDescs}`;
+      // Find personality contrasts to seed the interaction
+      const p1 = participants[0].personality;
+      const p2 = participants[1].personality;
+      let contrastHint = "";
+      if (p1 && p2) {
+        const contrasts: string[] = [];
+        if (Math.abs((p1.positivity ?? 50) - (p2.positivity ?? 50)) > 25)
+          contrasts.push(`${participants[0].name} is ${(p1.positivity ?? 50) > 50 ? "optimistic" : "cynical"}, ${participants[1].name} is ${(p2.positivity ?? 50) > 50 ? "optimistic" : "cynical"}`);
+        if (Math.abs((p1.energy ?? 50) - (p2.energy ?? 50)) > 25)
+          contrasts.push(`${participants[0].name} is ${(p1.energy ?? 50) > 50 ? "hyped" : "calm"}, ${participants[1].name} is ${(p2.energy ?? 50) > 50 ? "hyped" : "calm"}`);
+        if (Math.abs((p1.humor ?? 50) - (p2.humor ?? 50)) > 25)
+          contrasts.push(`${participants[0].name} is ${(p1.humor ?? 50) > 50 ? "goofy" : "serious"}, ${participants[1].name} is ${(p2.humor ?? 50) > 50 ? "goofy" : "serious"}`);
+        if (contrasts.length > 0) contrastHint = `\nPersonality friction: ${contrasts.join("; ")}. USE this tension.`;
+      }
 
-      const multiSystemPrompt = `${multiDirective}\n\nIMPORTANT: Each line must be 1 sentence, under 25 words. These are spoken aloud via TTS — short and punchy. ${responseInstruction}\n\nReturn ONLY a JSON array of objects: [{\"character\": \"Name\", \"line\": \"their line\"}, ...]\nNo other text. No markdown fences. Just the JSON array.`;
+      const multiDirective = block_type === "quip_banter"
+        ? `Two co-casters are watching a game together. Write a 2-line exchange where they TALK TO EACH OTHER — not just react to the screen separately. One says something, the other RESPONDS to what they said. They can disagree, tease, build on each other's point, or have their personalities clash. The screen is context, but the exchange is between THEM.${contrastHint}\n\nCharacters:\n${characterDescs}`
+        : `Two co-casters react to the SAME moment on screen. Character A says something, then Character B responds DIRECTLY to A's take — agreeing loudly, pushing back, one-upping, or riffing off it. They must acknowledge each other, not just independently comment.${contrastHint}\n\nCharacters:\n${characterDescs}`;
+
+      const multiSystemPrompt = `${multiDirective}\n\nRULES:\n- Each line: 1 sentence, under 20 words. Spoken aloud via TTS.\n- The second line MUST reference or respond to the first line.\n- Stay in character voice but react to EACH OTHER.\n\nReturn ONLY a JSON array: [{\"character\": \"Name\", \"line\": \"their line\"}, ...]\nNo other text. No markdown fences. Just the JSON array.`;
 
       const multiTextParts: string[] = [];
       if (scene_context) {

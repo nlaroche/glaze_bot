@@ -131,11 +131,11 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
       backstory_reference:
         "Subtly reference your own backstory or lore in the context of what you see.",
       quip_banter:
-        "Have a quick back-and-forth exchange with your co-caster about what just happened.",
+        "Two characters talk TO EACH OTHER about what just happened. One reacts, the other responds — disagree, tease, or riff.",
       callback:
         "Reference something from earlier in this session that connects to what's happening now.",
       hype_chain:
-        "React with rapid-fire energy to this moment. One punchy line.",
+        "Two characters react to the same moment — the second one responds to the first, not just the screen.",
     },
     memory: {
       enabled: true,

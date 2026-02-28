@@ -17,9 +17,9 @@ export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
   emotional_reaction: 'Express a pure emotional reaction. Don\'t describe the screen. Just FEEL it. Use emote_burst or screen_flash if it fits the moment.',
   question: 'Ask the player a question or wonder something aloud about what\'s happening.',
   backstory_reference: 'Subtly reference your own backstory or lore in the context of what you see.',
-  quip_banter: 'Have a quick back-and-forth exchange with your co-caster about what just happened.',
+  quip_banter: 'Two characters talk TO EACH OTHER about what just happened. One reacts, the other responds — disagree, tease, or riff.',
   callback: 'Reference something from earlier in this session that connects to what\'s happening now.',
-  hype_chain: 'React with rapid-fire energy to this moment. One punchy line.',
+  hype_chain: 'Two characters react to the same moment — the second one responds to the first, not just the screen.',
 };
 
 const BLOCK_TYPES: BlockType[] = [
