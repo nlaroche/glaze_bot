@@ -287,7 +287,13 @@ Deno.serve(async (req: Request) => {
         });
         if (!dRes.ok) { const e = await dRes.text(); return errorResponse(`Multi-character API error: ${e}`, 502); }
         const dData = await dRes.json();
-        const dText = (dData.choices?.[0]?.message?.content?.trim() ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        const dRaw = dData.choices?.[0]?.message?.content?.trim() ?? "";
+        let dText = dRaw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        // If think-stripping emptied the response, try extracting from think block
+        if (!dText && dRaw.includes("<think>")) {
+          const m = dRaw.match(/<think>([\s\S]*?)<\/think>/);
+          if (m) dText = m[1].trim();
+        }
         multiResult = { text: dText, usage: { input_tokens: dData.usage?.prompt_tokens ?? 0, output_tokens: dData.usage?.completion_tokens ?? 0 } };
       }
 
@@ -452,9 +458,22 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Dashscope ${res.status}: ${errText}`);
       }
       const data = await res.json();
-      const reply = (data.choices?.[0]?.message?.content?.trim() ?? "")
-        .replace(/<think>[\s\S]*?<\/think>/g, "")
-        .trim();
+      const rawContent = data.choices?.[0]?.message?.content?.trim() ?? "";
+      let reply = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      // Qwen sometimes wraps the entire response in <think> despite /no_think.
+      // If stripping left us empty but there was content, extract from the think block.
+      if (!reply && rawContent.includes("<think>")) {
+        const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
+        if (thinkMatch) {
+          // Take the last line from the think block — often the actual commentary
+          const thinkLines = thinkMatch[1].trim().split("\n").filter((l: string) => l.trim());
+          const lastLine = thinkLines[thinkLines.length - 1]?.trim() ?? "";
+          // Only use it if it looks like commentary (not reasoning/planning)
+          if (lastLine.length > 5 && lastLine.length < 200 && !lastLine.startsWith("I need") && !lastLine.startsWith("The user")) {
+            reply = lastLine;
+          }
+        }
+      }
       const visuals = enable_visuals
         ? parseToolCalls("dashscope", data)
         : [];
