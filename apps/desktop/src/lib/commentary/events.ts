@@ -45,6 +45,7 @@ export type EngineEventMap = {
   'chat-message': ChatMessageEvent;
   'overlay-show': { bubbleId: string; name: string; rarity: string; text: string; image?: string; visuals?: unknown[] };
   'overlay-dismiss': { bubbleId: string };
+  'capture-bounds': { x: number; y: number; width: number; height: number; screen_width: number; screen_height: number } | null;
   'system-message': { text: string };
 };
 

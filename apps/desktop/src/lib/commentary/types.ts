@@ -95,11 +95,22 @@ export interface PipelineResult {
   usage?: { input_tokens: number; output_tokens: number };
 }
 
+/** Capture bounds for window captures — maps capture-space coords to screen-space */
+export interface CaptureBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  screen_width: number;
+  screen_height: number;
+}
+
 /** Return type from Rust grab_frame command */
 export interface FrameResult {
   data_uri: string;
   width: number;
   height: number;
+  capture_bounds?: CaptureBounds;
 }
 
 export interface SceneContext {

@@ -156,6 +156,16 @@ engine.events.on('overlay-dismiss', async (msg) => {
   }
 });
 
+engine.events.on('capture-bounds', async (bounds) => {
+  if (!_overlayOnRaw) return;
+  try {
+    const { emitTo } = await import('@tauri-apps/api/event');
+    await emitTo('overlay', 'capture-bounds', bounds);
+  } catch (e) {
+    console.error('Failed to emit capture bounds:', e);
+  }
+});
+
 engine.events.on('system-message', (msg) => {
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const entry: ChatLogEntry = {

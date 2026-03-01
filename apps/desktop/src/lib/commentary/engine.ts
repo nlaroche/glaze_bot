@@ -248,6 +248,9 @@ export class CommentaryEngine {
         frameDims = { width: frame.width, height: frame.height };
         this.contextLoop.notifyFrameGrab();
 
+        // Send capture bounds to overlay for coordinate mapping
+        this.events.emit('capture-bounds', frame.capture_bounds ?? null);
+
         this.events.emit('pipeline:frame', { requestId: '', size: frameB64.length, width: frame.width, height: frame.height });
         debugFrameId = this.debugLogger.recordFrame(frame.data_uri);
 
@@ -370,6 +373,7 @@ export class CommentaryEngine {
         frameB64 = frame.data_uri.replace(/^data:image\/[a-z]+;base64,/, '');
         frameDims = { width: frame.width, height: frame.height };
         this.contextLoop.notifyFrameGrab();
+        this.events.emit('capture-bounds', frame.capture_bounds ?? null);
       } catch (err) {
         this.events.emit('pipeline:frame-error', { requestId: '', error: err instanceof Error ? err.message : String(err) });
         this.events.emit('system-message', { text: 'Failed to capture screen — is the share source still active?' });

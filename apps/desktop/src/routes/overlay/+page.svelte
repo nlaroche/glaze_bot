@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import VisualRenderer from '$lib/overlay/VisualRenderer.svelte';
-  import { pushVisuals } from '$lib/overlay/primitiveRegistry.svelte';
+  import { pushVisuals, setCaptureBounds } from '$lib/overlay/primitiveRegistry.svelte';
 
   interface Bubble {
     id: number;
@@ -139,6 +139,11 @@
           if (p.visuals?.length) {
             pushVisuals(p.visuals);
           }
+        });
+
+        // Receive capture bounds for coordinate mapping (window captures)
+        await webview.listen('capture-bounds', (event: any) => {
+          setCaptureBounds(event.payload ?? null);
         });
 
         await webview.listen('chat-dismiss', (event: any) => {

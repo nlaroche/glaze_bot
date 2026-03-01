@@ -327,11 +327,23 @@ fn encode_frame(img: image::RgbaImage, with_grid: bool) -> Result<(String, u32, 
     Ok((format!("data:image/jpeg;base64,{}", b64), width, height))
 }
 
+#[derive(Serialize, Clone)]
+pub struct CaptureBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub screen_width: u32,
+    pub screen_height: u32,
+}
+
 #[derive(Serialize)]
 pub struct FrameResult {
     pub data_uri: String,
     pub width: u32,
     pub height: u32,
+    /// Window position/size on screen (None for monitor captures)
+    pub capture_bounds: Option<CaptureBounds>,
 }
 
 /// Grab a screenshot frame, returned as base64 JPEG with dimensions.
@@ -349,7 +361,7 @@ pub fn grab_frame(source_id: String, with_grid: Option<bool>) -> Result<FrameRes
         let mon = monitors.get(idx).ok_or("Monitor not found")?;
         let img = mon.capture_image().map_err(|e| e.to_string())?;
         let (data_uri, width, height) = encode_frame(img, grid)?;
-        Ok(FrameResult { data_uri, width, height })
+        Ok(FrameResult { data_uri, width, height, capture_bounds: None })
     } else if source_id.starts_with("window-") {
         let wid: u32 = source_id
             .strip_prefix("window-")
@@ -357,9 +369,35 @@ pub fn grab_frame(source_id: String, with_grid: Option<bool>) -> Result<FrameRes
             .ok_or("Invalid window ID")?;
         let windows = Window::all().map_err(|e| e.to_string())?;
         let win = windows.into_iter().find(|w| w.id() == wid).ok_or("Window not found")?;
+
+        // Get window position on screen for coordinate mapping
+        let win_x = win.x();
+        let win_y = win.y();
+        let win_w = win.width();
+        let win_h = win.height();
+
+        // Get primary monitor dimensions for the coordinate transform
+        let (screen_w, screen_h) = Monitor::all()
+            .ok()
+            .and_then(|mons| mons.into_iter().find(|m| m.is_primary()))
+            .map(|m| (m.width(), m.height()))
+            .unwrap_or((1920, 1080));
+
         let img = win.capture_image().map_err(|e| e.to_string())?;
         let (data_uri, width, height) = encode_frame(img, grid)?;
-        Ok(FrameResult { data_uri, width, height })
+        Ok(FrameResult {
+            data_uri,
+            width,
+            height,
+            capture_bounds: Some(CaptureBounds {
+                x: win_x,
+                y: win_y,
+                width: win_w,
+                height: win_h,
+                screen_width: screen_w,
+                screen_height: screen_h,
+            }),
+        })
     } else {
         Err("Unknown source type".into())
     }
