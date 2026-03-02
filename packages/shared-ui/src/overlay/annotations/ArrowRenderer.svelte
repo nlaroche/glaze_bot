@@ -2,30 +2,30 @@
   import type { ArrowCommand } from '@glazebot/shared-types';
   import { onMount } from 'svelte';
 
-  let { command }: { command: ArrowCommand } = $props();
+  interface Props {
+    command: ArrowCommand;
+    animationSpeed?: number;
+    strokeWidth?: number;
+    dropShadow?: boolean;
+  }
+
+  let { command, animationSpeed = 1.0, strokeWidth = 3, dropShadow = true }: Props = $props();
 
   let x1 = $derived(command.from.x * 100);
   let y1 = $derived(command.from.y * 100);
   let x2 = $derived(command.to.x * 100);
   let y2 = $derived(command.to.y * 100);
   let color = $derived(command.color || '#FFD700');
-  let thickness = $derived(command.thickness || 3);
+  let thickness = $derived(command.thickness || strokeWidth);
 
   let labelX = $derived((x1 + x2) / 2);
   let labelY = $derived((y1 + y2) / 2 - 1.5);
 
-  // Angle of the main line in radians
   let angleRad = $derived(Math.atan2(y2 - y1, x2 - x1));
-
-  // Arrowhead whisker length (in % units, matching the line coords)
   let whiskerLen = $derived(thickness * 1.2);
-  // Whisker splay angle (30 degrees off the shaft)
   const SPLAY = Math.PI / 6;
-
-  // Left whisker endpoint (branches back-left from the tip)
   let wl_x = $derived(x2 - whiskerLen * Math.cos(angleRad - SPLAY));
   let wl_y = $derived(y2 - whiskerLen * Math.sin(angleRad - SPLAY));
-  // Right whisker endpoint (branches back-right from the tip)
   let wr_x = $derived(x2 - whiskerLen * Math.cos(angleRad + SPLAY));
   let wr_y = $derived(y2 - whiskerLen * Math.sin(angleRad + SPLAY));
 
@@ -34,8 +34,8 @@
   let whiskerRightEl: SVGLineElement | undefined = $state();
   let showLabel = $state(false);
 
-  const DRAW_SPEED = 1.5;
-  const WHISKER_DURATION = 100;
+  const BASE_DRAW_SPEED = 0.8;
+  const BASE_WHISKER_DURATION = 200;
 
   function drawStroke(el: SVGLineElement, duration: number): Animation {
     const len = el.getTotalLength?.() || 100;
@@ -47,22 +47,36 @@
     );
   }
 
+  function hideStroke(el: SVGLineElement) {
+    const len = el.getTotalLength?.() || 100;
+    el.style.strokeDasharray = `${len}`;
+    el.style.strokeDashoffset = `${len}`;
+  }
+
   onMount(() => {
     if (!lineEl) return;
+
+    // Hide whiskers immediately so they don't show during shaft draw
+    if (whiskerLeftEl) hideStroke(whiskerLeftEl);
+    if (whiskerRightEl) hideStroke(whiskerRightEl);
+
+    const speed = animationSpeed;
+    const drawSpeed = BASE_DRAW_SPEED / speed;
     const shaftLen = lineEl.getTotalLength?.() || 200;
-    const shaftDuration = Math.max(150, Math.min(shaftLen / DRAW_SPEED, 600));
+    const shaftDuration = Math.max(400, Math.min(shaftLen / drawSpeed, 1000)) * speed;
 
     const shaftAnim = drawStroke(lineEl, shaftDuration);
 
     shaftAnim.onfinish = () => {
-      if (whiskerLeftEl) drawStroke(whiskerLeftEl, WHISKER_DURATION);
-      if (whiskerRightEl) drawStroke(whiskerRightEl, WHISKER_DURATION);
+      const whiskerDur = BASE_WHISKER_DURATION * speed;
+      if (whiskerLeftEl) drawStroke(whiskerLeftEl, whiskerDur);
+      if (whiskerRightEl) drawStroke(whiskerRightEl, whiskerDur);
       showLabel = true;
     };
   });
 </script>
 
-<!-- Main shaft -->
+<g filter={dropShadow ? 'url(#annotation-shadow)' : undefined}>
 <line
   bind:this={lineEl}
   x1="{x1}%" y1="{y1}%"
@@ -71,8 +85,6 @@
   stroke-width={thickness}
   stroke-linecap="round"
 />
-
-<!-- Left whisker -->
 <line
   bind:this={whiskerLeftEl}
   x1="{x2}%" y1="{y2}%"
@@ -81,8 +93,6 @@
   stroke-width={thickness}
   stroke-linecap="round"
 />
-
-<!-- Right whisker -->
 <line
   bind:this={whiskerRightEl}
   x1="{x2}%" y1="{y2}%"
@@ -91,6 +101,7 @@
   stroke-width={thickness}
   stroke-linecap="round"
 />
+</g>
 
 {#if command.label && showLabel}
   <text

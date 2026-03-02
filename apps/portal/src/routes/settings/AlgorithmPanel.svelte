@@ -21,12 +21,16 @@
     { key: 'quip_banter', label: 'Quip / Banter', desc: 'Two characters exchange lines' },
     { key: 'callback', label: 'Callback', desc: 'Reference earlier in the session' },
     { key: 'hype_chain', label: 'Hype Chain', desc: 'Multiple characters react rapidly' },
+    { key: 'encouragement', label: 'Encouragement', desc: 'Emotional support and hype' },
+    { key: 'hot_take', label: 'Hot Take', desc: 'Bold, opinionated statement' },
+    { key: 'tangent', label: 'Tangent', desc: 'Personality-driven off-topic riff' },
     { key: 'silence', label: 'Silence', desc: 'Intentional quiet moment' },
   ] as const;
 
   const DEFAULT_WEIGHTS: Record<string, number> = {
-    solo_observation: 35, emotional_reaction: 20, question: 12,
-    backstory_reference: 8, quip_banter: 4, callback: 5, hype_chain: 2, silence: 14,
+    solo_observation: 25, emotional_reaction: 20, question: 12,
+    backstory_reference: 8, quip_banter: 4, callback: 5, hype_chain: 2,
+    encouragement: 6, hot_take: 5, tangent: 4, silence: 10,
   };
 
   const DEFAULT_PROMPTS: Record<string, string> = {
@@ -37,6 +41,9 @@
     quip_banter: 'Two characters talk TO EACH OTHER about what just happened. One reacts, the other responds — disagree, tease, or riff.',
     callback: 'Reference something from earlier in this session that connects to what\'s happening now.',
     hype_chain: 'Two characters react to the same moment — the second one responds to the first, not just the screen.',
+    encouragement: 'Be emotionally supportive. Encourage the player, hype them up, or empathize if things are going badly. Be genuine, not sarcastic.',
+    hot_take: 'Drop a bold, opinionated take — about the game, a mechanic, a character design, a strategy, pop culture, anything. Be confident and slightly controversial.',
+    tangent: 'Something on screen reminds you of something completely unrelated. Go off on a brief tangent that reveals your personality. Don\'t force a game connection.',
   };
 
   // ── Extract from config ──
@@ -63,9 +70,19 @@
     };
   }
 
+  function getVisualConfig(): { animationSpeed: number; strokeWidth: number; dropShadow: boolean } {
+    return {
+      animationSpeed: 1.0,
+      strokeWidth: 3,
+      dropShadow: true,
+      ...((getCommentary().visuals as Record<string, unknown>) ?? {}),
+    } as { animationSpeed: number; strokeWidth: number; dropShadow: boolean };
+  }
+
   let weights = $state(getWeights());
   let prompts = $state(getPrompts());
   let memoryConfig = $state(getMemoryConfig());
+  let visualsConfig = $state(getVisualConfig());
   let expandedPrompt = $state<string | null>(null);
   let saving = $state(false);
   let simResults = $state<Record<string, number> | null>(null);
@@ -83,7 +100,7 @@
   async function save() {
     saving = true;
     try {
-      const commentary = { ...getCommentary(), blockWeights: { ...weights }, blockPrompts: { ...prompts }, memory: { ...memoryConfig } };
+      const commentary = { ...getCommentary(), blockWeights: { ...weights }, blockPrompts: { ...prompts }, memory: { ...memoryConfig }, visuals: { ...visualsConfig } };
       const updated = { ...config, commentary };
       await onsave(updated);
     } finally {
@@ -249,7 +266,54 @@
     </div>
   </Card>
 
-  <!-- ═══ D. Simulator ═══ -->
+  <!-- ═══ D. Visual Annotations ═══ -->
+  <Card>
+    <div class="section-header">
+      <h3>Visual Annotations</h3>
+      <p class="section-desc">Control how visual overlays appear on the player's screen.</p>
+    </div>
+
+    <div class="visuals-grid">
+      <div class="visual-field">
+        <label>Animation Speed</label>
+        <div class="slider-with-labels">
+          <span class="slider-hint">Fast</span>
+          <SliderInput
+            min={0.5}
+            max={2.0}
+            step={0.1}
+            value={visualsConfig.animationSpeed}
+            onchange={(v) => { visualsConfig.animationSpeed = v; }}
+          />
+          <span class="slider-hint">Slow</span>
+        </div>
+        <span class="visual-value">{visualsConfig.animationSpeed.toFixed(1)}x</span>
+      </div>
+
+      <div class="visual-field">
+        <label>Stroke Width</label>
+        <div class="slider-with-labels">
+          <span class="slider-hint">Thin</span>
+          <SliderInput
+            min={1}
+            max={8}
+            step={1}
+            value={visualsConfig.strokeWidth}
+            onchange={(v) => { visualsConfig.strokeWidth = v; }}
+          />
+          <span class="slider-hint">Thick</span>
+        </div>
+        <span class="visual-value">{visualsConfig.strokeWidth}px</span>
+      </div>
+
+      <label class="toggle-row" data-testid="visual-shadow">
+        <input type="checkbox" bind:checked={visualsConfig.dropShadow} />
+        <span>Drop Shadow on Annotations</span>
+      </label>
+    </div>
+  </Card>
+
+  <!-- ═══ E. Simulator ═══ -->
   <Card>
     <div class="section-header">
       <h3>Simulator</h3>
@@ -364,6 +428,9 @@
   .bar-quip_banter { background: #f59e0b; }
   .bar-callback { background: #10b981; }
   .bar-hype_chain { background: #ef4444; }
+  .bar-encouragement { background: #ec4899; }
+  .bar-hot_take { background: #f97316; }
+  .bar-tangent { background: #8b5cf6; }
   .bar-silence { background: #6b7280; }
   .bar-value {
     width: 36px;
@@ -475,6 +542,41 @@
     font-size: var(--font-base, 0.875rem);
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Visuals ── */
+  .visuals-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md, 1rem);
+  }
+  .visual-field label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: var(--font-base, 0.875rem);
+    color: var(--color-text-primary);
+  }
+  .slider-with-labels {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .slider-with-labels :global(.slider-input) {
+    flex: 1;
+  }
+  .slider-hint {
+    font-size: var(--font-base, 0.875rem);
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+    width: 32px;
+  }
+  .visual-value {
+    font-size: var(--font-base, 0.875rem);
+    color: var(--color-text-primary);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    display: block;
+    margin-top: 0.25rem;
   }
 
   /* ── Save Bar ── */

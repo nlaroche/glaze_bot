@@ -13,3 +13,8 @@ export { default as ContextMenu } from './overlay/ContextMenu.svelte';
 export { default as CardViewer } from './overlay/CardViewer.svelte';
 export { default as ScreenPicker } from './overlay/ScreenPicker.svelte';
 export type { CaptureSource } from './overlay/ScreenPicker.svelte';
+export { default as ArrowRenderer } from './overlay/annotations/ArrowRenderer.svelte';
+export { default as CircleRenderer } from './overlay/annotations/CircleRenderer.svelte';
+export { default as HighlightRectRenderer } from './overlay/annotations/HighlightRectRenderer.svelte';
+export { default as FreehandPathRenderer } from './overlay/annotations/FreehandPathRenderer.svelte';
+export { default as StampRenderer } from './overlay/annotations/StampRenderer.svelte';

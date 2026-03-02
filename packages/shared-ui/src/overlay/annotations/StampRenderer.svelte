@@ -1,7 +1,12 @@
 <script lang="ts">
   import type { StampCommand, StampIcon } from '@glazebot/shared-types';
 
-  let { command }: { command: StampCommand } = $props();
+  interface Props {
+    command: StampCommand;
+    animationSpeed?: number;
+  }
+
+  let { command, animationSpeed = 1.0 }: Props = $props();
 
   const ICON_MAP: Record<StampIcon, string> = {
     checkmark: '\u2705',
@@ -21,6 +26,7 @@
   let size = $derived(command.size || 48);
   let rotation = $derived(command.rotation || 0);
   let icon = $derived(ICON_MAP[command.icon] || '\u2753');
+  let popDuration = $derived(0.6 * animationSpeed);
 </script>
 
 <div
@@ -30,6 +36,7 @@
     top: {top}%;
     font-size: {size}px;
     transform: translate(-50%, -50%) rotate({rotation}deg);
+    animation-duration: {popDuration}s;
   "
 >
   {icon}
@@ -39,7 +46,7 @@
   .stamp {
     position: absolute;
     pointer-events: none;
-    animation: stamp-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: stamp-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     line-height: 1;
     filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
   }

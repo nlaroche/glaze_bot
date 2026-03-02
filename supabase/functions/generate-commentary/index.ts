@@ -342,6 +342,9 @@ Deno.serve(async (req: Request) => {
       question: "\n[MODE: QUESTION] Ask the player or yourself a question about what's happening. Be curious or skeptical.",
       backstory_reference: "\n[MODE: BACKSTORY] Subtly connect what you see to your own backstory or past experiences. Don't force it.",
       callback: "\n[MODE: CALLBACK] Reference something from earlier in this session. Connect past to present.",
+      encouragement: "\n[MODE: ENCOURAGEMENT] Be supportive and genuine. React to how the player is DOING, not just what's on screen. Cheer, empathize, or motivate. Consider using a stamp (trophy, crown) or floating_text to reinforce your message.",
+      hot_take: "\n[MODE: HOT TAKE] State a bold opinion. Be confident and slightly provocative. This isn't analysis — it's personality. Consider using floating_text with 'slam' animation for emphasis.",
+      tangent: "\n[MODE: TANGENT] Something on screen triggered a thought. Go off on a brief tangent that shows your personality. Don't stay on-topic.",
     } as Record<string, string>)[block_type] ?? "" : "";
 
     let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective + blockInstruction

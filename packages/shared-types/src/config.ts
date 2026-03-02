@@ -27,6 +27,12 @@ export interface MemoryConfig {
   extractionPrompt: string;
 }
 
+export interface VisualConfig {
+  animationSpeed: number;   // multiplier: 0.5 = fast, 2.0 = slow, default 1.0
+  strokeWidth: number;      // 1-8, default 3
+  dropShadow: boolean;      // default true
+}
+
 export interface CommentaryConfig {
   visionProvider: string;
   visionModel: string;
@@ -42,6 +48,7 @@ export interface CommentaryConfig {
   blockWeights: Record<string, number>;
   blockPrompts: Record<string, string>;
   memory: MemoryConfig;
+  visuals: VisualConfig;
 }
 
 export interface GlazeBotConfig {
@@ -112,14 +119,17 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
       bufferSize: 10,
     },
     blockWeights: {
-      solo_observation: 35,
+      solo_observation: 25,
       emotional_reaction: 20,
       question: 12,
       backstory_reference: 8,
       quip_banter: 4,
       callback: 5,
       hype_chain: 2,
-      silence: 14,
+      encouragement: 6,
+      hot_take: 5,
+      tangent: 4,
+      silence: 10,
     },
     blockPrompts: {
       solo_observation:
@@ -136,6 +146,12 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
         "Reference something from earlier in this session that connects to what's happening now.",
       hype_chain:
         "Two characters react to the same moment — the second one responds to the first, not just the screen.",
+      encouragement:
+        "Be emotionally supportive. Encourage the player, hype them up, or empathize if things are going badly. Be genuine, not sarcastic.",
+      hot_take:
+        "Drop a bold, opinionated take — about the game, a mechanic, a character design, a strategy, pop culture, anything. Be confident and slightly controversial.",
+      tangent:
+        "Something on screen reminds you of something completely unrelated. Go off on a brief tangent that reveals your personality. Don't force a game connection.",
     },
     memory: {
       enabled: true,
@@ -144,6 +160,11 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
       memoriesPerPrompt: 10,
       extractionPrompt:
         "Review the conversation and extract 1-3 key memories worth remembering.",
+    },
+    visuals: {
+      animationSpeed: 1.0,
+      strokeWidth: 3,
+      dropShadow: true,
     },
   },
 };

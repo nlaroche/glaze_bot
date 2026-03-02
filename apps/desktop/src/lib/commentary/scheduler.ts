@@ -2,14 +2,17 @@ import type { GachaCharacter } from '@glazebot/shared-types';
 import type { BlockType, BlockWeights, BlockPrompts, ScheduledBlock, HistoryEntry } from './types';
 
 export const DEFAULT_BLOCK_WEIGHTS: BlockWeights = {
-  solo_observation: 35,
+  solo_observation: 25,
   emotional_reaction: 20,
   question: 12,
   backstory_reference: 8,
   quip_banter: 4,
   callback: 5,
   hype_chain: 2,
-  silence: 14,
+  encouragement: 6,
+  hot_take: 5,
+  tangent: 4,
+  silence: 10,
 };
 
 export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
@@ -20,6 +23,9 @@ export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
   quip_banter: 'Two characters talk TO EACH OTHER about what just happened. One reacts, the other responds — disagree, tease, or riff.',
   callback: 'Reference something from earlier in this session that connects to what\'s happening now.',
   hype_chain: 'Two characters react to the same moment — the second one responds to the first, not just the screen.',
+  encouragement: 'Be emotionally supportive. Encourage the player, hype them up, or empathize if things are going badly. Be genuine, not sarcastic.',
+  hot_take: 'Drop a bold, opinionated take — about the game, a mechanic, a character design, a strategy, pop culture, anything. Be confident and slightly controversial.',
+  tangent: 'Something on screen reminds you of something completely unrelated. Go off on a brief tangent that reveals your personality. Don\'t force a game connection.',
 };
 
 const BLOCK_TYPES: BlockType[] = [
@@ -30,6 +36,9 @@ const BLOCK_TYPES: BlockType[] = [
   'quip_banter',
   'callback',
   'hype_chain',
+  'encouragement',
+  'hot_take',
+  'tangent',
   'silence',
 ];
 

@@ -1,28 +1,31 @@
 <script lang="ts">
   import type { VisualCommand } from '@glazebot/shared-types';
-  import { getActiveVisuals } from './primitiveRegistry.svelte';
+  import { getActiveVisuals, getVisualConfig } from './primitiveRegistry.svelte';
 
-  // SVG renderers
-  import ArrowRenderer from './renderers/ArrowRenderer.svelte';
-  import CircleRenderer from './renderers/CircleRenderer.svelte';
-  import HighlightRectRenderer from './renderers/HighlightRectRenderer.svelte';
-  import FreehandPathRenderer from './renderers/FreehandPathRenderer.svelte';
+  // Shared renderers from @glazebot/shared-ui
+  import {
+    ArrowRenderer,
+    CircleRenderer,
+    HighlightRectRenderer,
+    FreehandPathRenderer,
+    StampRenderer,
+  } from '@glazebot/shared-ui';
 
-  // HTML renderers
+  // HTML renderers (desktop-only, not shared)
   import StatComparisonRenderer from './renderers/StatComparisonRenderer.svelte';
   import InfoTableRenderer from './renderers/InfoTableRenderer.svelte';
   import FloatingTextRenderer from './renderers/FloatingTextRenderer.svelte';
-  import StampRenderer from './renderers/StampRenderer.svelte';
   import SearchPanelRenderer from './renderers/SearchPanelRenderer.svelte';
 
-  // Canvas renderers
+  // Canvas renderers (desktop-only)
   import EmoteBurstRenderer from './renderers/EmoteBurstRenderer.svelte';
   import ScreenFlashRenderer from './renderers/ScreenFlashRenderer.svelte';
 
   let visuals = $derived(getActiveVisuals());
+  let visualConfig = $derived(getVisualConfig());
 
   const SVG_PRIMITIVES = new Set(['arrow', 'circle', 'highlight_rect']);
-  const HTML_PRIMITIVES = new Set(['stat_comparison', 'info_table', 'floating_text', 'stamp', 'search_panel']);
+  const HTML_PRIMITIVES = new Set(['stat_comparison', 'info_table', 'floating_text', 'search_panel']);
   const CANVAS_PRIMITIVES = new Set(['emote_burst', 'screen_flash']);
 
   let svgVisuals = $derived(visuals.filter((v) => SVG_PRIMITIVES.has(v.primitive)));
@@ -34,13 +37,18 @@
   <!-- SVG Layer -->
   {#if svgVisuals.length > 0}
     <svg class="visual-svg-layer">
+      <defs>
+        <filter id="annotation-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.7)" />
+        </filter>
+      </defs>
       {#each svgVisuals as cmd (cmd.id)}
         {#if cmd.primitive === 'arrow'}
-          <ArrowRenderer command={cmd as any} />
+          <ArrowRenderer command={cmd as any} animationSpeed={visualConfig.animationSpeed} strokeWidth={visualConfig.strokeWidth} dropShadow={visualConfig.dropShadow} />
         {:else if cmd.primitive === 'circle'}
-          <CircleRenderer command={cmd as any} />
+          <CircleRenderer command={cmd as any} animationSpeed={visualConfig.animationSpeed} strokeWidth={visualConfig.strokeWidth} dropShadow={visualConfig.dropShadow} />
         {:else if cmd.primitive === 'highlight_rect'}
-          <HighlightRectRenderer command={cmd as any} />
+          <HighlightRectRenderer command={cmd as any} animationSpeed={visualConfig.animationSpeed} strokeWidth={visualConfig.strokeWidth} dropShadow={visualConfig.dropShadow} />
         {/if}
       {/each}
     </svg>
@@ -48,7 +56,12 @@
 
   <!-- Freehand paths get their own SVG (viewBox-based) -->
   {#each visuals.filter((v) => v.primitive === 'freehand_path') as cmd (cmd.id)}
-    <FreehandPathRenderer command={cmd as any} />
+    <FreehandPathRenderer command={cmd as any} animationSpeed={visualConfig.animationSpeed} strokeWidth={visualConfig.strokeWidth} dropShadow={visualConfig.dropShadow} />
+  {/each}
+
+  <!-- Stamp -->
+  {#each visuals.filter((v) => v.primitive === 'stamp') as cmd (cmd.id)}
+    <StampRenderer command={cmd as any} animationSpeed={visualConfig.animationSpeed} />
   {/each}
 
   <!-- HTML Layer -->
@@ -61,8 +74,6 @@
           <InfoTableRenderer command={cmd as any} />
         {:else if cmd.primitive === 'floating_text'}
           <FloatingTextRenderer command={cmd as any} />
-        {:else if cmd.primitive === 'stamp'}
-          <StampRenderer command={cmd as any} />
         {:else if cmd.primitive === 'search_panel'}
           <SearchPanelRenderer command={cmd as any} />
         {/if}

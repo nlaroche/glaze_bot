@@ -406,10 +406,11 @@ export function extractSearchToolCall(
 export function buildVisualSystemAddendum(frameDims?: { width: number; height: number }): string {
   const gridHint = frameDims
     ? `\nThe screenshot is ${frameDims.width}x${frameDims.height} pixels. It has a coordinate grid overlay to help you estimate positions:
+- Gridlines at every 0.1 interval (dashed minor lines, solid center line at 0.5)
 - Tick marks with labels (0.1, 0.2, ..., 0.9) along all four edges
-- Dashed gridlines at 0.25 intervals with coordinate labels at intersections (e.g. "25,50" means x=0.25 y=0.50)
+- Coordinate labels at every 0.2 intersection (e.g. ".2,.4" means x=0.2 y=0.4, ".6,.8" means x=0.6 y=0.8)
 - "0,0" label at top-left corner, "1,1" at bottom-right corner
-STRATEGY: First identify which grid quadrant the target is in (e.g., between 0.25 and 0.50 horizontally, between 0.50 and 0.75 vertically), then estimate the precise position within that quadrant using the edge tick marks as guides.`
+STRATEGY: Find the nearest gridline intersection to your target. Read the edge tick marks to get the exact 0.1 position. For example, if something is between the 0.3 and 0.4 vertical lines and near the 0.6 horizontal line, its coordinate is approximately (0.35, 0.6).`
     : '';
 
   return `
@@ -445,12 +446,20 @@ HOW TO USE COORDINATES:
 - HUD elements are usually at the edges: health bars near top-left (0.0-0.2, 0.0-0.1), minimap near bottom-right (0.8-1.0, 0.8-1.0), ability bar near bottom-center (0.3-0.7, 0.9-1.0).
 - When in doubt, aim for the CENTER of the element you're pointing at, not its edge.
 
-TOOL TIPS:
-- arrow: draw FROM a neutral area TO the thing you're pointing at. Keep the "from" point away from the target so the arrow is visible.
+TOOL VARIETY — don't just use circles. Mix it up:
+- arrow: point at something, show direction of movement, draw FROM a neutral area TO the target.
 - circle: highlight a specific UI element, character, or item. Use radius 0.02-0.05 for small elements, 0.05-0.15 for larger areas.
 - highlight_rect: highlight a larger rectangular area like an inventory panel or map section.
-- emote_burst: burst of emoji particles — use for reactions to big moments.
-- screen_flash: quick full-screen flash — use sparingly for truly dramatic moments (deaths, wins).
+- emote_burst: emotional reactions (kills, deaths, wins, fails) — burst of emoji particles.
+- floating_text: hype text, dramatic one-liners, bold statements. Use 'slam' for emphasis, 'rise' for chill, 'shake' for panic.
+- stamp: quick icon reactions (checkmark for good play, skull for death, crown for domination, trophy for wins).
+- screen_flash: dramatic punctuation — use sparingly for truly dramatic moments (deaths, wins, clutch plays).
+- freehand_path: doodle or trace a path on screen for fun or to circle something loosely.
+
+For emotional_reaction blocks: PREFER emote_burst, screen_flash, or floating_text over arrows/circles.
+For encouragement blocks: Use stamps (trophy, crown, checkmark) or floating_text.
+
+TOOL TIPS:
 - Max 2 visuals per response.
 - Match your character personality: serious characters use clean arrows/circles, chaotic characters use emotes and doodles.`;
 }

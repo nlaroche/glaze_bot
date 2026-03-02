@@ -2,7 +2,14 @@
   import type { HighlightRectCommand } from '@glazebot/shared-types';
   import { onMount } from 'svelte';
 
-  let { command }: { command: HighlightRectCommand } = $props();
+  interface Props {
+    command: HighlightRectCommand;
+    animationSpeed?: number;
+    strokeWidth?: number;
+    dropShadow?: boolean;
+  }
+
+  let { command, animationSpeed = 1.0, strokeWidth = 3, dropShadow = true }: Props = $props();
 
   let x = $derived(command.origin.x * 100);
   let y = $derived(command.origin.y * 100);
@@ -15,7 +22,6 @@
 
   onMount(() => {
     if (!rectEl) return;
-    // Draw the rectangle border like a pen tracing the perimeter
     const perimeter = rectEl.getTotalLength?.() || 400;
     rectEl.style.strokeDasharray = `${perimeter}`;
     rectEl.style.strokeDashoffset = `${perimeter}`;
@@ -24,12 +30,12 @@
         { strokeDashoffset: `${perimeter}` },
         { strokeDashoffset: '0' },
       ],
-      { duration: 500, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
+      { duration: 800 * animationSpeed, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
     );
   });
 </script>
 
-<!-- Fill rect (fades in after stroke draws) -->
+<g filter={dropShadow ? 'url(#annotation-shadow)' : undefined}>
 <rect
   x="{x}%"
   y="{y}%"
@@ -40,8 +46,8 @@
   rx="4"
   stroke="none"
   class="fill-rect"
+  style="animation-delay: {0.75 * animationSpeed}s;"
 />
-<!-- Stroke rect (draws in) -->
 <rect
   bind:this={rectEl}
   x="{x}%"
@@ -49,15 +55,17 @@
   width="{w}%"
   height="{h}%"
   stroke={color}
-  stroke-width="2"
+  stroke-width={strokeWidth}
   fill="none"
   rx="4"
   stroke-linecap="round"
 />
+</g>
 
 <style>
   .fill-rect {
-    animation: fill-fade 0.3s ease-out 0.45s both;
+    animation: fill-fade 0.3s ease-out both;
+    animation-delay: 0.75s;
   }
   @keyframes fill-fade {
     from { opacity: 0; }

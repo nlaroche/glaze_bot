@@ -12,6 +12,9 @@ export type BlockType =
   | 'quip_banter'
   | 'callback'
   | 'hype_chain'
+  | 'encouragement'
+  | 'hot_take'
+  | 'tangent'
   | 'silence';
 
 export interface BlockWeights {
@@ -22,6 +25,9 @@ export interface BlockWeights {
   quip_banter: number;
   callback: number;
   hype_chain: number;
+  encouragement: number;
+  hot_take: number;
+  tangent: number;
   silence: number;
 }
 
@@ -33,6 +39,9 @@ export interface BlockPrompts {
   quip_banter: string;
   callback: string;
   hype_chain: string;
+  encouragement: string;
+  hot_take: string;
+  tangent: string;
 }
 
 export interface ScheduledBlock {

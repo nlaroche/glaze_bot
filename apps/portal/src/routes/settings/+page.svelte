@@ -2990,7 +2990,11 @@ The player said: "nice shot!"</pre>
 
   <!-- ═══ TAB: PRIMITIVES ═══ -->
   {:else if activeTab === 'primitives'}
-    <PrimitivesPanel />
+    <PrimitivesPanel
+      animationSpeed={(config as any)?.commentary?.visuals?.animationSpeed ?? 1.0}
+      strokeWidth={(config as any)?.commentary?.visuals?.strokeWidth ?? 3}
+      dropShadow={(config as any)?.commentary?.visuals?.dropShadow ?? true}
+    />
 
   <!-- ═══ TAB: ALGORITHM ═══ -->
   {:else if activeTab === 'algorithm'}

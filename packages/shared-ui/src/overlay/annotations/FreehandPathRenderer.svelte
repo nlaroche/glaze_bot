@@ -2,12 +2,18 @@
   import type { FreehandPathCommand } from '@glazebot/shared-types';
   import { onMount } from 'svelte';
 
-  let { command }: { command: FreehandPathCommand } = $props();
+  interface Props {
+    command: FreehandPathCommand;
+    animationSpeed?: number;
+    strokeWidth?: number;
+    dropShadow?: boolean;
+  }
+
+  let { command, animationSpeed = 1.0, strokeWidth = 3, dropShadow = true }: Props = $props();
 
   let color = $derived(command.color || '#FF4444');
-  let thickness = $derived(command.thickness || 3);
+  let thickness = $derived(command.thickness || strokeWidth);
 
-  // Use viewBox 0 0 1000 1000 and scale points for resolution independence
   let scaledPath = $derived(() => {
     const pts = command.points;
     if (pts.length < 2) return '';
@@ -31,12 +37,18 @@
         { strokeDashoffset: `${len}` },
         { strokeDashoffset: '0' },
       ],
-      { duration: 600, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
+      { duration: 1000 * animationSpeed, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' }
     );
   });
 </script>
 
 <svg viewBox="0 0 1000 1000" class="freehand-svg">
+  <defs>
+    <filter id="freehand-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.7)" />
+    </filter>
+  </defs>
+  <g filter={dropShadow ? 'url(#freehand-shadow)' : undefined}>
   <path
     bind:this={pathEl}
     d={scaledPath()}
@@ -47,6 +59,7 @@
     stroke-linecap="round"
     stroke-linejoin="round"
   />
+  </g>
 </svg>
 
 <style>

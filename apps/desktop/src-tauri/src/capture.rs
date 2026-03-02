@@ -169,28 +169,69 @@ fn fill_rect(img: &mut image::RgbaImage, x: i32, y: i32, w: u32, h: u32, color: 
     }
 }
 
-/// Draw a coordinate grid overlay to help the LLM estimate positions accurately.
+/// Draw a dense coordinate grid overlay to help the LLM estimate positions accurately.
 ///
 /// Features:
-/// - Edge tick marks with coordinate labels (0.1–0.9) along all 4 borders
-/// - Dashed gridlines at 0.25 intervals (4px on, 8px off)
-/// - Coordinate labels at the 9 major intersections (e.g. "25,50")
+/// - Gridlines at every 0.1 interval (9 vertical + 9 horizontal)
+///   - Major lines (0.5) are brighter, minor lines are subtle dashed
+/// - Coordinate labels at every 0.2 intersection (25 points)
+/// - Edge labels at every 0.1 along all 4 borders
 /// - Corner orientation labels ("0,0" top-left, "1,1" bottom-right)
 fn draw_grid(img: &mut image::RgbaImage) {
     let (w, h) = (img.width(), img.height());
     let fg_color = image::Rgba([255, 255, 0, 220]);        // bright yellow text
     let shadow_color = image::Rgba([0, 0, 0, 200]);         // dark shadow for readability
-    let line_color = image::Rgba([255, 255, 0, 120]);        // dashed gridline color
+    let major_line = image::Rgba([255, 255, 0, 140]);        // 0.5 center lines
+    let minor_line = image::Rgba([255, 255, 0, 70]);         // 0.1 interval lines
     let bg_color = image::Rgba([0, 0, 0, 160]);              // label background
 
-    let tick_len: u32 = 12;
+    let tick_len: u32 = 14;
     let tick_thickness: u32 = 2;
+
+    // ── Gridlines at 0.1 intervals ─────────────────────────────────
+    let dash_on: u32 = 4;
+    let dash_off: u32 = 6;
+    let dash_cycle = dash_on + dash_off;
+
+    for i in 1..10u32 {
+        let frac = i as f64 / 10.0;
+        let is_major = i == 5; // 0.5 = center line
+        let color = if is_major { &major_line } else { &minor_line };
+
+        // Vertical gridline
+        let gx = (w as f64 * frac) as u32;
+        if gx < w {
+            for y in 0..h {
+                let draw = if is_major { true } else { (y % dash_cycle) < dash_on };
+                if draw {
+                    blend_pixel(img.get_pixel_mut(gx, y), color);
+                    if gx + 1 < w {
+                        blend_pixel(img.get_pixel_mut(gx + 1, y), color);
+                    }
+                }
+            }
+        }
+
+        // Horizontal gridline
+        let gy = (h as f64 * frac) as u32;
+        if gy < h {
+            for x in 0..w {
+                let draw = if is_major { true } else { (x % dash_cycle) < dash_on };
+                if draw {
+                    blend_pixel(img.get_pixel_mut(x, gy), color);
+                    if gy + 1 < h {
+                        blend_pixel(img.get_pixel_mut(x, gy + 1), color);
+                    }
+                }
+            }
+        }
+    }
 
     // ── Edge tick marks + labels at 0.1 intervals ─────────────────
     for i in 1..10u32 {
         let label = format!("0.{}", i);
 
-        // Top edge: vertical tick + label below
+        // Top edge
         let tx = (w as f64 * i as f64 / 10.0) as u32;
         for dy in 0..tick_len {
             for dt in 0..tick_thickness {
@@ -202,7 +243,7 @@ fn draw_grid(img: &mut image::RgbaImage) {
         }
         draw_text(img, &label, tx as i32 - 6, (tick_len + 2) as i32, &fg_color, &shadow_color);
 
-        // Bottom edge: vertical tick + label above
+        // Bottom edge
         for dy in 0..tick_len {
             for dt in 0..tick_thickness {
                 let px = tx.saturating_add(dt);
@@ -214,7 +255,7 @@ fn draw_grid(img: &mut image::RgbaImage) {
         }
         draw_text(img, &label, tx as i32 - 6, (h - tick_len - 14) as i32, &fg_color, &shadow_color);
 
-        // Left edge: horizontal tick + label right
+        // Left edge
         let ty = (h as f64 * i as f64 / 10.0) as u32;
         for dx in 0..tick_len {
             for dt in 0..tick_thickness {
@@ -226,7 +267,7 @@ fn draw_grid(img: &mut image::RgbaImage) {
         }
         draw_text(img, &label, (tick_len + 2) as i32, ty as i32 - 5, &fg_color, &shadow_color);
 
-        // Right edge: horizontal tick + label left
+        // Right edge
         for dx in 0..tick_len {
             for dt in 0..tick_thickness {
                 let px = w.saturating_sub(1 + dx);
@@ -240,62 +281,27 @@ fn draw_grid(img: &mut image::RgbaImage) {
         draw_text(img, &label, (w as i32) - tick_len as i32 - 2 - label_w, ty as i32 - 5, &fg_color, &shadow_color);
     }
 
-    // ── Dashed major gridlines at 0.25 intervals ──────────────────
-    let dash_on: u32 = 4;
-    let dash_off: u32 = 8;
-    let dash_cycle = dash_on + dash_off;
-
-    for &frac in &[0.25f64, 0.5, 0.75] {
-        // Vertical dashed line
-        let gx = (w as f64 * frac) as u32;
-        if gx < w {
-            for y in 0..h {
-                if (y % dash_cycle) < dash_on {
-                    blend_pixel(img.get_pixel_mut(gx, y), &line_color);
-                    if gx + 1 < w {
-                        blend_pixel(img.get_pixel_mut(gx + 1, y), &line_color);
-                    }
-                }
-            }
-        }
-
-        // Horizontal dashed line
-        let gy = (h as f64 * frac) as u32;
-        if gy < h {
-            for x in 0..w {
-                if (x % dash_cycle) < dash_on {
-                    blend_pixel(img.get_pixel_mut(x, gy), &line_color);
-                    if gy + 1 < h {
-                        blend_pixel(img.get_pixel_mut(x, gy + 1), &line_color);
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Coordinate labels at major intersections ──────────────────
-    // 9 intersections: (25,25), (25,50), ..., (75,75)
-    for &fy in &[0.25f64, 0.5, 0.75] {
-        for &fx in &[0.25f64, 0.5, 0.75] {
+    // ── Coordinate labels at 0.2 intersections (25 points) ────────
+    for yi in 1..5u32 {
+        for xi in 1..5u32 {
+            let fx = xi as f64 * 0.2;
+            let fy = yi as f64 * 0.2;
             let cx = (w as f64 * fx) as i32;
             let cy = (h as f64 * fy) as i32;
-            let label = format!("{},{}", (fx * 100.0) as u32, (fy * 100.0) as u32);
+            // Use decimal format: ".2,.4" — compact but unambiguous
+            let label = format!(".{},{}", xi * 2, yi * 2);
             let label_px_w = (label.len() as u32) * 7 + 4;
             let label_px_h: u32 = 14;
 
-            // Background rectangle
             fill_rect(img, cx + 3, cy + 3, label_px_w, label_px_h, &bg_color);
-            // Text
             draw_text(img, &label, cx + 5, cy + 5, &fg_color, &shadow_color);
         }
     }
 
     // ── Corner orientation labels ─────────────────────────────────
-    // "0,0" at top-left
     fill_rect(img, 2, 2, 32, 14, &bg_color);
     draw_text(img, "0,0", 4, 4, &fg_color, &shadow_color);
 
-    // "1,1" at bottom-right
     let br_x = w as i32 - 34;
     let br_y = h as i32 - 16;
     fill_rect(img, br_x, br_y, 32, 14, &bg_color);

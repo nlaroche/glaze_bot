@@ -8,9 +8,24 @@
     StampIcon,
   } from '@glazebot/shared-types';
   import Button from '$lib/components/ui/Button.svelte';
-  import { SliderInput } from '@glazebot/shared-ui';
+  import {
+    SliderInput,
+    ArrowRenderer,
+    CircleRenderer,
+    HighlightRectRenderer,
+    FreehandPathRenderer,
+    StampRenderer,
+  } from '@glazebot/shared-ui';
   import Select from '$lib/components/ui/Select.svelte';
   import TextInput from '$lib/components/ui/TextInput.svelte';
+
+  interface Props {
+    animationSpeed?: number;
+    strokeWidth?: number;
+    dropShadow?: boolean;
+  }
+
+  let { animationSpeed = 1.0, strokeWidth = 3, dropShadow = true }: Props = $props();
 
   // ── Primitive categories ─────────────────────────────────────────
   const CATEGORIES: { label: string; primitives: VisualPrimitive[] }[] = [
@@ -312,34 +327,33 @@
             {#key previewKey}
               <div class="preview-overlay">
                 {#if previewCommand.primitive === 'arrow'}
-                  {@const ax1 = previewCommand.from.x * 100}
-                  {@const ay1 = previewCommand.from.y * 100}
-                  {@const ax2 = previewCommand.to.x * 100}
-                  {@const ay2 = previewCommand.to.y * 100}
-                  {@const aRad = Math.atan2(ay2 - ay1, ax2 - ax1)}
-                  {@const wLen = (previewCommand.thickness || 3) * 1.2}
-                  {@const splay = Math.PI / 6}
-                  {@const wlx = ax2 - wLen * Math.cos(aRad - splay)}
-                  {@const wly = ay2 - wLen * Math.sin(aRad - splay)}
-                  {@const wrx = ax2 - wLen * Math.cos(aRad + splay)}
-                  {@const wry = ay2 - wLen * Math.sin(aRad + splay)}
                   <svg class="preview-svg">
-                    <line x1="{ax1}%" y1="{ay1}%" x2="{ax2}%" y2="{ay2}%" stroke={previewCommand.color} stroke-width={previewCommand.thickness} stroke-linecap="round" class="draw-line" />
-                    <line x1="{ax2}%" y1="{ay2}%" x2="{wlx}%" y2="{wly}%" stroke={previewCommand.color} stroke-width={previewCommand.thickness} stroke-linecap="round" class="draw-whisker" />
-                    <line x1="{ax2}%" y1="{ay2}%" x2="{wrx}%" y2="{wry}%" stroke={previewCommand.color} stroke-width={previewCommand.thickness} stroke-linecap="round" class="draw-whisker" />
-                    {#if previewCommand.label}
-                      <text x="{(ax1 + ax2) / 2}%" y="{(ay1 + ay2) / 2 - 2}%" fill={previewCommand.color} font-size="14" font-weight="bold" text-anchor="middle" class="draw-label" style="text-shadow: 0 1px 4px rgba(0,0,0,0.8);">{previewCommand.label}</text>
-                    {/if}
+                    <defs>
+                      <filter id="annotation-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.7)" />
+                      </filter>
+                    </defs>
+                    <ArrowRenderer command={previewCommand} {animationSpeed} {strokeWidth} {dropShadow} />
                   </svg>
 
                 {:else if previewCommand.primitive === 'circle'}
                   <svg class="preview-svg">
-                    <circle cx="{previewCommand.center.x * 100}%" cy="{previewCommand.center.y * 100}%" r="{previewCommand.radius * 100}%" stroke={previewCommand.color} stroke-width={previewCommand.thickness} fill={previewCommand.fill_opacity ? previewCommand.color : 'none'} fill-opacity={previewCommand.fill_opacity ?? 0} stroke-linecap="round" class="draw-circle" />
+                    <defs>
+                      <filter id="annotation-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.7)" />
+                      </filter>
+                    </defs>
+                    <CircleRenderer command={previewCommand} {animationSpeed} {strokeWidth} {dropShadow} />
                   </svg>
 
                 {:else if previewCommand.primitive === 'highlight_rect'}
                   <svg class="preview-svg">
-                    <rect x="{previewCommand.origin.x * 100}%" y="{previewCommand.origin.y * 100}%" width="{previewCommand.width * 100}%" height="{previewCommand.height * 100}%" stroke={previewCommand.color} stroke-width="2" fill={previewCommand.color} fill-opacity={previewCommand.fill_opacity ?? 0.15} rx="4" stroke-linecap="round" class="draw-rect" />
+                    <defs>
+                      <filter id="annotation-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.7)" />
+                      </filter>
+                    </defs>
+                    <HighlightRectRenderer command={previewCommand} {animationSpeed} {strokeWidth} {dropShadow} />
                   </svg>
 
                 {:else if previewCommand.primitive === 'floating_text'}
@@ -349,8 +363,7 @@
                   <div class="preview-flash" style="background: {previewCommand.color}; --intensity: {previewCommand.intensity};"></div>
 
                 {:else if previewCommand.primitive === 'stamp'}
-                  {@const icons = { checkmark: '\u2705', crossmark: '\u274C', question: '\u2753', exclamation: '\u2757', crown: '\uD83D\uDC51', trophy: '\uD83C\uDFC6', target: '\uD83C\uDFAF', sword: '\u2694\uFE0F', shield: '\uD83D\uDEE1\uFE0F', potion: '\uD83E\uDDEA' }}
-                  <div class="preview-stamp" style="left: {previewCommand.position.x * 100}%; top: {previewCommand.position.y * 100}%; font-size: {Math.min(previewCommand.size, 64)}px; transform: translate(-50%, -50%) rotate({previewCommand.rotation ?? 0}deg);">{icons[previewCommand.icon] ?? '\u2753'}</div>
+                  <StampRenderer command={previewCommand} {animationSpeed} />
 
                 {:else if previewCommand.primitive === 'emote_burst'}
                   {@const emojis = { heart: '\u2764\uFE0F', fire: '\uD83D\uDD25', skull: '\uD83D\uDC80', star: '\u2B50', laugh: '\uD83D\uDE02', cry: '\uD83D\uDE2D', rage: '\uD83D\uDE21', thumbsup: '\uD83D\uDC4D', thumbsdown: '\uD83D\uDC4E', sparkle: '\u2728' }}
@@ -367,9 +380,7 @@
                   </div>
 
                 {:else if previewCommand.primitive === 'freehand_path'}
-                  <svg class="preview-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <path d="M 20 50 L 35 30 L 50 50 L 65 30 L 80 50{previewCommand.close_path ? ' Z' : ''}" stroke={previewCommand.color} stroke-width={previewCommand.thickness / 2} fill={previewCommand.close_path ? previewCommand.color : 'none'} fill-opacity="0.15" stroke-linecap="round" stroke-linejoin="round" class="draw-path" />
-                  </svg>
+                  <FreehandPathRenderer command={previewCommand} {animationSpeed} {strokeWidth} {dropShadow} />
                 {/if}
               </div>
             {/key}
@@ -610,39 +621,7 @@
     height: 100%;
   }
 
-  /* ── Draw-in Animations ─────────────────────────────────────── */
-  .draw-line {
-    stroke-dasharray: 1000;
-    stroke-dashoffset: 1000;
-    animation: draw-stroke 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  .draw-circle {
-    stroke-dasharray: 1000;
-    stroke-dashoffset: 1000;
-    animation: draw-stroke 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  .draw-rect {
-    stroke-dasharray: 2000;
-    stroke-dashoffset: 2000;
-    animation: draw-stroke 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  .draw-path {
-    stroke-dasharray: 500;
-    stroke-dashoffset: 500;
-    animation: draw-stroke 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  .draw-whisker {
-    stroke-dasharray: 200;
-    stroke-dashoffset: 200;
-    animation: draw-stroke 0.15s cubic-bezier(0.4, 0, 0.2, 1) 0.35s forwards;
-  }
-  .draw-label {
-    animation: fade-in 0.3s ease-out 0.4s both;
-  }
-  @keyframes draw-stroke { to { stroke-dashoffset: 0; } }
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-
-  /* ── Other Preview Animations ───────────────────────────────── */
+  /* ── Preview Animations ──────────────────────────────────────── */
   .preview-floating-text {
     position: absolute;
     top: 50%; left: 50%;
@@ -658,12 +637,7 @@
   .preview-floating-text.anim-slam { animation: prev-slam 2s ease-out forwards; }
 
   .preview-flash { position: absolute; inset: 0; animation: prev-flash 0.6s ease-out forwards; }
-  .preview-stamp {
-    position: absolute;
-    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
-    animation: prev-stamp-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-    line-height: 1;
-  }
+  /* stamp is rendered by shared StampRenderer */
   .preview-burst { position: absolute; transform: translate(-50%, -50%); }
   .burst-particle {
     position: absolute;
@@ -719,11 +693,7 @@
     30% { opacity: var(--intensity, 0.3); }
     100% { opacity: 0; }
   }
-  @keyframes prev-stamp-pop {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    60% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  }
+  /* stamp keyframes handled by shared StampRenderer */
   @keyframes prev-burst {
     0% { transform: translate(0, 0) scale(0); opacity: 0; }
     15% { opacity: 1; transform: scale(1); }

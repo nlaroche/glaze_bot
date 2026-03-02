@@ -1,10 +1,28 @@
-import type { VisualCommand } from '@glazebot/shared-types';
+import type { VisualCommand, VisualConfig } from '@glazebot/shared-types';
 
 /** Active visual commands with expiry tracking */
 interface ActiveVisual {
   command: VisualCommand;
   expiresAt: number;
   pinned: boolean;
+}
+
+const DEFAULT_VISUAL_CONFIG: VisualConfig = {
+  animationSpeed: 1.0,
+  strokeWidth: 3,
+  dropShadow: true,
+};
+
+let visualConfig = $state<VisualConfig>({ ...DEFAULT_VISUAL_CONFIG });
+
+/** Update the visual config (call when gacha_config is loaded) */
+export function setVisualConfig(config: Partial<VisualConfig>) {
+  visualConfig = { ...DEFAULT_VISUAL_CONFIG, ...config };
+}
+
+/** Get current visual config (reactive) */
+export function getVisualConfig(): VisualConfig {
+  return visualConfig;
 }
 
 /** Capture bounds for coordinate transformation (window captures) */
@@ -108,6 +126,11 @@ export function pushVisuals(commands: VisualCommand[]) {
 
     // Transform coordinates from capture-space to screen-space
     cmd = transformVisual(cmd);
+
+    // Apply visual config overrides
+    if (visualConfig.animationSpeed !== 1.0 && cmd.duration_ms) {
+      cmd = { ...cmd, duration_ms: Math.round(cmd.duration_ms * visualConfig.animationSpeed) };
+    }
 
     const pinned = 'pinned' in cmd ? !!(cmd as any).pinned : false;
 
