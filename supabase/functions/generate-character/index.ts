@@ -168,12 +168,15 @@ async function generateSpriteGemini(
 
   const geminiData = await geminiRes.json();
   const parts = geminiData.candidates?.[0]?.content?.parts ?? [];
-  const imagePart = parts.find(
-    (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData?.mimeType?.startsWith("image/"),
+  // deno-lint-ignore no-explicit-any
+  const imagePart = parts.find((p: any) =>
+    (p.inline_data ?? p.inlineData)?.mime_type?.startsWith("image/") ||
+    (p.inline_data ?? p.inlineData)?.mimeType?.startsWith("image/"),
   );
-  if (!imagePart?.inlineData?.data) return null;
+  const imageData = imagePart?.inline_data ?? imagePart?.inlineData;
+  if (!imageData?.data) return null;
 
-  const imageBytes = Uint8Array.from(atob(imagePart.inlineData.data), (c) => c.charCodeAt(0));
+  const imageBytes = Uint8Array.from(atob(imageData.data), (c) => c.charCodeAt(0));
   const r2Key = characterPortraitKey(characterId);
   return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
 }

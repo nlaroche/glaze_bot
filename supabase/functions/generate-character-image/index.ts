@@ -118,19 +118,22 @@ async function generateWithGemini(
 
   const geminiData = await geminiRes.json();
 
-  // Extract image from response parts
+  // Extract image from response parts (REST API returns snake_case keys)
   const candidates = geminiData.candidates ?? [];
   const parts = candidates[0]?.content?.parts ?? [];
   const imagePart = parts.find(
-    (p: { inlineData?: { mimeType: string; data: string } }) => p.inlineData?.mimeType?.startsWith("image/"),
+    // deno-lint-ignore no-explicit-any
+    (p: any) => (p.inline_data ?? p.inlineData)?.mime_type?.startsWith("image/") ||
+                (p.inline_data ?? p.inlineData)?.mimeType?.startsWith("image/"),
   );
 
-  if (!imagePart?.inlineData?.data) {
+  const imageData = imagePart?.inline_data ?? imagePart?.inlineData;
+  if (!imageData?.data) {
     console.error("[generate-character-image] Gemini response had no image data:", JSON.stringify(geminiData).slice(0, 500));
     throw new Error("Gemini returned no image data");
   }
 
-  const imageBytes = Uint8Array.from(atob(imagePart.inlineData.data), (c) => c.charCodeAt(0));
+  const imageBytes = Uint8Array.from(atob(imageData.data), (c) => c.charCodeAt(0));
 
   return {
     imageBytes,
