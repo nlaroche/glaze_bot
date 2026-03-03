@@ -77,6 +77,19 @@ export async function getSession(): Promise<Session | null> {
   return data.session;
 }
 
+/** Fetch the current user's role from public.users. Returns 'user' if not found. */
+export async function getUserRole(): Promise<string> {
+  const supabase = createSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 'user';
+  const { data } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .single() as { data: { role?: string } | null };
+  return data?.role ?? 'user';
+}
+
 export function onAuthStateChange(
   callback: (event: AuthChangeEvent, session: Session | null) => void,
 ) {

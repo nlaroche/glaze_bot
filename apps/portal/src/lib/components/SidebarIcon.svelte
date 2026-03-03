@@ -1,6 +1,6 @@
 <script lang="ts">
   interface Props {
-    name: 'home' | 'pack' | 'collection' | 'admin' | 'logs' | 'logout';
+    name: 'home' | 'pack' | 'collection' | 'admin' | 'logs' | 'logout' | 'billing';
     size?: number;
   }
 
@@ -39,6 +39,9 @@
     <line x1="4" y1="10" x2="20" y2="10" />
     <line x1="4" y1="14" x2="16" y2="14" />
     <line x1="4" y1="18" x2="12" y2="18" />
+  {:else if name === 'billing'}
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <line x1="2" y1="10" x2="22" y2="10" />
   {:else if name === 'logout'}
     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
     <polyline points="16 17 21 12 16 7" />

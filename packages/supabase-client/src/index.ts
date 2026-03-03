@@ -9,6 +9,7 @@ export {
   verifyEmailOtp,
   signOut,
   getSession,
+  getUserRole,
   onAuthStateChange,
 } from "./auth.js";
 export type { Session, User, AuthChangeEvent } from "@supabase/supabase-js";

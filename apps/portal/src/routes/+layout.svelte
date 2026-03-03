@@ -22,10 +22,14 @@
     }
   });
 
-  const navItems: { href: string; label: string; icon: 'home' | 'pack' | 'collection' | 'admin' | 'logs' }[] = [
+  type NavIcon = 'home' | 'billing' | 'admin' | 'logs' | 'logout';
+
+  const mainNav: { href: string; label: string; icon: NavIcon }[] = [
     { href: '/', label: 'Home', icon: 'home' },
-    { href: '/pack', label: 'Packs', icon: 'pack' },
-    { href: '/collection', label: 'Collection', icon: 'collection' },
+    { href: '/billing', label: 'Billing', icon: 'billing' },
+  ];
+
+  const adminNav: { href: string; label: string; icon: NavIcon }[] = [
     { href: '/settings', label: 'Admin', icon: 'admin' },
     { href: '/logs', label: 'Logs', icon: 'logs' },
   ];
@@ -52,32 +56,52 @@
     <nav class="sidebar" data-testid="portal-sidebar">
       <div class="sidebar-brand">
         <span class="brand-title">GlazeBot</span>
-        <span class="brand-tagline">Admin Portal</span>
       </div>
+
       <div class="nav-items">
-        {#each navItems as item}
+        {#each mainNav as item}
           <a
             href={item.href}
             class="nav-link"
             class:active={isActive(item.href)}
             data-testid="nav-{item.label.toLowerCase()}"
-            title={item.label}
           >
             <span class="nav-icon">
-              <SidebarIcon name={item.icon} size={20} />
+              <SidebarIcon name={item.icon} size={22} />
             </span>
             <span class="nav-label">{item.label}</span>
           </a>
         {/each}
       </div>
+
+      {#if auth.isAdmin}
+        <div class="nav-section">
+          <span class="nav-section-label">Admin</span>
+          <div class="nav-items">
+            {#each adminNav as item}
+              <a
+                href={item.href}
+                class="nav-link"
+                class:active={isActive(item.href)}
+                data-testid="nav-{item.label.toLowerCase()}"
+              >
+                <span class="nav-icon">
+                  <SidebarIcon name={item.icon} size={22} />
+                </span>
+                <span class="nav-label">{item.label}</span>
+              </a>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       <div class="nav-bottom">
         <button
           class="nav-link logout-link"
           onclick={() => import('@glazebot/supabase-client').then(m => m.signOut())}
-          title="Sign out"
         >
           <span class="nav-icon">
-            <SidebarIcon name="logout" size={20} />
+            <SidebarIcon name="logout" size={22} />
           </span>
           <span class="nav-label">Sign Out</span>
         </button>
@@ -119,7 +143,7 @@
 
   /* ─── Sidebar ─── */
   .sidebar {
-    width: 220px;
+    width: 230px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -132,76 +156,102 @@
 
   .sidebar-brand {
     display: flex;
-    flex-direction: column;
-    padding: var(--space-5) var(--space-5) var(--space-4);
+    align-items: center;
+    padding: var(--space-6) var(--space-5);
     border-bottom: 1px solid var(--color-border);
-    margin-bottom: var(--space-1);
   }
 
   .brand-title {
     font-family: var(--font-brand);
-    font-size: var(--font-xl);
+    font-size: var(--font-3xl);
     font-weight: 400;
     color: var(--color-pink);
-    letter-spacing: 2px;
+    letter-spacing: 2.5px;
   }
 
-  .brand-tagline {
-    font-family: var(--font-brand);
-    font-size: var(--font-xs);
-    font-weight: 400;
-    color: var(--color-text-muted);
-    letter-spacing: 1.5px;
-    margin-top: var(--space-1);
-  }
-
+  /* ─── Nav Items ─── */
   .nav-items {
     display: flex;
     flex-direction: column;
     gap: var(--space-0-5);
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-3) var(--space-3);
   }
 
-  .nav-bottom {
-    margin-top: auto;
-    padding: var(--space-2);
+  .nav-section {
+    padding-top: var(--space-3);
     border-top: 1px solid var(--color-border);
+    margin: var(--space-2) var(--space-3) 0;
+  }
+
+  .nav-section-label {
+    display: block;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 0 var(--space-4) var(--space-2);
+  }
+
+  .nav-section .nav-items {
+    padding: 0;
   }
 
   .nav-link {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: var(--space-2-5);
-    padding: var(--space-2) var(--space-2-5);
-    border-radius: var(--radius-lg);
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: 0;
     color: var(--color-text-secondary);
     text-decoration: none;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     font-weight: 500;
     cursor: pointer;
-    transition: all var(--transition-base);
+    transition: color var(--transition-slow) ease;
     border: none;
     background: none;
     font-family: inherit;
     width: 100%;
   }
 
+  /* Left-edge indicator line */
+  .nav-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    border-radius: 0 2px 2px 0;
+    background: var(--color-teal);
+    transform: translateY(-50%);
+    transition: height var(--transition-slow) ease;
+  }
+
   .nav-link:hover {
-    background: var(--teal-a12);
     color: var(--color-text-primary);
   }
 
+  .nav-link:hover::before {
+    height: 20px;
+  }
+
   .nav-link.active {
-    background: var(--teal-a20);
     color: var(--color-teal);
+  }
+
+  .nav-link.active::before {
+    height: 28px;
   }
 
   .nav-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     flex-shrink: 0;
   }
 
@@ -209,9 +259,19 @@
     white-space: nowrap;
   }
 
+  /* ─── Bottom ─── */
+  .nav-bottom {
+    margin-top: auto;
+    padding: var(--space-3);
+    border-top: 1px solid var(--color-border);
+  }
+
   .logout-link:hover {
-    background: var(--error-a12);
     color: var(--color-error);
+  }
+
+  .logout-link:hover::before {
+    background: var(--color-error);
   }
 
   /* ─── Content ─── */

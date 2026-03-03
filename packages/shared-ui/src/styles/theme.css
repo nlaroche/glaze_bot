@@ -19,8 +19,8 @@
   --color-sidebar: #070a12;
   --color-chrome: rgba(10, 22, 42, 0.35);
   --color-chrome-hover: rgba(255, 255, 255, 0.08);
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-subtle: rgba(255, 255, 255, 0.03);
+  --color-border: rgba(255, 255, 255, 0.10);
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
 
   /* Text */
   --color-text-primary: #E8ECF1;
@@ -189,7 +189,7 @@
 
   /* ─── Composite: Panel ─── */
   --panel-bg: rgba(255, 255, 255, 0.02);
-  --panel-border: rgba(255, 255, 255, 0.06);
+  --panel-border: rgba(255, 255, 255, 0.10);
   --panel-radius: 12px;
   --panel-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
 
