@@ -2,7 +2,7 @@
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-session-id, x-request-id",
 };
 
 /** Handle OPTIONS preflight — call at the top of every Deno.serve handler */

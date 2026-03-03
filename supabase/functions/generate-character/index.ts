@@ -10,6 +10,7 @@ import {
   characterTaglineKey,
   rollTokenPools,
   buildDirective,
+  ActivityLogger,
 } from "../_shared/mod.ts";
 import type { TokenPools } from "../_shared/mod.ts";
 
@@ -118,7 +119,11 @@ async function generateSpritePixelLab(
     body: JSON.stringify({ description: prompt, image_size: { width: 128, height: 128 }, no_background: true }),
   });
 
-  if (!pixelRes.ok) return null;
+  if (!pixelRes.ok) {
+    const body = await pixelRes.text().catch(() => "");
+    console.error(`[generateSpritePixelLab] ${pixelRes.status} ${pixelRes.statusText}: ${body}`);
+    return null;
+  }
 
   const pixelData = await pixelRes.json();
   const base64Str: string = pixelData.image?.base64 ?? "";
@@ -155,7 +160,11 @@ async function generateSpriteGemini(
     body: JSON.stringify(geminiRequest),
   });
 
-  if (!geminiRes.ok) return null;
+  if (!geminiRes.ok) {
+    const body = await geminiRes.text().catch(() => "");
+    console.error(`[generateSpriteGemini] ${geminiRes.status} ${geminiRes.statusText}: ${body}`);
+    return null;
+  }
 
   const geminiData = await geminiRes.json();
   const parts = geminiData.candidates?.[0]?.content?.parts ?? [];
@@ -169,27 +178,61 @@ async function generateSpriteGemini(
   return await uploadToPublicBucket(r2Key, imageBytes, "image/png");
 }
 
-async function generateSprite(
+/** Generate sprite with retry (up to 2 attempts, 1s backoff). */
+async function generateSpriteWithRetry(
   characterId: string,
   description: string,
   rarity: string,
   config: Record<string, unknown>,
+  logger: ActivityLogger,
 ): Promise<string | null> {
   const imageProvider = (config.imageProvider as string) ?? "pixellab";
   const imageModel = config.imageModel as string | undefined;
   const imageConfig = config.imageConfig as { imageSize?: string; aspectRatio?: string } | undefined;
+  const maxAttempts = 2;
 
-  try {
-    if (imageProvider === "gemini") {
-      const prompt = buildGeminiSpritePrompt(description, rarity);
-      return await generateSpriteGemini(characterId, prompt, imageModel, imageConfig);
-    } else {
-      const prompt = buildSpritePrompt(description, rarity);
-      return await generateSpritePixelLab(characterId, prompt);
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    logger.log("sprite.generate.start", { attempt, provider: imageProvider });
+
+    try {
+      let url: string | null = null;
+      if (imageProvider === "gemini") {
+        const prompt = buildGeminiSpritePrompt(description, rarity);
+        url = await generateSpriteGemini(characterId, prompt, imageModel, imageConfig);
+      } else {
+        const prompt = buildSpritePrompt(description, rarity);
+        url = await generateSpritePixelLab(characterId, prompt);
+      }
+
+      if (url) {
+        logger.log("sprite.generate.success", { attempt, provider: imageProvider, url });
+        return url;
+      }
+
+      // null return means API returned non-ok or no image data
+      const isLast = attempt === maxAttempts;
+      if (isLast) {
+        logger.error("sprite.generate.fail", { attempt, provider: imageProvider, reason: "null result" });
+      } else {
+        logger.warn("sprite.generate.fail", { attempt, provider: imageProvider, reason: "null result" });
+      }
+    } catch (err) {
+      const isLast = attempt === maxAttempts;
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (isLast) {
+        logger.error("sprite.generate.fail", { attempt, provider: imageProvider, error: errMsg });
+      } else {
+        logger.warn("sprite.generate.fail", { attempt, provider: imageProvider, error: errMsg });
+      }
     }
-  } catch {
-    return null;
+
+    // Backoff before retry (skip on last attempt)
+    if (attempt < maxAttempts) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
+
+  return null;
 }
 
 async function generateCharacter(
@@ -280,6 +323,9 @@ Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
+  const serviceClient = getServiceClient();
+  let logger: ActivityLogger | null = null;
+
   try {
     const auth = await getRequestUser(req);
     if ("error" in auth) return auth.error;
@@ -293,7 +339,11 @@ Deno.serve(async (req: Request) => {
       // Default to common if no body
     }
 
-    const serviceClient = getServiceClient();
+    const requestId = crypto.randomUUID();
+    logger = new ActivityLogger(serviceClient, auth.user.id, {
+      scope: "character",
+      requestId,
+    });
 
     // Fetch gacha config
     const { data: configRow, error: configError } = await serviceClient
@@ -307,7 +357,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const config = configRow.config as Record<string, unknown>;
-    const character = await generateCharacter(rarity, config);
+
+    // Generate character text
+    let character: Record<string, unknown>;
+    try {
+      character = await generateCharacter(rarity, config);
+      logger.log("text.generate.success", {
+        rarity,
+        name: character.name,
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error("text.generate.fail", { rarity, error: errMsg });
+      await logger.flush();
+      throw err;
+    }
 
     // Assign random voice from Fish Audio
     const voices = await fetchVoices();
@@ -317,6 +381,9 @@ Deno.serve(async (req: Request) => {
       const pick = voices[Math.floor(Math.random() * voices.length)];
       voiceId = pick.id;
       voiceName = pick.name;
+      logger.log("voice.assign.success", { voiceId, voiceName });
+    } else {
+      logger.warn("voice.assign.skip", { reason: "no voices available" });
     }
 
     const tagline = (character.tagline as string) || "";
@@ -339,14 +406,22 @@ Deno.serve(async (req: Request) => {
       .select()
       .single();
 
-    if (insertError) return errorResponse(insertError.message);
+    if (insertError) {
+      logger.error("db.insert.fail", { error: insertError.message });
+      await logger.flush();
+      return errorResponse(insertError.message);
+    }
 
-    // Generate sprite image (non-blocking — character is valid without it)
-    const avatarUrl = await generateSprite(
+    logger.setCharacterId(inserted.id);
+    logger.log("db.insert.success", { characterId: inserted.id });
+
+    // Generate sprite image with retry (up to 2 attempts)
+    const avatarUrl = await generateSpriteWithRetry(
       inserted.id,
       (character.description as string) ?? "",
       rarity,
       config,
+      logger,
     );
 
     const updateFields: Record<string, unknown> = {};
@@ -380,9 +455,15 @@ Deno.serve(async (req: Request) => {
           );
           updateFields.tagline_url = taglineUrl;
           inserted.tagline_url = taglineUrl;
+          logger.log("tts.tagline.success", { taglineUrl });
+        } else {
+          const body = await ttsRes.text().catch(() => "");
+          logger.error("tts.tagline.fail", { status: ttsRes.status, body });
         }
       } catch (ttsErr) {
+        const errMsg = ttsErr instanceof Error ? ttsErr.message : String(ttsErr);
         console.error("[generate-character] TTS/R2 upload failed:", ttsErr);
+        logger.error("tts.tagline.fail", { error: errMsg });
       }
     }
 
@@ -393,9 +474,13 @@ Deno.serve(async (req: Request) => {
         .eq("id", inserted.id);
     }
 
+    await logger.flush();
     return jsonResponse(inserted);
   } catch (err) {
     console.error("[generate-character]", err);
+    if (logger) {
+      await logger.flush();
+    }
     const message = err instanceof Error ? err.message : "Internal error";
     return errorResponse(message);
   }

@@ -132,6 +132,8 @@ fn main() {
             overlay::show_overlay,
             overlay::hide_overlay,
             overlay::set_overlay_interactive,
+            overlay::start_overlay_guard,
+            overlay::stop_overlay_guard,
             close_tray_menu,
             tray_menu_action,
             ptt::start_ptt_listener,

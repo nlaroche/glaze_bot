@@ -1,12 +1,42 @@
 <script lang="ts">
   import { PackOpener } from '@glazebot/shared-ui';
-  import type { GachaCharacter } from '@glazebot/shared-types';
+  import type { GachaCharacter, CharacterRarity } from '@glazebot/shared-types';
   import { openBoosterPack } from '@glazebot/supabase-client';
 
   let error = $state('');
   let collectionComplete = $state(false);
+  let demoMode = $state(false);
+
+  const rarities: CharacterRarity[] = ['common', 'rare', 'epic', 'legendary'];
+
+  function makeMockCharacter(index: number): GachaCharacter {
+    const rarity = rarities[Math.floor(Math.random() * rarities.length)];
+    const names = ['Pixel', 'Neon', 'Blitz', 'Surge', 'Echo', 'Drift', 'Glitch', 'Flux'];
+    const name = names[Math.floor(Math.random() * names.length)];
+    return {
+      id: `demo-${Date.now()}-${index}`,
+      user_id: 'demo',
+      name: `${name} ${rarity[0].toUpperCase()}${rarity.slice(1)}`,
+      description: `A ${rarity} demo character for testing animations.`,
+      backstory: 'Born in the demo realm.',
+      system_prompt: 'You are a demo character.',
+      rarity,
+      avatar_seed: `demo-${index}`,
+      is_active: true,
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
+  }
 
   async function handleRequestOpen(): Promise<{ characters: GachaCharacter[]; images: Record<string, string> }> {
+    if (demoMode) {
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
+      return {
+        characters: [makeMockCharacter(0), makeMockCharacter(1), makeMockCharacter(2)],
+        images: {},
+      };
+    }
+
     error = '';
     const result = await openBoosterPack();
 
@@ -39,6 +69,11 @@
   {#if error}
     <div class="error-toast">{error}</div>
   {/if}
+
+  <label class="demo-toggle">
+    <input type="checkbox" bind:checked={demoMode} />
+    Demo mode
+  </label>
 </div>
 
 <style>
@@ -82,5 +117,22 @@
     padding: 8px 16px;
     border-radius: 8px;
     font-size: 0.9rem;
+  }
+
+  .demo-toggle {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .demo-toggle input {
+    accent-color: var(--color-pink, #FDB5CE);
   }
 </style>

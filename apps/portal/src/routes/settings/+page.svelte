@@ -1262,9 +1262,16 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────
+  let mounted = false;
   $effect(() => {
-    loadConfig();
-    loadCharacters();
+    if (!mounted) {
+      mounted = true;
+      loadConfig();
+      loadCharacters();
+    }
+  });
+
+  $effect(() => {
     if (activeTab === 'voices') { loadFishVoices(); loadVoiceUsageMap(); }
   });
 

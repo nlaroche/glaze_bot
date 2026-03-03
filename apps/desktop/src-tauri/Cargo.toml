@@ -18,6 +18,15 @@ image = { version = "0.25", default-features = false, features = ["jpeg"] }
 cpal = "0.15"
 whisper-rs = "0.15"
 
+raw-window-handle = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Foundation",
+  "Win32_UI_Shell",
+] }
+
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]

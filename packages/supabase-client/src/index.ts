@@ -47,5 +47,8 @@ export {
   listConfigSnapshots,
   updateConfigSnapshot,
   deleteConfigSnapshot,
+  getLogsByCharacter,
+  getLogsBySession,
+  getRecentLogs,
 } from "./gacha.js";
-export type { FishVoice, TokenPool, TokenPools, TokenPoolEntry, TokenRoll, ConfigSnapshot } from "./gacha.js";
+export type { FishVoice, TokenPool, TokenPools, TokenPoolEntry, TokenRoll, ConfigSnapshot, ActivityLogEntry } from "./gacha.js";

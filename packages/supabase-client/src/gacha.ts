@@ -524,6 +524,75 @@ export function buildDirective(tokens: TokenRoll): string {
   return "\n\nCHARACTER DIRECTIVE (follow these exactly):\n" + lines.join("\n");
 }
 
+// ─── Activity Logs ─────────────────────────────────────────────────
+
+export interface ActivityLogEntry {
+  id: string;
+  user_id: string;
+  character_id: string | null;
+  session_id: string | null;
+  request_id: string | null;
+  scope: "character" | "session" | "system";
+  event: string;
+  level: "info" | "warn" | "error";
+  data: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** Get activity logs for a specific character */
+export async function getLogsByCharacter(
+  characterId: string,
+  limit = 100,
+): Promise<ActivityLogEntry[]> {
+  // Table added by migration; cast needed until types are regenerated
+  const { data, error } = await (db() as any)
+    .from("activity_log")
+    .select("*")
+    .eq("character_id", characterId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data as unknown as ActivityLogEntry[];
+}
+
+/** Get activity logs for a specific session */
+export async function getLogsBySession(
+  sessionId: string,
+  limit = 100,
+): Promise<ActivityLogEntry[]> {
+  const { data, error } = await (db() as any)
+    .from("activity_log")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data as unknown as ActivityLogEntry[];
+}
+
+/** Get recent activity logs with optional filters */
+export async function getRecentLogs(
+  limit = 100,
+  opts?: { scope?: string; level?: string },
+): Promise<ActivityLogEntry[]> {
+  let query = (db() as any)
+    .from("activity_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (opts?.scope && opts.scope !== "all") {
+    query = query.eq("scope", opts.scope);
+  }
+  if (opts?.level && opts.level !== "all") {
+    query = query.eq("level", opts.level);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data as unknown as ActivityLogEntry[];
+}
+
 // ─── Config Snapshots ──────────────────────────────────────────────
 
 export interface ConfigSnapshot {

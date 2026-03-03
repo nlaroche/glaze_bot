@@ -21,6 +21,7 @@
   let flippedCards: boolean[] = $state([false, false, false]);
   let cardVisible: boolean[] = $state([false, false, false]);
   let legendaryFlash: boolean = $state(false);
+  let legendaryCardIndex: number = $state(-1);
   let screenShake: boolean = $state(false);
   let allFlipped = $derived(flippedCards.every(Boolean));
   let tearProgress = $state(0);
@@ -30,25 +31,19 @@
   let packX = $state(0);
   let packY = $state(0);
   let packRot = $state(0);
-  let packScale = $state(1);
+  let packScaleX = $state(1);
+  let packScaleY = $state(1);
   let rafId: number | null = null;
   let startTime = 0;
+  let prevPackX = 0;
 
-  // Burst debris
-  let burstDebris: { id: number; x: number; y: number; dx: number; dy: number; delay: number; size: number; shape: string; rot: number; color: string }[] = $state([]);
-
-  // Burst rings — dynamic, varied shockwaves
-  let burstRings: { id: number; delay: number; duration: number; size: number; thickness: number; color: string; scaleX: number; scaleY: number; rot: number }[] = $state([]);
+  // Burst bloom — fires after anticipation beat
+  let burstFired = $state(false);
 
   // Wind streaks
   let windStreaks: { id: number; x: number; y: number; angle: number; length: number; speed: number; delay: number; color: string }[] = $state([]);
 
   let debrisIdCounter = 0;
-  const debrisShapes = ['gear', 'bolt', 'spark', 'hex'] as const;
-
-  function randomDebrisShape(): string {
-    return debrisShapes[Math.floor(Math.random() * debrisShapes.length)];
-  }
 
   function pickThreeCards(): GachaCharacter[] {
     const shuffled = [...characters].sort(() => Math.random() - 0.5);
@@ -66,16 +61,23 @@
         packX = 0;
         packY = Math.sin(elapsed * 1.2) * 10;
         packRot = Math.sin(elapsed * 0.8) * 1.5;
-        packScale = 1;
+        packScaleX = 1;
+        packScaleY = 1;
       } else if (phase === 'shake') {
-        // Shake driven by shakeIntensity (set by openPack)
-        const freq = 8 + shakeIntensity * 40;
-        const ampX = shakeIntensity * 10;
-        const ampR = shakeIntensity * 7;
+        // Shake — gentler: lower freq ceiling, smaller amplitude
+        const freq = 6 + shakeIntensity * 22;
+        const ampX = shakeIntensity * 5;
+        const ampR = shakeIntensity * 3.5;
         packX = Math.sin(elapsed * freq) * ampX;
         packY = Math.cos(elapsed * freq * 0.7) * ampX * 0.3;
         packRot = Math.sin(elapsed * freq * 1.1) * ampR;
-        packScale = 1;
+
+        // Squash/stretch from velocity — subtler
+        const velocity = packX - prevPackX;
+        const squashAmount = Math.min(Math.abs(velocity) * 0.003 * shakeIntensity, 0.025);
+        packScaleX = 1 + squashAmount;
+        packScaleY = 1 - squashAmount;
+        prevPackX = packX;
       }
       // tear/burst/reveal: pack is hidden, values don't matter
 
@@ -183,15 +185,19 @@
       requestAnimationFrame(tick);
     });
 
-    // Burst phase
+    // Burst phase — dramatic pause then layered explosion
     phase = 'burst';
-    spawnBurstDebris();
-    await wait(700);
+    burstFired = false;
+    await wait(200); // longer anticipation hold — screen dims, tension builds
+    burstFired = true;
 
-    // Reveal phase
+    // Let the explosion breathe — full bloom plays out ~1.6s total
+    await wait(1000);
+
+    // Reveal phase — cards arrive while outer haze still lingers
     phase = 'reveal';
     for (let i = 0; i < packCards.length; i++) {
-      await wait(280);
+      await wait(350);
       cardVisible[i] = true;
     }
 
@@ -206,10 +212,11 @@
     if (!char) return;
 
     if (char.rarity === 'legendary') {
+      legendaryCardIndex = index;
       legendaryFlash = true;
       screenShake = true;
-      setTimeout(() => { legendaryFlash = false; }, 400);
-      setTimeout(() => { screenShake = false; }, 300);
+      setTimeout(() => { legendaryFlash = false; legendaryCardIndex = -1; }, 1000);
+      setTimeout(() => { screenShake = false; }, 600);
     }
   }
 
@@ -237,78 +244,17 @@
     windStreaks = streaks;
   }
 
-  function spawnBurstDebris() {
-    const colors = ['#FDB5CE', '#3B9797', '#B06AFF', '#FFD700', '#fff', '#89CFF0'];
-    const debris: typeof burstDebris = [];
-    for (let i = 0; i < 35; i++) {
-      const angle = (Math.PI * 2 * i) / 35 + (Math.random() - 0.5) * 0.4;
-      const speed = 120 + Math.random() * 280;
-      debris.push({
-        id: debrisIdCounter++,
-        x: 50,
-        y: 45,
-        dx: Math.cos(angle) * speed,
-        dy: Math.sin(angle) * speed,
-        delay: Math.random() * 0.2,
-        size: 8 + Math.random() * 16,
-        shape: randomDebrisShape(),
-        rot: Math.random() * 360,
-        color: colors[Math.floor(Math.random() * colors.length)],
-      });
-    }
-    burstDebris = debris;
-    setTimeout(() => { burstDebris = []; }, 1600);
-
-    // Spawn shockwave rings — white/near-white only, clean energy pulse
-    const rings: typeof burstRings = [
-      {
-        id: debrisIdCounter++,
-        delay: 0,
-        duration: 0.7,
-        size: 30,
-        thickness: 3,
-        color: 'rgba(255,255,255,0.8)',
-        scaleX: 1,
-        scaleY: 0.95,
-        rot: 0,
-      },
-      {
-        id: debrisIdCounter++,
-        delay: 0.08,
-        duration: 0.85,
-        size: 50,
-        thickness: 1.5,
-        color: 'rgba(255,255,255,0.4)',
-        scaleX: 0.95,
-        scaleY: 1,
-        rot: -5,
-      },
-      {
-        id: debrisIdCounter++,
-        delay: 0.18,
-        duration: 1,
-        size: 40,
-        thickness: 1,
-        color: 'rgba(255,255,255,0.2)',
-        scaleX: 1.05,
-        scaleY: 0.92,
-        rot: 3,
-      },
-    ];
-    burstRings = rings;
-    setTimeout(() => { burstRings = []; }, 1400);
-  }
-
   function resetToIdle() {
     phase = 'idle';
     packCards = [];
     flippedCards = [false, false, false];
     cardVisible = [false, false, false];
-    burstDebris = [];
-    burstRings = [];
+    burstFired = false;
     windStreaks = [];
     tearProgress = 0;
     shakeIntensity = 0;
+    legendaryFlash = false;
+    legendaryCardIndex = -1;
   }
 
   function wait(ms: number): Promise<void> {
@@ -319,10 +265,6 @@
 </script>
 
 <div class="pack-opener" class:screen-shake={screenShake} data-testid="pack-opener" data-phase={phase}>
-  {#if legendaryFlash}
-    <div class="legendary-flash" data-testid="legendary-flash"></div>
-  {/if}
-
   <!-- Wind streaks during shake -->
   {#if phase === 'shake'}
     <div class="wind-layer">
@@ -344,35 +286,6 @@
     </div>
   {/if}
 
-  <!-- Burst debris layer -->
-  <div class="debris-layer">
-    {#each burstDebris as d (d.id)}
-      <div
-        class="debris"
-        style="
-          left: {d.x}%;
-          top: {d.y}%;
-          --dx: {d.dx}px;
-          --dy: {d.dy}px;
-          --delay: {d.delay}s;
-          --size: {d.size}px;
-          --rot: {d.rot}deg;
-          --color: {d.color};
-        "
-      >
-        {#if d.shape === 'gear'}
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0 2.5a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/><path d="M10.5 2h3l.5 3 2.2.9 2.3-1.8 2.1 2.1-1.8 2.3.9 2.2 3 .5v3l-3 .5-.9 2.2 1.8 2.3-2.1 2.1-2.3-1.8-2.2.9-.5 3h-3l-.5-3-2.2-.9-2.3 1.8-2.1-2.1 1.8-2.3-.9-2.2-3-.5v-3l3-.5.9-2.2L3.8 5.5 5.9 3.4l2.3 1.8L10.4 4.3z" opacity="0.85"/></svg>
-        {:else if d.shape === 'bolt'}
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
-        {:else if d.shape === 'spark'}
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5z"/></svg>
-        {:else}
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l8.66 5v10L12 22l-8.66-5V7z"/></svg>
-        {/if}
-      </div>
-    {/each}
-  </div>
-
   <!-- Pack — JS-driven transform, never teleports -->
   {#if showPack}
     <div class="pack-scene">
@@ -386,7 +299,7 @@
         {#if phase !== 'tear'}
           <div
             class="pack-float"
-            style="transform: translate({packX}px, {packY}px) rotate({packRot}deg) scale({packScale});"
+            style="transform: translate({packX}px, {packY}px) rotate({packRot}deg) scaleX({packScaleX}) scaleY({packScaleY});"
           >
             <div class="pack-glow" style={phase === 'shake' ? `opacity: ${0.3 + shakeIntensity * 0.7}; transform: scale(${1 + shakeIntensity * 0.25});` : ''}></div>
             <div class="pack-body">
@@ -459,22 +372,20 @@
 
   {#if phase === 'burst'}
     <div class="burst-state">
-      <div class="burst-flash"></div>
-      {#each burstRings as ring (ring.id)}
-        <div
-          class="burst-ring"
-          style="
-            --ring-delay: {ring.delay}s;
-            --ring-dur: {ring.duration}s;
-            --ring-size: {ring.size}px;
-            --ring-thick: {ring.thickness}px;
-            --ring-color: {ring.color};
-            --ring-sx: {ring.scaleX};
-            --ring-sy: {ring.scaleY};
-            --ring-rot: {ring.rot}deg;
-          "
-        ></div>
-      {/each}
+      <div class="burst-dim"></div>
+      {#if burstFired}
+        <div class="bloom-core"></div>
+        <div class="bloom-mid"></div>
+        <div class="bloom-outer"></div>
+        <div class="bloom-haze"></div>
+        <div class="bloom-ring bloom-ring-1"></div>
+        <div class="bloom-ring bloom-ring-2"></div>
+        <div class="bloom-ring bloom-ring-3"></div>
+        <div class="bloom-streaks"></div>
+        <div class="bloom-sparkle bloom-sparkle-1"></div>
+        <div class="bloom-sparkle bloom-sparkle-2"></div>
+        <div class="bloom-sparkle bloom-sparkle-3"></div>
+      {/if}
     </div>
   {/if}
 
@@ -482,6 +393,15 @@
     <div class="cards-container" data-testid="cards-container">
       {#each packCards as char, i}
         <div class="card-slot" class:visible={cardVisible[i]} style="--card-index: {i};" data-testid="card-slot">
+          <!-- Legendary flash — positioned relative to this card -->
+          {#if legendaryFlash && legendaryCardIndex === i}
+            <div class="legendary-flash" data-testid="legendary-flash">
+              <div class="legendary-flash-dim"></div>
+              <div class="legendary-flash-inner"></div>
+              <div class="legendary-flash-outer"></div>
+              <div class="legendary-flash-ring"></div>
+            </div>
+          {/if}
           <CharacterCard
             character={char}
             flipped={flippedCards[i]}
@@ -504,6 +424,20 @@
 
 <style>
   .pack-opener {
+    /* Physics-based spring curves via linear() */
+    --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938,
+      1.077 20.4%, 1.121, 1.149 24.3%, 1.163 27%, 1.154, 1.129 32.8%,
+      1.017 43.1%, 0.991, 0.977 51%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1);
+
+    --ease-arrive: linear(0, 0.009 1.2%, 0.2 4.5%, 0.567 9.7%, 0.847 15.1%,
+      0.997 20.9%, 1.08 26%, 1.1 28.4%, 1.093 33.5%, 1.03 47.3%,
+      1.005 60%, 0.998 72%, 1);
+
+    --ease-bounce: linear(0, 0.004, 0.016, 0.035, 0.063 9.1%, 0.141, 0.25,
+      0.391, 0.563, 0.765, 1, 0.891, 0.813 45.5%, 0.785, 0.766, 0.754, 0.75,
+      0.754, 0.766, 0.785, 0.813 63.6%, 0.891, 1 72.7%, 0.973, 0.953, 0.941,
+      0.938, 0.941, 0.953, 0.973, 1, 0.988, 0.984, 0.988, 1);
+
     position: relative;
     display: flex;
     flex-direction: column;
@@ -515,37 +449,81 @@
     overflow: hidden;
   }
 
-  /* ── Screen shake for legendary ── */
+  /* ── Screen shake for legendary — spring decay ── */
   .screen-shake {
-    animation: screenShake 0.3s ease-out;
+    animation: screenShake 0.6s var(--ease-spring);
   }
 
   @keyframes screenShake {
-    0%, 100% { transform: translate(0, 0); }
-    10% { transform: translate(3px, -3px); }
-    20% { transform: translate(-3px, 3px); }
-    30% { transform: translate(3px, 3px); }
-    40% { transform: translate(-3px, -3px); }
-    50% { transform: translate(3px, -3px); }
-    60% { transform: translate(-3px, 3px); }
-    70% { transform: translate(3px, 3px); }
-    80% { transform: translate(-3px, -3px); }
-    90% { transform: translate(3px, -3px); }
+    0% { transform: translate(0, 0) scale(1); }
+    15% { transform: translate(6px, -4px) scale(1.02); }
+    35% { transform: translate(-4px, 3px) scale(1.01); }
+    55% { transform: translate(2px, -2px); }
+    100% { transform: translate(0, 0) scale(1); }
   }
 
-  /* ── Legendary flash ── */
+  /* ── Legendary flash — centered on the card that triggered it ── */
   .legendary-flash {
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(circle, rgba(255, 215, 0, 0.5), transparent 70%);
-    z-index: 100;
-    animation: flash 0.4s ease-out forwards;
+    position: absolute;
+    inset: -200px;
+    z-index: 50;
     pointer-events: none;
   }
 
-  @keyframes flash {
+  .legendary-flash-dim {
+    position: absolute;
+    inset: -400px;
+    background: rgba(0, 0, 0, 0.15);
+    animation: legendaryDim 1s ease-out forwards;
+  }
+
+  @keyframes legendaryDim {
     0% { opacity: 1; }
+    25% { opacity: 1; }
     100% { opacity: 0; }
+  }
+
+  .legendary-flash-inner {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 215, 0, 0.95), rgba(255, 180, 0, 0.5) 25%, transparent 50%);
+    animation: legendaryFlashIn 0.7s var(--ease-arrive) forwards;
+  }
+
+  @keyframes legendaryFlashIn {
+    0% { opacity: 0; transform: scale(0.3); }
+    12% { opacity: 1; }
+    35% { opacity: 0.85; }
+    100% { opacity: 0; transform: scale(1.5); }
+  }
+
+  .legendary-flash-outer {
+    position: absolute;
+    inset: -100px;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 170, 0, 0.4), rgba(255, 140, 0, 0.15) 35%, transparent 65%);
+    animation: legendaryFlashOut 1s var(--ease-arrive) forwards;
+  }
+
+  @keyframes legendaryFlashOut {
+    0% { opacity: 0; transform: scale(0.4); }
+    15% { opacity: 0.8; }
+    40% { opacity: 0.6; }
+    100% { opacity: 0; transform: scale(2); }
+  }
+
+  .legendary-flash-ring {
+    position: absolute;
+    inset: 50px;
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 40%, rgba(255, 215, 0, 0.3) 50%, transparent 60%);
+    animation: legendaryRing 0.8s 0.05s var(--ease-arrive) forwards;
+    opacity: 0;
+  }
+
+  @keyframes legendaryRing {
+    0% { opacity: 0; transform: scale(0.2); }
+    15% { opacity: 0.7; }
+    100% { opacity: 0; transform: scale(3); }
   }
 
   /* ══════════════════════════════════════════
@@ -593,47 +571,6 @@
   }
 
   /* ══════════════════════════════════════════
-     BURST DEBRIS — SVG robot parts
-     ══════════════════════════════════════════ */
-  .debris-layer {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 20;
-    overflow: visible;
-  }
-
-  .debris {
-    position: absolute;
-    width: var(--size);
-    height: var(--size);
-    color: var(--color);
-    filter: drop-shadow(0 0 6px var(--color));
-    animation: debrisFly 1.4s var(--delay) cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    opacity: 0;
-  }
-
-  .debris svg {
-    width: 100%;
-    height: 100%;
-  }
-
-  @keyframes debrisFly {
-    0% {
-      transform: translate(0, 0) scale(0.5) rotate(var(--rot));
-      opacity: 1;
-    }
-    20% {
-      opacity: 1;
-      transform: translate(calc(var(--dx) * 0.3), calc(var(--dy) * 0.3)) scale(1.2) rotate(calc(var(--rot) + 90deg));
-    }
-    100% {
-      transform: translate(var(--dx), var(--dy)) scale(0) rotate(calc(var(--rot) + 540deg));
-      opacity: 0;
-    }
-  }
-
-  /* ══════════════════════════════════════════
      PACK SCENE
      ══════════════════════════════════════════ */
   .pack-scene {
@@ -651,7 +588,6 @@
     outline: none;
     font-family: inherit;
   }
-
 
   .pack-wrapper:disabled {
     cursor: default;
@@ -860,7 +796,7 @@
     transform: translateY(-0.5px);
   }
 
-  /* ── Ambient motes ── */
+  /* ── Ambient motes — smooth ease-in-out for loops ── */
   .mote {
     position: absolute;
     animation: moteFloat 3s ease-in-out infinite;
@@ -945,7 +881,7 @@
   }
 
   /* ══════════════════════════════════════════
-     BURST STATE
+     BURST STATE — Layered bloom + rings + sparkles
      ══════════════════════════════════════════ */
   .burst-state {
     position: absolute;
@@ -955,57 +891,247 @@
     justify-content: center;
     z-index: 10;
     overflow: visible;
-    mix-blend-mode: screen;
-  }
-
-  .burst-flash {
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.95), rgba(253, 181, 206, 0.3) 35%, transparent 65%);
-    animation: burstFlash 0.6s ease-out forwards;
     pointer-events: none;
   }
 
-  @keyframes burstFlash {
-    0% { opacity: 1; }
-    30% { opacity: 0.7; }
+  /* Anticipation dim — darkening before the bloom fires */
+  .burst-dim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    animation: burstDim 0.6s ease-out forwards;
+  }
+
+  @keyframes burstDim {
+    0% { opacity: 0; }
+    10% { opacity: 0.2; }
+    30% { opacity: 0.2; }
     100% { opacity: 0; }
   }
 
-  .burst-ring {
+  /* Core bloom — tight bright white flash */
+  .bloom-core {
     position: absolute;
-    width: var(--ring-size);
-    height: var(--ring-size);
-    border: var(--ring-thick) solid var(--ring-color);
+    width: 150px;
+    height: 150px;
     border-radius: 50%;
-    animation: burstRingExpand var(--ring-dur) var(--ring-delay) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    background: radial-gradient(circle, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.7) 35%, transparent 65%);
+    animation: bloomCore 0.8s var(--ease-arrive) forwards;
     opacity: 0;
     mix-blend-mode: screen;
-    filter: blur(0.5px);
-    transform-origin: center;
   }
 
-  @keyframes burstRingExpand {
-    0% {
-      transform: scale(0.1) scaleX(var(--ring-sx)) scaleY(var(--ring-sy)) rotate(var(--ring-rot));
-      opacity: 1;
-      border-width: var(--ring-thick);
-    }
-    30% {
-      opacity: 0.9;
-    }
-    60% {
-      opacity: 0.4;
-    }
-    100% {
-      transform: scale(10) scaleX(var(--ring-sx)) scaleY(var(--ring-sy)) rotate(var(--ring-rot));
-      opacity: 0;
-      border-width: 0.5px;
-    }
+  @keyframes bloomCore {
+    0% { opacity: 0; transform: scale(0.3); }
+    10% { opacity: 1; }
+    25% { opacity: 0.95; transform: scale(1); }
+    50% { opacity: 0.6; }
+    100% { opacity: 0; transform: scale(1.4); }
+  }
+
+  /* Mid bloom — soft pink-white, slower */
+  .bloom-mid {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 230, 240, 0.8), rgba(253, 181, 206, 0.35) 40%, transparent 70%);
+    animation: bloomMid 1.1s 0.05s var(--ease-arrive) forwards;
+    opacity: 0;
+    mix-blend-mode: screen;
+    filter: blur(10px);
+  }
+
+  @keyframes bloomMid {
+    0% { opacity: 0; transform: scale(0.2); }
+    12% { opacity: 0.85; }
+    30% { opacity: 0.7; transform: scale(1); }
+    55% { opacity: 0.35; }
+    100% { opacity: 0; transform: scale(1.6); }
+  }
+
+  /* Outer bloom — wide atmospheric haze */
+  .bloom-outer {
+    position: absolute;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(200, 160, 220, 0.45), rgba(176, 106, 255, 0.18) 30%, rgba(253, 181, 206, 0.1) 50%, transparent 70%);
+    animation: bloomOuter 1.4s 0.08s var(--ease-arrive) forwards;
+    opacity: 0;
+    mix-blend-mode: screen;
+    filter: blur(25px);
+  }
+
+  @keyframes bloomOuter {
+    0% { opacity: 0; transform: scale(0.15); }
+    10% { opacity: 0.5; }
+    25% { opacity: 0.45; transform: scale(0.8); }
+    50% { opacity: 0.25; }
+    100% { opacity: 0; transform: scale(2.2); }
+  }
+
+  /* Lingering haze — stays visible longest, atmospheric */
+  .bloom-haze {
+    position: absolute;
+    width: 1000px;
+    height: 1000px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(253, 181, 206, 0.12), rgba(176, 106, 255, 0.06) 40%, transparent 65%);
+    animation: bloomHaze 2s 0.1s ease-out forwards;
+    opacity: 0;
+    mix-blend-mode: screen;
+    filter: blur(40px);
+  }
+
+  @keyframes bloomHaze {
+    0% { opacity: 0; transform: scale(0.3); }
+    15% { opacity: 0.4; }
+    35% { opacity: 0.3; transform: scale(1.2); }
+    65% { opacity: 0.15; }
+    100% { opacity: 0; transform: scale(2.5); }
+  }
+
+  /* Soft expanding rings — radial-gradient based, not bordered circles */
+  .bloom-ring {
+    position: absolute;
+    border-radius: 50%;
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+
+  .bloom-ring-1 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, transparent 45%, rgba(255, 255, 255, 0.25) 50%, transparent 55%);
+    animation: bloomRing 1s 0.02s var(--ease-arrive) forwards;
+  }
+
+  .bloom-ring-2 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, transparent 45%, rgba(253, 181, 206, 0.2) 49%, rgba(255, 255, 255, 0.15) 51%, transparent 55%);
+    animation: bloomRing 1.2s 0.1s var(--ease-arrive) forwards;
+    filter: blur(3px);
+  }
+
+  .bloom-ring-3 {
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, transparent 44%, rgba(176, 106, 255, 0.12) 48%, rgba(253, 181, 206, 0.08) 52%, transparent 56%);
+    animation: bloomRing 1.5s 0.18s var(--ease-arrive) forwards;
+    filter: blur(6px);
+  }
+
+  @keyframes bloomRing {
+    0% { opacity: 0; transform: scale(0.1); }
+    12% { opacity: 1; }
+    30% { opacity: 0.7; }
+    100% { opacity: 0; transform: scale(3); }
+  }
+
+  /* Light streaks — conic-gradient thin wedges */
+  .bloom-streaks {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgba(255, 255, 255, 0.18) 3deg,
+      transparent 6deg,
+      transparent 30deg,
+      rgba(255, 255, 255, 0.12) 33deg,
+      transparent 36deg,
+      transparent 60deg,
+      rgba(255, 255, 255, 0.15) 63deg,
+      transparent 66deg,
+      transparent 90deg,
+      rgba(255, 255, 255, 0.1) 93deg,
+      transparent 96deg,
+      transparent 120deg,
+      rgba(255, 255, 255, 0.16) 123deg,
+      transparent 126deg,
+      transparent 150deg,
+      rgba(255, 255, 255, 0.11) 153deg,
+      transparent 156deg,
+      transparent 180deg,
+      rgba(255, 255, 255, 0.14) 183deg,
+      transparent 186deg,
+      transparent 210deg,
+      rgba(255, 255, 255, 0.1) 213deg,
+      transparent 216deg,
+      transparent 240deg,
+      rgba(255, 255, 255, 0.17) 243deg,
+      transparent 246deg,
+      transparent 270deg,
+      rgba(255, 255, 255, 0.09) 273deg,
+      transparent 276deg,
+      transparent 300deg,
+      rgba(255, 255, 255, 0.13) 303deg,
+      transparent 306deg,
+      transparent 330deg,
+      rgba(255, 255, 255, 0.11) 333deg,
+      transparent 336deg,
+      transparent 360deg
+    );
+    animation: bloomStreaks 1s 0.03s var(--ease-arrive) forwards;
+    opacity: 0;
+    mix-blend-mode: screen;
+  }
+
+  @keyframes bloomStreaks {
+    0% { opacity: 0; transform: scale(0.3) rotate(0deg); }
+    12% { opacity: 0.85; }
+    35% { opacity: 0.5; }
+    100% { opacity: 0; transform: scale(4) rotate(25deg); }
+  }
+
+  /* Sparkle motes — small bright points that drift outward */
+  .bloom-sparkle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8), 0 0 20px rgba(253, 181, 206, 0.4);
+    mix-blend-mode: screen;
+    opacity: 0;
+  }
+
+  .bloom-sparkle-1 {
+    animation: sparkle1 1.2s 0.08s ease-out forwards;
+  }
+
+  .bloom-sparkle-2 {
+    animation: sparkle2 1s 0.15s ease-out forwards;
+  }
+
+  .bloom-sparkle-3 {
+    animation: sparkle3 1.1s 0.05s ease-out forwards;
+  }
+
+  @keyframes sparkle1 {
+    0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+    10% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-120px, -80px) scale(0.2); }
+  }
+
+  @keyframes sparkle2 {
+    0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+    12% { opacity: 1; }
+    100% { opacity: 0; transform: translate(100px, -60px) scale(0.2); }
+  }
+
+  @keyframes sparkle3 {
+    0% { opacity: 0; transform: translate(0, 0) scale(0.5); }
+    10% { opacity: 1; }
+    100% { opacity: 0; transform: translate(80px, 90px) scale(0.2); }
   }
 
   /* ══════════════════════════════════════════
-     REVEAL / DONE — Cards
+     REVEAL / DONE — Cards with bounce easing
      ══════════════════════════════════════════ */
   .cards-container {
     display: flex;
@@ -1016,41 +1142,25 @@
   }
 
   .card-slot {
+    position: relative;
     opacity: 0;
-    transform: translateY(200px) scale(0.3) rotate(calc((var(--card-index) - 1) * 15deg));
+    transform: translateY(300px) scale(0.2);
   }
 
   .card-slot.visible {
-    animation: cardLand 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-    animation-delay: calc(var(--card-index) * 0.05s);
+    animation: cardLand 1s var(--ease-bounce) forwards;
   }
 
   @keyframes cardLand {
-    0% {
-      opacity: 0;
-      transform: translateY(200px) scale(0.3) rotate(calc((var(--card-index) - 1) * 15deg));
-    }
-    40% {
-      opacity: 1;
-      transform: translateY(-20px) scale(1.05) rotate(0deg);
-    }
-    65% {
-      transform: translateY(8px) scale(0.98) rotate(0deg);
-    }
-    80% {
-      transform: translateY(-4px) scale(1.01) rotate(0deg);
-    }
-    100% {
-      opacity: 1;
-      transform: translateY(0) scale(1) rotate(0deg);
-    }
+    0% { opacity: 0; transform: translateY(300px) scale(0.2); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   /* ── Bottom actions ── */
   .bottom-actions {
     opacity: 0;
     transform: translateY(10px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
+    transition: opacity 0.4s var(--ease-arrive), transform 0.4s var(--ease-arrive);
     pointer-events: none;
     margin-top: var(--space-2);
   }

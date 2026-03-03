@@ -1,40 +1,30 @@
 <script lang="ts">
   import { CharacterCard, CardViewer } from '@glazebot/shared-ui';
   import type { GachaCharacter } from '@glazebot/shared-types';
-  import { getCollection } from '@glazebot/supabase-client';
+  import { getCollectionStore, loadCharacters } from '$lib/stores/collection.svelte';
   import { onMount } from 'svelte';
 
-  let characters: GachaCharacter[] = $state([]);
-  let loading = $state(true);
-  let error = $state('');
+  const collection = getCollectionStore();
   let viewerCharacter = $state<GachaCharacter | null>(null);
 
-  onMount(async () => {
-    try {
-      characters = await getCollection();
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to load collection';
-    } finally {
-      loading = false;
-    }
-  });
+  onMount(() => { loadCharacters(); });
 </script>
 
 <div class="page">
   <h2>Collection</h2>
 
-  {#if loading}
+  {#if collection.loading}
     <div class="empty-state">Loading collection...</div>
-  {:else if error}
-    <div class="empty-state error">{error}</div>
-  {:else if characters.length === 0}
+  {:else if collection.error}
+    <div class="empty-state error">{collection.error}</div>
+  {:else if collection.allCharacters.length === 0}
     <div class="empty-state">
       <p>No characters yet!</p>
       <p class="hint">Open a booster pack to start your collection.</p>
     </div>
   {:else}
     <div class="card-grid">
-      {#each characters as char (char.id)}
+      {#each collection.allCharacters as char (char.id)}
         <CharacterCard
           character={char}
           flipped={true}

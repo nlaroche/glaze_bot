@@ -1,641 +1,44 @@
 <script lang="ts">
   import { CharacterCardRow, ContextMenu, CardViewer, ScreenPicker } from '@glazebot/shared-ui';
   import MemoryInspector from '$lib/components/MemoryInspector.svelte';
-  import type { CaptureSource } from '@glazebot/shared-ui';
+  import ChatPanel from '$lib/components/ChatPanel.svelte';
   import type { GachaCharacter } from '@glazebot/shared-types';
-  import { getCollection, getCharacter } from '@glazebot/supabase-client';
   import { getAuthState } from '$lib/stores/auth.svelte';
-  import {
-    getSessionStore,
-    setPartySlot,
-    setActiveShare,
-    setRunning,
-    setPaused,
-    setOverlayOn,
-    clearChatLog,
-    getActiveParty,
-    setRecording,
-    showSttBubble,
-    sendUserMessage,
-  } from '$lib/stores/session.svelte';
-  import {
-    getDebugStore,
-    logDebug,
-  } from '$lib/stores/debug.svelte';
+  import { getSessionStore } from '$lib/stores/session.svelte';
+  import { getDebugStore } from '$lib/stores/debug.svelte';
+  import { getCollectionStore, loadCharacters } from '$lib/stores/collection.svelte';
+  import { usePartyManagement } from '$lib/composables/usePartyManagement.svelte';
+  import { useScreenCapture } from '$lib/composables/useScreenCapture.svelte';
+  import { useCommentaryControls } from '$lib/composables/useCommentaryControls.svelte';
 
   const auth = getAuthState();
   const session = getSessionStore();
   const debug = getDebugStore();
+  const chars = getCollectionStore();
 
-  // Character data from Supabase (cheap to re-fetch, not session-critical)
-  let allCharacters = $state<GachaCharacter[]>([]);
-  let loadingChars = $state(true);
-
-  // Collection = all characters not in party
-  let collection = $derived(
-    allCharacters.filter((c) => !session.partySlots.some((s) => s?.id === c.id))
-  );
-
-  let searchQuery = $state('');
-  let filteredCollection = $derived(
-    searchQuery
-      ? collection.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-      : collection
-  );
-
-  // Load characters from Supabase when authenticated
   $effect(() => {
-    if (auth.isAuthenticated && !auth.loading) {
-      loadCharacters();
-    }
+    if (auth.isAuthenticated && !auth.loading) loadCharacters();
   });
 
-  async function loadCharacters() {
-    loadingChars = true;
-    try {
-      allCharacters = await getCollection();
-    } catch (e) {
-      console.error('Failed to load characters:', e);
-      allCharacters = [];
-    }
-    loadingChars = false;
-  }
-
-  function removeFromParty(index: number) {
-    setPartySlot(index, null);
-    if (session.overlayOn) emitPartyToOverlay();
-  }
-
-  function addToParty(char: GachaCharacter) {
-    const emptyIndex = session.partySlots.findIndex((s) => s === null);
-    if (emptyIndex !== -1) {
-      setPartySlot(emptyIndex, char);
-      if (session.overlayOn) emitPartyToOverlay();
-    }
-  }
-
-  // Drag-and-drop
-  let dragOverPartySlot = $state<number | null>(null);
-  let dragOverCollection = $state(false);
-
-  function findCharById(id: string): GachaCharacter | undefined {
-    return allCharacters.find((c) => c.id === id);
-  }
-
-  function handlePartySlotDrop(e: DragEvent, slotIndex: number) {
-    e.preventDefault();
-    dragOverPartySlot = null;
-    const charId = e.dataTransfer?.getData('text/plain');
-    if (!charId) return;
-    const char = findCharById(charId);
-    if (!char) return;
-
-    const oldSlot = session.partySlots.findIndex((s) => s?.id === charId);
-    if (oldSlot !== -1) setPartySlot(oldSlot, null);
-
-    const displaced = session.partySlots[slotIndex];
-    setPartySlot(slotIndex, char);
-    if (displaced && oldSlot !== -1) {
-      setPartySlot(oldSlot, displaced);
-    }
-  }
-
-  function handleCollectionDrop(e: DragEvent) {
-    e.preventDefault();
-    dragOverCollection = false;
-    const charId = e.dataTransfer?.getData('text/plain');
-    if (!charId) return;
-    const slotIndex = session.partySlots.findIndex((s) => s?.id === charId);
-    if (slotIndex !== -1) setPartySlot(slotIndex, null);
-  }
-
-  // Chat log element for auto-scroll
-  let chatLogEl: HTMLDivElement | undefined = $state();
-
-  // Auto-scroll chat log (only when viewing live)
-  $effect(() => {
-    void session.chatLog.length;
-    if (chatLogEl) {
-      requestAnimationFrame(() => {
-        chatLogEl!.scrollTop = chatLogEl!.scrollHeight;
-      });
-    }
+  const commentary = useCommentaryControls({ session, debug });
+  const party = usePartyManagement({
+    session, collection: chars,
+    onPartyChanged: () => commentary.emitPartyToOverlay(),
   });
+  const capture = useScreenCapture({ session, onStop: () => commentary.handleStop() });
 
-  // Screen sharing state (local UI state — picker doesn't need to survive navigation)
-  let pickerOpen = $state(false);
-  let pickerInitialTab = $state<'screen' | 'app'>('screen');
-  let captureSources = $state<CaptureSource[]>([]);
-  let loadingSources = $state(false);
-
-  async function openPicker(tab: 'screen' | 'app') {
-    pickerInitialTab = tab;
-    loadingSources = true;
-    pickerOpen = true;
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const sources: any[] = await invoke('list_sources');
-      captureSources = sources.map((s) => ({
-        id: s.id,
-        name: s.name,
-        type: s.source_type === 'monitor' ? 'screen' as const : 'window' as const,
-        thumbnail: s.thumbnail ?? undefined,
-      }));
-    } catch (e) {
-      console.error('Failed to list sources:', e);
-      captureSources = [];
-    }
-    loadingSources = false;
-  }
-
-  function handleSourceSelect(source: CaptureSource) {
-    setActiveShare(source);
-    pickerOpen = false;
-  }
-
-  async function stopSharing() {
-    if (session.isRunning) {
-      handleStop();
-    }
-    // Hide overlay window when share stops — but preserve the preference
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('hide_overlay');
-    } catch (e) {
-      console.error('Failed to hide overlay:', e);
-    }
-    setActiveShare(null);
-  }
-
-  // Commentary controls
-  let canStart = $derived(!!session.activeShare && session.partySlots.some((s) => s !== null) && !session.isRunning);
-
-  async function handleStart() {
-    if (!session.activeShare) return;
-    const party = getActiveParty();
-    if (party.length === 0) return;
-
-    // Re-fetch characters from DB to pick up any changes (e.g. voice reassignment)
-    const freshParty = await Promise.all(
-      party.map(async (c) => {
-        try {
-          const fresh = await getCharacter(c.id);
-          // Update the party slot with fresh data
-          const idx = session.partySlots.findIndex((s) => s?.id === c.id);
-          if (idx !== -1) setPartySlot(idx, fresh);
-          return fresh;
-        } catch {
-          return c; // fallback to cached if fetch fails
-        }
-      })
-    );
-
-    setRunning(true);
-    setPaused(false);
-    await session.engine.start(session.activeShare.id, freshParty);
-
-    // Init speech (whisper model + VAD if always-on)
-    await initSpeech();
-
-    // Auto-show overlay if preference is ON
-    if (session.overlayOn) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const { emitTo } = await import('@tauri-apps/api/event');
-        await invoke('show_overlay');
-        // Reset overlay state from any previous session
-        await emitTo('overlay', 'overlay-reset', {});
-        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-        const webview = getCurrentWebview();
-        await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
-            console.warn('[main] Overlay ready timeout, proceeding anyway');
-            resolve();
-          }, 5000);
-          webview.listen('overlay-ready', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        });
-        await emitPartyToOverlay();
-      } catch (e) {
-        console.error('Failed to auto-show overlay:', e);
-      }
-    }
-  }
-
-  function handlePauseResume() {
-    if (session.isPaused) {
-      setPaused(false);
-      session.engine.resume();
-    } else {
-      setPaused(true);
-      session.engine.pause();
-    }
-  }
-
-  function handleStop() {
-    setRunning(false);
-    setPaused(false);
-    session.engine.stop();
-    cleanupSpeech();
-  }
-
-  // Keep engine party in sync
-  $effect(() => {
-    const party = session.partySlots.filter((s): s is GachaCharacter => s !== null);
-    session.engine.updateParty(party);
-  });
-
-  async function emitPartyToOverlay() {
-    try {
-      const { emitTo } = await import('@tauri-apps/api/event');
-      const activeMembers = session.partySlots
-        .filter((s): s is GachaCharacter => s !== null)
-        .map((c) => ({ id: c.id, name: c.name, rarity: c.rarity, image: c.avatar_url }));
-      await emitTo('overlay', 'party-updated', { members: activeMembers });
-    } catch (e) {
-      console.error('Failed to emit party:', e);
-    }
-  }
-
-  async function toggleOverlay() {
-    setOverlayOn(!session.overlayOn);
-
-    // Only show/hide the overlay window if screen share is active
-    if (!session.activeShare) return;
-
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const { emitTo } = await import('@tauri-apps/api/event');
-      if (session.overlayOn) {
-        await invoke('show_overlay');
-        // Reset overlay state so "Waiting for commentary..." shows again
-        await emitTo('overlay', 'overlay-reset', {});
-        const { getCurrentWebview } = await import('@tauri-apps/api/webview');
-        const webview = getCurrentWebview();
-        await new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => {
-            console.warn('[main] Overlay ready timeout, proceeding anyway');
-            resolve();
-          }, 5000);
-          webview.listen('overlay-ready', () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-        });
-        await emitPartyToOverlay();
-      } else {
-        await invoke('hide_overlay');
-      }
-    } catch (e) {
-      console.error('Overlay toggle failed:', e);
-    }
-  }
-
-  // Context menu state
+  // Context menu + card viewer + memory inspector (trivial UI state — stays inline)
   let contextMenu = $state<{ x: number; y: number; character: GachaCharacter; inPartySlot?: number } | null>(null);
-
   function openContextMenu(e: MouseEvent, char: GachaCharacter, partySlot?: number) {
     contextMenu = { x: e.clientX, y: e.clientY, character: char, inPartySlot: partySlot };
   }
-
-  // Card viewer state
   let viewerCharacter = $state<GachaCharacter | null>(null);
-
-  // Memory inspector state
   let memoryInspectCharacter = $state<GachaCharacter | null>(null);
-
-  const rarityNameColor: Record<string, string> = {
-    common: 'var(--rarity-common)',
-    rare: 'var(--rarity-rare)',
-    epic: 'var(--rarity-epic)',
-    legendary: 'var(--rarity-legendary)',
-  };
-
-  // ── Text input ──
-  let userInput = $state('');
-  let chatInputEl = $state<HTMLInputElement | null>(null);
-
-  let hasParty = $derived(session.partySlots.some((s) => s !== null));
-
-  // ── @mention autocomplete ──
-  let mentionQuery = $state<string | null>(null);
-  let mentionIndex = $state(0);
-  let mentionStartPos = $state(0);
-
-  let mentionCandidates = $derived.by(() => {
-    if (mentionQuery === null) return [];
-    const q = mentionQuery.toLowerCase();
-    const party = getActiveParty();
-    if (!q) return party; // show all party members when just "@"
-    return party.filter((c) => c.name.toLowerCase().includes(q));
-  });
-
-  /** Render @mentions in message text with cyan highlight */
-  function renderMentions(text: string): string {
-    // Escape HTML first to prevent XSS
-    const escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-    // Match @Name patterns — character names from the party
-    const party = getActiveParty();
-    if (party.length === 0) return escaped;
-    // Build regex from party names (escape special regex chars), match longest first
-    const names = party
-      .map((c) => c.name)
-      .sort((a, b) => b.length - a.length)
-      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const pattern = new RegExp(`@(${names.join('|')})`, 'gi');
-    return escaped.replace(pattern, '<span class="mention-highlight">@$1</span>');
-  }
-
-  function checkMention() {
-    if (!chatInputEl) return;
-    const val = userInput;
-    const cursor = chatInputEl.selectionStart ?? val.length;
-    // Walk backwards from cursor to find "@"
-    const before = val.slice(0, cursor);
-    const atIdx = before.lastIndexOf('@');
-    if (atIdx === -1 || (atIdx > 0 && before[atIdx - 1] !== ' ')) {
-      mentionQuery = null;
-      return;
-    }
-    const query = before.slice(atIdx + 1);
-    // Close menu if there's a space after the query (user moved on)
-    if (query.includes(' ')) {
-      mentionQuery = null;
-      return;
-    }
-    mentionQuery = query;
-    mentionStartPos = atIdx;
-    mentionIndex = 0;
-  }
-
-  function insertMention(charName: string) {
-    const cursor = chatInputEl?.selectionStart ?? userInput.length;
-    const before = userInput.slice(0, mentionStartPos);
-    const after = userInput.slice(cursor);
-    userInput = `${before}@${charName} ${after}`;
-    mentionQuery = null;
-    // Focus back and set cursor position
-    setTimeout(() => {
-      if (chatInputEl) {
-        chatInputEl.focus();
-        const pos = before.length + charName.length + 2; // @name + space
-        chatInputEl.setSelectionRange(pos, pos);
-      }
-    }, 0);
-  }
-
-  function handleSendText() {
-    if (!userInput.trim() || !hasParty) return;
-    sendUserMessage(userInput.trim());
-    userInput = '';
-    mentionQuery = null;
-  }
-
-  function handleInputKeydown(e: KeyboardEvent) {
-    const candidates = mentionCandidates;
-    if (mentionQuery !== null && candidates.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        mentionIndex = (mentionIndex + 1) % candidates.length;
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        mentionIndex = (mentionIndex - 1 + candidates.length) % candidates.length;
-        return;
-      }
-      if (e.key === 'Tab' || e.key === 'Enter') {
-        e.preventDefault();
-        insertMention(candidates[mentionIndex].name);
-        return;
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        mentionQuery = null;
-        return;
-      }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText();
-    }
-  }
-
-  // ── Push-to-Talk (global — works even when game has focus) ──
-  // The global keyboard hook runs whenever PTT mode is selected, regardless of
-  // whether the engine is running. This allows the overlay indicator to show and
-  // STT to work for both live commentary and direct chat.
-  let pttActive = $state(false);
-
-  $effect(() => {
-    if (debug.speechMode !== 'push-to-talk') return;
-
-    let unlistenPress: (() => void) | undefined;
-    let unlistenRelease: (() => void) | undefined;
-
-    (async () => {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const { listen } = await import('@tauri-apps/api/event');
-
-      // Start the global keyboard listener on the Rust side
-      await invoke('start_ptt_listener', { keyCode: debug.pttKey });
-
-      unlistenPress = await listen('ptt-pressed', () => {
-        if (pttActive) return;
-        pttActive = true;
-        setRecording(true);
-        logDebug('stt-request', { mode: 'ptt', key: debug.pttKey });
-        invoke('start_recording').catch((err: unknown) => {
-          console.error('Failed to start recording:', err);
-          pttActive = false;
-          setRecording(false);
-        });
-      });
-
-      unlistenRelease = await listen('ptt-released', () => {
-        if (!pttActive) return;
-        pttActive = false;
-        setRecording(false);
-        invoke<string>('stop_recording').then((text) => {
-          if (text && text.trim()) {
-            logDebug('stt-response', { mode: 'ptt', text });
-            showSttBubble(text.trim());
-            sendUserMessage(text.trim());
-          }
-        }).catch((err: unknown) => {
-          console.error('Failed to stop recording:', err);
-        });
-      });
-    })();
-
-    return () => {
-      unlistenPress?.();
-      unlistenRelease?.();
-      import('@tauri-apps/api/core').then(({ invoke }) => {
-        invoke('stop_ptt_listener').catch(() => {});
-      });
-    };
-  });
-
-  // ── Always-on VAD STT listener ──
-  $effect(() => {
-    if (debug.speechMode !== 'always-on' || !session.isRunning) return;
-
-    let unlisten: (() => void) | undefined;
-
-    import('@tauri-apps/api/webview').then(({ getCurrentWebview }) => {
-      getCurrentWebview().listen<string>('stt-result', (event) => {
-        const text = event.payload;
-        if (text && text.trim()) {
-          logDebug('stt-response', { mode: 'always-on', text });
-          showSttBubble(text.trim());
-          sendUserMessage(text.trim());
-        }
-      }).then((fn) => { unlisten = fn; });
-    });
-
-    return () => {
-      unlisten?.();
-    };
-  });
-
-  // ── Whisper + VAD lifecycle ──
-  async function initSpeech() {
-    if (debug.speechMode === 'off') return;
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('init_whisper');
-
-      if (debug.speechMode === 'always-on') {
-        await invoke('set_vad_config', { threshold: debug.vadThreshold, silenceMs: debug.vadSilenceMs });
-        await invoke('start_vad');
-      }
-    } catch (e) {
-      console.error('Failed to init speech:', e);
-    }
-  }
-
-  async function cleanupSpeech() {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('stop_vad');
-    } catch {
-      // Ignore — may not have been started
-    }
-  }
 </script>
 
 <div class="home">
   <div class="main-area">
-    <!-- Commentary Log -->
-    <div class="chat-section-header">
-      <h2>Chat History</h2>
-    </div>
-    <div class="chat-log" bind:this={chatLogEl}>
-      {#if session.chatLog.length === 0}
-        <div class="chat-empty">
-          {#if !auth.isAuthenticated}
-            <p>Sign in to start commentary.</p>
-          {:else if loadingChars}
-            <p>Loading characters...</p>
-          {:else if allCharacters.length === 0}
-            <p>No characters yet. Open some booster packs first!</p>
-          {:else if !session.activeShare}
-            <p>Select a screen or app to capture.</p>
-          {:else if !session.partySlots.some((s) => s !== null)}
-            <p>Add at least one character to your party.</p>
-          {:else}
-            <p>Hit Start to begin commentary.</p>
-          {/if}
-        </div>
-      {:else}
-        {#each session.chatLog as msg (msg.id)}
-          <div class="chat-msg" class:chat-msg-user={msg.isUserMessage}>
-            <div class="msg-avatar" style="border-color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">
-              {#if msg.image}
-                <img src={msg.image} alt="" />
-              {:else}
-                <span class="msg-avatar-fallback">{msg.name[0]}</span>
-              {/if}
-            </div>
-            <div class="msg-body">
-              <div class="msg-header">
-                <span class="msg-name" style="color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">{msg.name}</span>
-                <span class="msg-time">{msg.time}</span>
-              </div>
-              <p class="msg-text">{@html renderMentions(msg.text)}</p>
-            </div>
-          </div>
-        {/each}
-      {/if}
-    </div>
-
-    <!-- Error banner (shows when there are recent errors) -->
-    {#if debug.errorCount > 0}
-      <button class="error-banner" onclick={() => import('$app/navigation').then(m => m.goto('/settings'))}>
-        <span class="error-banner-dot"></span>
-        <span>{debug.errorCount} error{debug.errorCount > 1 ? 's' : ''} — click to view in Settings</span>
-      </button>
-    {/if}
-
-    <!-- Text input bar (always visible, disabled when not running) -->
-    <div class="input-bar" class:input-bar-disabled={!hasParty}>
-        {#if session.sttBubbleText}
-          <div class="stt-bubble">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--color-teal)" stroke-width="1.5"/><path d="M6 3v3l2 1" stroke="var(--color-teal)" stroke-width="1.2" stroke-linecap="round"/></svg>
-            <span>{session.sttBubbleText}</span>
-          </div>
-        {/if}
-        <!-- @mention autocomplete dropdown -->
-        {#if mentionQuery !== null && mentionCandidates.length > 0}
-          <div class="mention-dropdown">
-            {#each mentionCandidates as char, i (char.id)}
-              <button
-                class="mention-option"
-                class:mention-option-active={i === mentionIndex}
-                onmousedown={(e) => { e.preventDefault(); insertMention(char.name); }}
-                onmouseenter={() => mentionIndex = i}
-              >
-                <span class="mention-avatar" style="border-color: {rarityNameColor[char.rarity]}">
-                  {#if char.avatar_url}
-                    <img src={char.avatar_url} alt="" />
-                  {:else}
-                    {char.name[0]}
-                  {/if}
-                </span>
-                <span class="mention-name" style="color: {rarityNameColor[char.rarity]}">{char.name}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-        <div class="input-row">
-          {#if session.isRecording}
-            <div class="recording-indicator">
-              <span class="recording-dot"></span>
-              <span>Listening...</span>
-            </div>
-          {/if}
-          <input
-            class="chat-input"
-            type="text"
-            placeholder={hasParty ? "Type @ to mention a character..." : "Add a character to chat..."}
-            bind:value={userInput}
-            bind:this={chatInputEl}
-            oninput={checkMention}
-            onkeydown={handleInputKeydown}
-            disabled={!hasParty}
-          />
-          <button class="send-btn" onclick={handleSendText} disabled={!hasParty || !userInput.trim()}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l10-5-3 5 3 5z" fill="currentColor"/></svg>
-          </button>
-        </div>
-      </div>
+    <ChatPanel />
 
     <div class="controls-bar">
         <!-- Capture group / Active share -->
@@ -645,15 +48,15 @@
             <div class="share-inline">
               <div class="share-pulse"></div>
               <span class="share-name" title={session.activeShare.name}>{session.activeShare.name}</span>
-              <button class="share-x" onclick={stopSharing} title="Stop sharing">&times;</button>
+              <button class="share-x" onclick={capture.stopSharing} title="Stop sharing">&times;</button>
             </div>
           {:else}
             <div class="ctrl-group-buttons">
-              <button class="ctrl-btn capture" onclick={() => openPicker('screen')}>
+              <button class="ctrl-btn capture" onclick={() => capture.openPicker('screen')}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/></svg>
                 Screen
               </button>
-              <button class="ctrl-btn capture" onclick={() => openPicker('app')}>
+              <button class="ctrl-btn capture" onclick={() => capture.openPicker('app')}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                 App
               </button>
@@ -667,11 +70,11 @@
         <div class="ctrl-group">
           <span class="ctrl-label">Commentary</span>
           <div class="ctrl-group-buttons">
-            <button class="ctrl-btn start" disabled={!canStart} onclick={handleStart}>>
+            <button class="ctrl-btn start" disabled={!commentary.canStart} onclick={commentary.handleStart}>>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
               Start
             </button>
-            <button class="ctrl-btn" disabled={!session.isRunning} onclick={handlePauseResume}>
+            <button class="ctrl-btn" disabled={!session.isRunning} onclick={commentary.handlePauseResume}>
               {#if session.isPaused}
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><polygon points="3,1 12,7 3,13"/></svg>
                 Resume
@@ -680,7 +83,7 @@
                 Pause
               {/if}
             </button>
-            <button class="ctrl-btn stop" disabled={!session.isRunning} onclick={handleStop}>
+            <button class="ctrl-btn stop" disabled={!session.isRunning} onclick={commentary.handleStop}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="1.5"/></svg>
               Stop
             </button>
@@ -695,7 +98,7 @@
           <button
             class="toggle"
             class:toggle-on={session.overlayOn}
-            onclick={toggleOverlay}
+            onclick={commentary.toggleOverlay}
             aria-pressed={session.overlayOn}
             title={session.activeShare ? '' : 'Overlay will appear when screen sharing starts'}
           >
@@ -719,17 +122,17 @@
         {#each session.partySlots as slot, i}
           <div
             class="drop-zone"
-            class:drop-active={dragOverPartySlot === i}
-            ondragover={(e) => { e.preventDefault(); dragOverPartySlot = i; }}
-            ondragleave={() => { if (dragOverPartySlot === i) dragOverPartySlot = null; }}
-            ondrop={(e) => handlePartySlotDrop(e, i)}
+            class:drop-active={party.dragOverPartySlot === i}
+            ondragover={(e) => { e.preventDefault(); party.dragOverPartySlot = i; }}
+            ondragleave={() => { if (party.dragOverPartySlot === i) party.dragOverPartySlot = null; }}
+            ondrop={(e) => party.handlePartySlotDrop(e, i)}
           >
             {#if slot}
               <CharacterCardRow
                 character={slot}
                 image={slot.avatar_url}
                 draggable={true}
-                onremove={() => removeFromParty(i)}
+                onremove={() => party.removeFromParty(i)}
                 oncontextmenu={(e) => openContextMenu(e, slot, i)}
               />
             {:else}
@@ -753,31 +156,31 @@
         class="search-input"
         type="text"
         placeholder="Search characters..."
-        bind:value={searchQuery}
+        bind:value={party.searchQuery}
       />
       <div
         class="collection-list"
-        class:drop-active={dragOverCollection}
-        ondragover={(e) => { e.preventDefault(); dragOverCollection = true; }}
-        ondragleave={() => { dragOverCollection = false; }}
-        ondrop={handleCollectionDrop}
+        class:drop-active={party.dragOverCollection}
+        ondragover={(e) => { e.preventDefault(); party.dragOverCollection = true; }}
+        ondragleave={() => { party.dragOverCollection = false; }}
+        ondrop={party.handleCollectionDrop}
       >
-        {#if loadingChars}
+        {#if chars.loading}
           <p class="empty-msg">Loading characters...</p>
         {:else}
-          {#each filteredCollection as char (char.id)}
+          {#each party.filteredCollection as char (char.id)}
             <CharacterCardRow
               character={char}
               image={char.avatar_url}
               draggable={true}
-              onclick={() => addToParty(char)}
+              onclick={() => party.addToParty(char)}
               oncontextmenu={(e) => openContextMenu(e, char)}
             />
           {:else}
             <p class="empty-msg">
-              {#if allCharacters.length === 0}
+              {#if chars.allCharacters.length === 0}
                 No characters yet.
-              {:else if searchQuery}
+              {:else if party.searchQuery}
                 No matches found.
               {:else}
                 All characters are in your party!
@@ -836,7 +239,7 @@
             {
               label: 'Remove from Party',
               icon: '✕',
-              onclick: () => { removeFromParty(contextMenu!.inPartySlot!); },
+              onclick: () => { party.removeFromParty(contextMenu!.inPartySlot!); },
             },
           ]
         : []),
@@ -856,12 +259,12 @@
 />
 
 <ScreenPicker
-  open={pickerOpen}
-  initialTab={pickerInitialTab}
-  sources={captureSources}
-  loading={loadingSources}
-  onselect={handleSourceSelect}
-  onclose={() => { pickerOpen = false; }}
+  open={capture.pickerOpen}
+  initialTab={capture.pickerInitialTab}
+  sources={capture.captureSources}
+  loading={capture.loadingSources}
+  onselect={capture.handleSourceSelect}
+  onclose={() => capture.closePicker()}
 />
 
 <style>
@@ -879,134 +282,6 @@
     flex-direction: column;
     min-width: 0;
     overflow: hidden;
-  }
-
-  .chat-section-header {
-    padding: var(--space-3-5) var(--space-5) var(--space-2);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .chat-section-header h2 {
-    font-size: var(--font-xs);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--color-text-muted, #6B7788);
-    margin: 0;
-    font-weight: 600;
-  }
-
-  .back-btn {
-    padding: 3px var(--space-2-5);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--start-a25);
-    background: var(--start-a8);
-    color: var(--color-start, #5BCA7A);
-    font-size: var(--font-xs);
-    cursor: pointer;
-    transition: background var(--transition-base);
-  }
-
-  .back-btn:hover {
-    background: var(--start-a15);
-  }
-
-  /* ── Chat log ── */
-  .chat-log {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 var(--space-5) var(--space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-0-5);
-  }
-
-  .chat-empty {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .chat-empty p {
-    color: var(--color-text-muted, #6B7788);
-    font-size: var(--font-base);
-  }
-
-  .chat-msg {
-    display: flex;
-    gap: var(--space-2-5);
-    padding: var(--space-2) var(--space-2-5);
-    border-radius: var(--radius-md);
-    transition: background 0.1s;
-  }
-
-  .chat-msg:hover {
-    background: var(--white-a3);
-  }
-
-  .msg-avatar {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-    border-radius: var(--radius-full);
-    border: 2px solid var(--white-a10);
-    overflow: hidden;
-    background: var(--black-a30);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: var(--space-0-5);
-  }
-
-  .msg-avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    image-rendering: pixelated;
-  }
-
-  .msg-avatar-fallback {
-    font-size: var(--font-base);
-    color: var(--color-text-muted, #6B7788);
-    font-weight: 600;
-  }
-
-  .msg-body {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .msg-header {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-  }
-
-  .msg-name {
-    font-size: var(--font-md);
-    font-weight: 600;
-  }
-
-  .msg-time {
-    font-size: var(--font-sm);
-    color: var(--color-text-secondary, #8b95a8);
-  }
-
-  .msg-text {
-    margin: 3px 0 0;
-    font-size: var(--font-md);
-    color: var(--color-text-primary, #d0d6e0);
-    line-height: 1.45;
-    user-select: text;
-    -webkit-user-select: text;
-  }
-
-  .msg-text :global(.mention-highlight) {
-    color: var(--color-teal, #3ecfcf);
-    font-weight: 600;
   }
 
   /* ── Inline share indicator ── */
@@ -1366,222 +641,6 @@
     text-align: center;
     padding: var(--space-4) 0;
     margin: 0;
-  }
-
-  /* ── User messages ── */
-  .chat-msg-user {
-    flex-direction: row-reverse;
-  }
-
-  .chat-msg-user .msg-body {
-    text-align: right;
-  }
-
-  .chat-msg-user .msg-header {
-    flex-direction: row-reverse;
-  }
-
-  /* ── Text input bar ── */
-  .error-banner {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-4);
-    margin: 0 var(--space-4) var(--space-1);
-    border-radius: var(--radius-md);
-    background: rgba(239, 68, 68, 0.12);
-    border: 1px solid rgba(239, 68, 68, 0.25);
-    color: #f87171;
-    font-size: var(--font-sm);
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 150ms ease;
-  }
-
-  .error-banner:hover {
-    background: rgba(239, 68, 68, 0.2);
-  }
-
-  .error-banner-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #ef4444;
-    flex-shrink: 0;
-    animation: error-pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes error-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  .input-bar {
-    flex-shrink: 0;
-    padding: var(--space-2) var(--space-5);
-    position: relative;
-  }
-
-  .input-bar-disabled {
-    opacity: 0.45;
-    pointer-events: none;
-  }
-
-  .stt-bubble {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1-5);
-    padding: var(--space-1) var(--space-2-5);
-    margin-bottom: var(--space-1-5);
-    border-radius: var(--radius-md);
-    background: var(--teal-a8);
-    border: 1px solid var(--teal-a20);
-    font-size: var(--font-sm);
-    color: var(--color-light-teal);
-    animation: stt-fade 0.2s ease-in;
-  }
-
-  @keyframes stt-fade {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* ── @mention dropdown ── */
-  .mention-dropdown {
-    position: absolute;
-    bottom: 100%;
-    left: var(--space-5);
-    right: var(--space-5);
-    margin-bottom: var(--space-1);
-    background: var(--color-surface-2, #1a2035);
-    border: 1px solid var(--white-a10);
-    border-radius: var(--radius-lg);
-    padding: var(--space-1);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    box-shadow: 0 -4px 16px var(--black-a40);
-    z-index: 10;
-    animation: mention-slide 0.15s ease-out;
-  }
-
-  @keyframes mention-slide {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .mention-option {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .mention-option:hover,
-  .mention-option-active {
-    background: var(--white-a8);
-  }
-
-  .mention-avatar {
-    width: 24px;
-    height: 24px;
-    border-radius: var(--radius-full);
-    border: 2px solid;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--font-xs);
-    color: var(--color-text-primary);
-    background: var(--white-a4);
-    flex-shrink: 0;
-  }
-
-  .mention-avatar img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .mention-name {
-    font-size: var(--font-base);
-    font-weight: 600;
-  }
-
-  .input-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1-5);
-  }
-
-  .recording-indicator {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: 0 var(--space-2);
-    font-size: var(--font-sm);
-    color: var(--color-stop, #FF6B6B);
-    flex-shrink: 0;
-  }
-
-  .recording-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-full);
-    background: var(--color-stop, #FF6B6B);
-    animation: pulse 1s ease-in-out infinite;
-  }
-
-  .chat-input {
-    flex: 1;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--white-a10);
-    background: var(--white-a4);
-    color: var(--color-text-primary, #e2e8f0);
-    font-size: var(--font-base);
-    font-family: inherit;
-    outline: none;
-    transition: border-color var(--transition-base), background var(--transition-base);
-  }
-
-  .chat-input::placeholder {
-    color: var(--color-text-muted, #6B7788);
-  }
-
-  .chat-input:focus {
-    border-color: var(--white-a20);
-    background: var(--white-a6);
-  }
-
-  .send-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-full);
-    border: 1px solid var(--teal-a20);
-    background: var(--teal-a8);
-    color: var(--color-teal);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: background var(--transition-base), border-color var(--transition-base);
-  }
-
-  .send-btn:hover:not(:disabled) {
-    background: var(--teal-a20);
-    border-color: var(--teal-a40);
-  }
-
-  .send-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
   }
 
   /* ── Game detection status ── */

@@ -22,11 +22,12 @@
     }
   });
 
-  const navItems: { href: string; label: string; icon: 'home' | 'pack' | 'collection' | 'admin' }[] = [
+  const navItems: { href: string; label: string; icon: 'home' | 'pack' | 'collection' | 'admin' | 'logs' }[] = [
     { href: '/', label: 'Home', icon: 'home' },
     { href: '/pack', label: 'Packs', icon: 'pack' },
     { href: '/collection', label: 'Collection', icon: 'collection' },
     { href: '/settings', label: 'Admin', icon: 'admin' },
+    { href: '/logs', label: 'Logs', icon: 'logs' },
   ];
 
   function isActive(href: string): boolean {

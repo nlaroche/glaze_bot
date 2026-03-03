@@ -20,3 +20,4 @@ export type {
   TokenPools,
   TokenRoll,
 } from "./tokenPools.ts";
+export { ActivityLogger } from "./activity-logger.ts";
