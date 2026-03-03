@@ -96,8 +96,8 @@
   let generationPrompt = $state('');
   let imageSystemInfo = $state('facing south, sitting at a table, 128x128 pixel art sprite, no background');
   let imageProvider = $state<'pixellab' | 'gemini'>('pixellab');
-  let imageModel = $state('gemini-2.0-flash-preview-image-generation');
-  let imageSize = $state('1024x1024');
+  let imageModel = $state('gemini-3.1-flash-image-preview');
+  let imageSize = $state('1K');
   let dropRates = $state({ common: 0.6, rare: 0.25, epic: 0.12, legendary: 0.03 });
 
   // ─── State: Commentary LLM ───────────────────────────────────────
@@ -1200,8 +1200,8 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
 
       _image_generation_flow: [
         'Step 1: Provider selected from imageProvider (pixellab or gemini)',
-        'Step 2: Model from imageModel (e.g. gemini-2.0-flash-preview-image-generation)',
-        'Step 3: Image size from imageConfig.imageSize (e.g. 1024x1024), aspect ratio from imageConfig.aspectRatio',
+        'Step 2: Model from imageModel (e.g. gemini-3.1-flash-image-preview)',
+        'Step 3: Image size from imageConfig.imageSize (e.g. 1K), aspect ratio from imageConfig.aspectRatio',
         'Step 4: Prompt built from imageSystemInfo + character description',
       ],
 
@@ -1387,9 +1387,9 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     generationPrompt = (config.generationPrompt as string) ?? '';
     imageSystemInfo = (config.imageSystemInfo as string) ?? 'facing south, sitting at a table, 128x128 pixel art sprite, no background';
     imageProvider = ((config.imageProvider as string) ?? 'pixellab') as 'pixellab' | 'gemini';
-    imageModel = (config.imageModel as string) ?? 'gemini-2.0-flash-preview-image-generation';
+    imageModel = (config.imageModel as string) ?? 'gemini-3.1-flash-image-preview';
     const imgCfg = config.imageConfig as Record<string, string> | undefined;
-    imageSize = imgCfg?.imageSize ?? '1024x1024';
+    imageSize = imgCfg?.imageSize ?? '1K';
     tokenPools = (config.tokenPools as Record<string, TokenPool>) ?? structuredClone(DEFAULT_TOKEN_POOLS);
     const c = config.commentary as Record<string, unknown> | undefined;
     commentaryVisionProvider = (c?.visionProvider as string) ?? 'dashscope';
@@ -2235,7 +2235,9 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
                     label="Model"
                     bind:value={imageModel}
                     options={[
-                      { value: 'gemini-2.0-flash-preview-image-generation', label: 'Gemini 2.0 Flash (Preview)' },
+                      { value: 'gemini-3.1-flash-image-preview', label: 'Gemini 3.1 Flash Image (Nano Banana 2)' },
+                      { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro Image (Nano Banana Pro)' },
+                      { value: 'gemini-2.5-flash-image', label: 'Gemini 2.5 Flash Image' },
                     ]}
                     onchange={() => { syncToConfig(); rawJson = JSON.stringify(config, null, 2); }}
                     testid="config-image-model"
@@ -2244,9 +2246,9 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
                     label="Resolution"
                     bind:value={imageSize}
                     options={[
-                      { value: '512x512', label: '512px' },
-                      { value: '1024x1024', label: '1K (1024px)' },
-                      { value: '2048x2048', label: '2K (2048px)' },
+                      { value: '512px', label: '512px' },
+                      { value: '1K', label: '1K (1024px)' },
+                      { value: '2K', label: '2K (2048px)' },
                     ]}
                     onchange={() => { syncToConfig(); rawJson = JSON.stringify(config, null, 2); }}
                     testid="config-image-size"
