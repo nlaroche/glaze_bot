@@ -73,13 +73,22 @@ Deno.serve(async (req: Request) => {
 
     const serviceClient = getServiceClient();
 
-    // Fetch gacha config
-    const { data: configRow, error: configError } = await serviceClient
-      .from("gacha_config")
-      .select("config")
-      .eq("id", "default")
-      .single();
+    // Fetch gacha config and recent character names in parallel
+    const [configResult, recentResult] = await Promise.all([
+      serviceClient
+        .from("gacha_config")
+        .select("config")
+        .eq("id", "default")
+        .single(),
+      serviceClient
+        .from("characters")
+        .select("name")
+        .eq("user_id", auth.user.id)
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
 
+    const { data: configRow, error: configError } = configResult;
     if (configError || !configRow) {
       return errorResponse("Gacha config not found");
     }
@@ -105,13 +114,7 @@ Deno.serve(async (req: Request) => {
     const systemPrompt = `${generationPrompt}\n\nRarity: ${rarity.toUpperCase()}\n${guidance}\n\nPersonality trait values must be integers between ${range.min} and ${range.max}.\n\nAlso include a "tagline" field: a short catchphrase (max 10 words) that captures the character's personality — this appears on their card.\n\nIMPORTANT: Every character MUST be completely different from any previous generation. Do not repeat names, archetypes, or themes. Be wildly creative.`;
     const temperature = baseTemp + quality.tempBoost;
 
-    // Fetch recently created character names to explicitly exclude them
-    const { data: recentChars } = await serviceClient
-      .from("characters")
-      .select("name")
-      .eq("user_id", auth.user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data: recentChars } = recentResult;
 
     const recentNames = (recentChars ?? []).map(
       (c: { name: string }) => c.name,
