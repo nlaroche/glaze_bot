@@ -79,8 +79,8 @@ async function generateWithGemini(
     throw new Error("Gemini API key not configured");
   }
 
-  const geminiModel = model || "gemini-2.0-flash-preview-image-generation";
-  const imageSize = imageConfig?.imageSize ?? "1024x1024";
+  const geminiModel = model || "gemini-3.1-flash-image-preview";
+  const imageSize = imageConfig?.imageSize ?? "1K";
   const aspectRatio = imageConfig?.aspectRatio ?? "1:1";
 
   const geminiRequest = {
@@ -95,7 +95,7 @@ async function generateWithGemini(
     ],
     generationConfig: {
       responseModalities: ["TEXT", "IMAGE"],
-      imageGenerationConfig: {
+      imageConfig: {
         imageSize,
         aspectRatio,
       },

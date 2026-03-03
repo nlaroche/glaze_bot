@@ -141,15 +141,15 @@ async function generateSpriteGemini(
 ): Promise<string | null> {
   if (!GEMINI_API_KEY) return null;
 
-  const model = geminiModel || "gemini-2.0-flash-preview-image-generation";
-  const imageSize = imageConfig?.imageSize ?? "1024x1024";
+  const model = geminiModel || "gemini-3.1-flash-image-preview";
+  const imageSize = imageConfig?.imageSize ?? "1K";
   const aspectRatio = imageConfig?.aspectRatio ?? "1:1";
 
   const geminiRequest = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       responseModalities: ["TEXT", "IMAGE"],
-      imageGenerationConfig: { imageSize, aspectRatio },
+      imageConfig: { imageSize, aspectRatio },
     },
   };
 
