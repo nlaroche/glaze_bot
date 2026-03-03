@@ -257,18 +257,17 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-4);
-    padding: 44px 40px 36px;
-    border-radius: 16px;
-    background: rgba(8, 14, 28, 0.82);
-    border: 1px solid var(--white-a8);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    min-width: 360px;
-    max-width: 400px;
+    gap: var(--space-5);
+    padding: 56px 48px 48px;
+    border-radius: 18px;
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    width: 440px;
     box-shadow:
-      0 0 60px var(--teal-a5),
-      0 8px 32px var(--black-a40);
+      0 0 80px var(--teal-a8),
+      0 12px 48px var(--black-a50);
   }
 
   /* ---- Brand ---- */
@@ -276,24 +275,24 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-1-5);
-    margin-bottom: var(--space-2);
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
   }
 
   .title {
     font-family: var(--font-brand);
-    font-size: 1.6rem;
+    font-size: var(--font-4xl);
     font-weight: 400;
-    color: #c8d0dc;
-    letter-spacing: 2px;
+    color: var(--color-pink);
+    letter-spacing: 3px;
     margin: 0;
   }
 
   .tagline {
     font-family: var(--font-brand);
-    font-size: var(--font-micro);
+    font-size: var(--font-sm);
     font-weight: 400;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     letter-spacing: 1.5px;
     margin: 0;
   }
@@ -301,25 +300,25 @@
   /* ---- Google button ---- */
   .google-btn {
     width: 100%;
-    padding: 11px 16px;
-    border: 1px solid var(--white-a8);
+    padding: 14px 20px;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    background: var(--white-a4);
+    background: var(--color-surface-overlay);
     color: var(--color-text-primary);
     font-family: 'Satoshi', sans-serif;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     font-weight: 600;
     cursor: pointer;
     transition: background var(--transition-base), border-color var(--transition-base);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 12px;
   }
 
   .google-btn:hover:not(:disabled) {
     background: var(--white-a8);
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: var(--white-a15);
   }
 
   .google-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -333,7 +332,7 @@
     width: 100%;
     gap: var(--space-3);
     color: var(--color-text-muted);
-    font-size: var(--font-xs);
+    font-size: var(--font-sm);
   }
 
   .divider::before,
@@ -348,19 +347,19 @@
   .email-form {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2-5);
+    gap: var(--space-3);
     width: 100%;
   }
 
   input {
     width: 100%;
-    padding: var(--input-padding);
-    border: 1px solid var(--input-border);
+    padding: 14px 16px;
+    border: 1px solid var(--color-border);
     border-radius: var(--input-radius);
     background: var(--input-bg);
     color: var(--color-text-primary);
     font-family: 'Satoshi', sans-serif;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     outline: none;
     transition: border-color var(--transition-base), background var(--transition-base);
   }
@@ -373,16 +372,17 @@
   input::placeholder { color: var(--color-text-muted); }
 
   .send-btn {
-    padding: var(--space-2-5);
+    padding: 14px;
     border: none;
     border-radius: var(--radius-lg);
-    background: var(--color-teal);
+    background: linear-gradient(180deg, #449999 0%, #327272 100%);
     color: white;
     font-family: 'Satoshi', sans-serif;
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     font-weight: 700;
     cursor: pointer;
     transition: opacity var(--transition-base);
+    box-shadow: inset 0 1px 0 var(--white-a12), 0 2px 8px var(--teal-a20);
   }
 
   .send-btn:hover:not(:disabled) { opacity: 0.85; }
@@ -409,8 +409,8 @@
   }
 
   .sent-detail {
-    color: var(--color-text-secondary);
-    font-size: var(--font-base);
+    color: var(--color-text-primary);
+    font-size: var(--font-md);
     margin-bottom: var(--space-2);
     text-align: center;
   }
@@ -418,9 +418,9 @@
   .back-btn {
     background: none;
     border: none;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     font-family: 'Satoshi', sans-serif;
-    font-size: var(--font-brand-md);
+    font-size: var(--font-base);
     cursor: pointer;
     text-decoration: underline;
     transition: color var(--transition-base);
@@ -431,7 +431,7 @@
   /* ---- Error ---- */
   .error {
     color: var(--color-error);
-    font-size: var(--font-base);
+    font-size: var(--font-md);
     text-align: center;
   }
 </style>

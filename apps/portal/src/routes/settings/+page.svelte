@@ -542,6 +542,19 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   let pipeline = $state({ step1: 'idle' as StepStatus, step2: 'idle' as StepStatus, step3: 'idle' as StepStatus });
   let stepErrors = $state({ step1: '', step2: '', step3: '' });
 
+  // ─── Pipeline Log ────────────────────────────────────────────────
+  interface LogEntry { time: string; level: 'info' | 'success' | 'error'; message: string; }
+  let pipelineLog = $state<LogEntry[]>([]);
+  let logExpanded = $state(true);
+
+  function addLog(level: LogEntry['level'], message: string) {
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    pipelineLog = [...pipelineLog, { time, level, message }];
+  }
+
+  function clearLog() { pipelineLog = []; }
+
   let editName = $state('');
   let editDescription = $state('');
   let editBackstory = $state('');
@@ -1644,22 +1657,27 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       step3: meta?.step3_voice ? 'done' : 'idle',
     };
     stepErrors = { step1: '', step2: '', step3: '' };
+    clearLog();
   }
 
   // ─── Pipeline: Step 1 — Text Generation ───────────────────────────
   async function runStep1(rarity: CharacterRarity) {
     pipeline.step1 = 'running';
     stepErrors.step1 = '';
+    addLog('info', `Step 1: Generating ${rarity} character text...`);
     try {
       const tokens = tokensRolled && Object.keys(rolledTokens).length > 0 ? rolledTokens : undefined;
       const character = await generateCharacterText(rarity, tokens);
       loadCharacterIntoEditor(character);
       pipeline.step1 = 'done';
+      addLog('success', `Step 1: Created "${character.name}" (${rarity})`);
       activeStep = 2;
       await loadCharacters();
     } catch (e) {
       pipeline.step1 = 'error';
-      stepErrors.step1 = e instanceof Error ? e.message : 'Generation failed';
+      const msg = e instanceof Error ? e.message : 'Generation failed';
+      stepErrors.step1 = msg;
+      addLog('error', `Step 1 failed: ${msg}`);
     }
   }
 
@@ -1667,14 +1685,18 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     if (!workingCharacter) return;
     pipeline.step1 = 'running';
     stepErrors.step1 = '';
+    addLog('info', `Step 1: Re-generating ${workingCharacter.rarity} character text...`);
     try {
       const character = await generateCharacterText(workingCharacter.rarity);
       loadCharacterIntoEditor(character);
       pipeline.step1 = 'done';
+      addLog('success', `Step 1: Created "${character.name}" (${character.rarity})`);
       await loadCharacters();
     } catch (e) {
       pipeline.step1 = 'error';
-      stepErrors.step1 = e instanceof Error ? e.message : 'Generation failed';
+      const msg = e instanceof Error ? e.message : 'Generation failed';
+      stepErrors.step1 = msg;
+      addLog('error', `Step 1 failed: ${msg}`);
     }
   }
 
@@ -1701,6 +1723,8 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     if (!workingCharacter) return;
     pipeline.step2 = 'running';
     stepErrors.step2 = '';
+    const providerLabel = imageProvider === 'gemini' ? `Gemini (${imageModel}, ${imageSize})` : 'PixelLab (128x128)';
+    addLog('info', `Step 2: Generating sprite via ${providerLabel}...`);
     try {
       const result = await generateCharacterImage(workingCharacter.id, imagePrompt, {
         provider: imageProvider,
@@ -1711,10 +1735,13 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
       const { getCharacter } = await import('@glazebot/supabase-client');
       workingCharacter = await getCharacter(workingCharacter.id);
       pipeline.step2 = 'done';
+      addLog('success', `Step 2: Sprite generated — ${result.avatar_url.split('/').pop()}`);
       characters = characters.map(c => c.id === workingCharacter!.id ? workingCharacter! : c);
     } catch (e) {
       pipeline.step2 = 'error';
-      stepErrors.step2 = e instanceof Error ? e.message : 'Image generation failed';
+      const msg = e instanceof Error ? e.message : 'Image generation failed';
+      stepErrors.step2 = msg;
+      addLog('error', `Step 2 failed: ${msg}`);
     }
   }
 
@@ -1748,6 +1775,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
     if (!workingCharacter) return;
     pipeline.step3 = 'running';
     stepErrors.step3 = '';
+    addLog('info', `Step 3: ${voiceId ? 'Assigning selected voice' : 'Auto-assigning voice'}...`);
     try {
       if (voiceId) {
         // Direct DB update — instant, no edge function overhead
@@ -1758,19 +1786,23 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
           voice_name: voiceName,
         } as Partial<GachaCharacter>);
         workingCharacter = { ...workingCharacter, voice_id: voiceId, voice_name: voiceName };
+        addLog('success', `Step 3: Assigned voice "${voiceName}"`);
       } else {
         // Auto-assign: use edge function (LLM picks best voice)
         const result = await assignCharacterVoice(workingCharacter.id);
         workingCharacter = { ...workingCharacter, voice_id: result.voice_id, voice_name: result.voice_name };
         const { getCharacter } = await import('@glazebot/supabase-client');
         workingCharacter = await getCharacter(workingCharacter.id);
+        addLog('success', `Step 3: Auto-assigned voice "${result.voice_name}"`);
       }
       pipeline.step3 = 'done';
       characters = characters.map(c => c.id === workingCharacter!.id ? workingCharacter! : c);
       loadVoiceUsageMap();
     } catch (e) {
       pipeline.step3 = 'error';
-      stepErrors.step3 = e instanceof Error ? e.message : 'Voice assignment failed';
+      const msg = e instanceof Error ? e.message : 'Voice assignment failed';
+      stepErrors.step3 = msg;
+      addLog('error', `Step 3 failed: ${msg}`);
     }
   }
 
@@ -3490,6 +3522,30 @@ The player said: "nice shot!"</pre>
       {/if}
     </div>
 
+    <!-- Pipeline Log -->
+    {#if pipelineLog.length > 0}
+      <div class="pipeline-log" data-testid="pipeline-log">
+        <div class="log-header">
+          <button class="log-toggle" onclick={() => logExpanded = !logExpanded}>
+            <span class="log-chevron">{logExpanded ? '\u25BC' : '\u25B6'}</span>
+            <span class="log-title">Pipeline Log ({pipelineLog.length})</span>
+          </button>
+          <button class="log-clear" onclick={() => clearLog()}>Clear</button>
+        </div>
+        {#if logExpanded}
+          <div class="log-entries">
+            {#each pipelineLog as entry}
+              <div class="log-entry log-{entry.level}">
+                <span class="log-time">{entry.time}</span>
+                <span class="log-indicator"></span>
+                <span class="log-message">{entry.message}</span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     <!-- Footer Navigation -->
     <div class="wizard-footer" data-testid="wizard-footer">
       <div class="wizard-footer-left">
@@ -4155,6 +4211,105 @@ The player said: "nice shot!"</pre>
 
   .rarity-btn:hover:not(.selected) {
     background: var(--white-a4);
+  }
+
+  /* ─── Pipeline Log ─── */
+  .pipeline-log {
+    border-top: 1px solid var(--white-a8);
+    flex-shrink: 0;
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-7);
+    color: var(--color-text-secondary);
+  }
+
+  .log-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  .log-toggle:hover {
+    background: var(--white-a4);
+  }
+
+  .log-title {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .log-clear {
+    font-size: var(--font-sm);
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .log-clear:hover {
+    color: var(--color-text-primary);
+    background: var(--white-a6);
+  }
+
+  .log-chevron {
+    font-size: 0.65rem;
+  }
+
+  .log-entries {
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 0 var(--space-7) var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .log-entry {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: var(--font-sm);
+    line-height: 1.6;
+  }
+
+  .log-time {
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .log-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  .log-info .log-indicator { background: var(--color-teal); }
+  .log-success .log-indicator { background: #22c55e; }
+  .log-error .log-indicator { background: var(--color-error); }
+
+  .log-info .log-message { color: var(--color-text-secondary); }
+  .log-success .log-message { color: #22c55e; }
+  .log-error .log-message { color: var(--color-error); }
+
+  .log-message {
+    word-break: break-word;
   }
 
   /* ─── Wizard Footer ─── */

@@ -25,12 +25,19 @@
     { key: 'hot_take', label: 'Hot Take', desc: 'Bold, opinionated statement' },
     { key: 'tangent', label: 'Tangent', desc: 'Personality-driven off-topic riff' },
     { key: 'silence', label: 'Silence', desc: 'Intentional quiet moment' },
+    { key: 'conspiracy_theory', label: 'Conspiracy Theory', desc: 'Connect unrelated things on screen' },
+    { key: 'roast_the_game', label: 'Roast the Game', desc: 'Critique a design choice or UI element' },
+    { key: 'lore_drop', label: 'Lore Drop', desc: 'Invent fake lore about something on screen' },
+    { key: 'existential_crisis', label: 'Existential Crisis', desc: 'Brief existential reflection from mundane trigger' },
+    { key: 'power_ranking', label: 'Power Ranking', desc: 'Rank or tier-list something on screen' },
   ] as const;
 
   const DEFAULT_WEIGHTS: Record<string, number> = {
-    solo_observation: 25, emotional_reaction: 20, question: 12,
-    backstory_reference: 8, quip_banter: 4, callback: 5, hype_chain: 2,
-    encouragement: 6, hot_take: 5, tangent: 4, silence: 10,
+    solo_observation: 15, emotional_reaction: 12, question: 10,
+    backstory_reference: 6, quip_banter: 7, callback: 5, hype_chain: 3,
+    encouragement: 5, hot_take: 8, tangent: 8, silence: 8,
+    conspiracy_theory: 4, roast_the_game: 4, lore_drop: 3,
+    existential_crisis: 3, power_ranking: 3,
   };
 
   const DEFAULT_PROMPTS: Record<string, string> = {
@@ -44,6 +51,11 @@
     encouragement: 'Be emotionally supportive. Encourage the player, hype them up, or empathize if things are going badly. Be genuine, not sarcastic.',
     hot_take: 'Drop a bold, opinionated take — about the game, a mechanic, a character design, a strategy, pop culture, anything. Be confident and slightly controversial.',
     tangent: 'Something on screen reminds you of something completely unrelated. Go off on a brief tangent that reveals your personality. Don\'t force a game connection.',
+    conspiracy_theory: 'Connect two unrelated things on screen and spin a brief conspiracy. The game is hiding something. You\'re onto it. You might be wrong but you\'re not crazy.',
+    roast_the_game: 'Find something about the game itself — a design choice, UI element, animation, sound — and have a strong opinion about it. Not the player. The GAME.',
+    lore_drop: 'Invent a fake piece of lore about something on screen. State it as absolute fact. Don\'t break character. This is YOUR truth.',
+    existential_crisis: 'Something mundane on screen triggers a brief moment of existential reflection. It passes quickly. You\'re fine. Probably.',
+    power_ranking: 'Rank something on screen against something else. Best weapon? Worst NPC? Tier list energy. Be decisive and unreasonable.',
   };
 
   // ── Extract from config ──
@@ -71,12 +83,12 @@
   }
 
   function getVisualConfig(): { animationSpeed: number; strokeWidth: number; dropShadow: boolean } {
+    const raw = (getCommentary().visuals as Record<string, unknown>) ?? {};
     return {
-      animationSpeed: 1.0,
-      strokeWidth: 3,
-      dropShadow: true,
-      ...((getCommentary().visuals as Record<string, unknown>) ?? {}),
-    } as { animationSpeed: number; strokeWidth: number; dropShadow: boolean };
+      animationSpeed: typeof raw.animationSpeed === 'number' ? raw.animationSpeed : 1.0,
+      strokeWidth: typeof raw.strokeWidth === 'number' ? raw.strokeWidth : 3,
+      dropShadow: typeof raw.dropShadow === 'boolean' ? raw.dropShadow : true,
+    };
   }
 
   let weights = $state(getWeights());
@@ -150,7 +162,7 @@
               max={100}
               step={1}
               value={weights[bt.key]}
-              onchange={(v) => { weights[bt.key] = v; }}
+              onchange={(e) => { weights[bt.key] = Number(e.currentTarget.value); }}
             />
           </div>
         {/each}
@@ -283,7 +295,7 @@
             max={2.0}
             step={0.1}
             value={visualsConfig.animationSpeed}
-            onchange={(v) => { visualsConfig.animationSpeed = v; }}
+            onchange={(e) => { visualsConfig.animationSpeed = Number(e.currentTarget.value); }}
           />
           <span class="slider-hint">Slow</span>
         </div>
@@ -299,7 +311,7 @@
             max={8}
             step={1}
             value={visualsConfig.strokeWidth}
-            onchange={(v) => { visualsConfig.strokeWidth = v; }}
+            onchange={(e) => { visualsConfig.strokeWidth = Number(e.currentTarget.value); }}
           />
           <span class="slider-hint">Thick</span>
         </div>
