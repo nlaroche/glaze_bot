@@ -261,6 +261,18 @@ export type Database = {
         Args: Record<string, never>;
         Returns: Database["public"]["Tables"]["characters"]["Row"][];
       };
+      soft_delete_character: {
+        Args: { p_character_id: string };
+        Returns: undefined;
+      };
+      soft_delete_all_characters: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      restore_character: {
+        Args: { p_character_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       character_rarity: "common" | "rare" | "epic" | "legendary";
