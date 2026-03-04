@@ -283,24 +283,19 @@ export async function getAllCharacters(): Promise<GachaCharacter[]> {
   return data as unknown as GachaCharacter[];
 }
 
-/** Soft-delete a character (sets deleted_at, hides from user queries) */
+/** Soft-delete a character (uses SECURITY DEFINER RPC to bypass SELECT RLS) */
 export async function deleteCharacter(id: string): Promise<void> {
-  const { error } = await db()
-    .from("characters")
-    .update({ is_active: false, deleted_at: new Date().toISOString() })
-    .eq("id", id);
+  const { error } = await db().rpc("soft_delete_character", {
+    p_character_id: id,
+  });
   if (error) throw error;
 }
 
 /** Soft-delete ALL active characters at once */
 export async function deleteAllCharacters(): Promise<number> {
-  const { data, error } = await db()
-    .from("characters")
-    .update({ is_active: false, deleted_at: new Date().toISOString() })
-    .eq("is_active", true)
-    .select("id");
+  const { data, error } = await db().rpc("soft_delete_all_characters");
   if (error) throw error;
-  return data?.length ?? 0;
+  return data ?? 0;
 }
 
 /** Purge a single soft-deleted character (R2 media + hard-delete DB row) */

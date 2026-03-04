@@ -20,20 +20,20 @@
 
   /* Text — icy white/blue tones on dark bg */
   --color-text-primary: #D8E8F0;
-  --color-text-secondary: #8AAAB8;
-  --color-text-muted: #5A7888;
+  --color-text-secondary: #9CBCC8;
+  --color-text-muted: #8AAAB8;
 
   /* Glass */
   --glass-bg: rgba(10, 16, 24, 0.88);
   --glass-border: rgba(140, 200, 240, 0.08);
 
   /* Semantic */
-  --color-heading: #B0D0E0;
+  --color-heading: #D0E8F0;
   --color-info: var(--color-accent-light);
 
   /* Panel */
-  --panel-bg: rgba(140, 200, 240, 0.03);
-  --panel-border: rgba(140, 200, 240, 0.06);
+  --panel-bg: rgba(140, 200, 240, 0.06);
+  --panel-border: rgba(140, 200, 240, 0.10);
   --panel-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 
   /* Input */

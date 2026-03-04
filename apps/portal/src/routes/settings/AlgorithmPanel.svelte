@@ -12,8 +12,8 @@
 
   let { config, onsave }: Props = $props();
 
-  // ── Block types with labels ──
-  const BLOCK_TYPES = [
+  // ── Topic types with labels ──
+  const TOPIC_TYPES = [
     { key: 'solo_observation', label: 'Solo Observation', desc: 'React to what\'s on screen' },
     { key: 'emotional_reaction', label: 'Emotional Reaction', desc: 'Pure emotional response' },
     { key: 'question', label: 'Question', desc: 'Ask the player or wonder aloud' },
@@ -64,11 +64,15 @@
   }
 
   function getWeights(): Record<string, number> {
-    return { ...DEFAULT_WEIGHTS, ...((getCommentary().blockWeights as Record<string, number>) ?? {}) };
+    const c = getCommentary();
+    // Accept both new (topicWeights) and old (blockWeights) key names
+    return { ...DEFAULT_WEIGHTS, ...((c.topicWeights ?? c.blockWeights) as Record<string, number> ?? {}) };
   }
 
   function getPrompts(): Record<string, string> {
-    return { ...DEFAULT_PROMPTS, ...((getCommentary().blockPrompts as Record<string, string>) ?? {}) };
+    const c = getCommentary();
+    // Accept both new (topicPrompts) and old (blockPrompts) key names
+    return { ...DEFAULT_PROMPTS, ...((c.topicPrompts ?? c.blockPrompts) as Record<string, string> ?? {}) };
   }
 
   function getMemoryConfig(): Record<string, unknown> {
@@ -102,8 +106,8 @@
   // ── Derived: distribution ──
   let distribution = $derived.by(() => {
     const total = Object.values(weights).reduce((a, b) => a + b, 0);
-    if (total === 0) return Object.fromEntries(BLOCK_TYPES.map((b) => [b.key, 0]));
-    return Object.fromEntries(BLOCK_TYPES.map((b) => [b.key, weights[b.key] / total]));
+    if (total === 0) return Object.fromEntries(TOPIC_TYPES.map((b) => [b.key, 0]));
+    return Object.fromEntries(TOPIC_TYPES.map((b) => [b.key, weights[b.key] / total]));
   });
 
   let barMax = $derived(Math.max(...Object.values(distribution), 0.01));
@@ -112,7 +116,7 @@
   async function save() {
     saving = true;
     try {
-      const commentary = { ...getCommentary(), blockWeights: { ...weights }, blockPrompts: { ...prompts }, memory: { ...memoryConfig }, visuals: { ...visualsConfig } };
+      const commentary = { ...getCommentary(), topicWeights: { ...weights }, topicPrompts: { ...prompts }, memory: { ...memoryConfig }, visuals: { ...visualsConfig } };
       const updated = { ...config, commentary };
       await onsave(updated);
     } finally {
@@ -124,15 +128,15 @@
   function simulate() {
     const total = Object.values(weights).reduce((a, b) => a + b, 0);
     if (total === 0) {
-      simResults = Object.fromEntries(BLOCK_TYPES.map((b) => [b.key, 0]));
+      simResults = Object.fromEntries(TOPIC_TYPES.map((b) => [b.key, 0]));
       return;
     }
     const counts: Record<string, number> = {};
-    for (const b of BLOCK_TYPES) counts[b.key] = 0;
+    for (const b of TOPIC_TYPES) counts[b.key] = 0;
 
     for (let i = 0; i < 100; i++) {
       let roll = Math.random() * total;
-      for (const b of BLOCK_TYPES) {
+      for (const b of TOPIC_TYPES) {
         roll -= weights[b.key];
         if (roll <= 0) { counts[b.key]++; break; }
       }
@@ -142,16 +146,16 @@
 </script>
 
 <div class="algo-panel" data-testid="algorithm-panel">
-  <!-- ═══ A. Block Weights ═══ -->
+  <!-- ═══ A. Topic Weights ═══ -->
   <Card>
     <div class="section-header">
-      <h3>Block Weights</h3>
+      <h3>Topic Weights</h3>
       <p class="section-desc">Control how often each commentary type is selected. Higher weight = more frequent.</p>
     </div>
 
     <div class="weights-layout">
       <div class="weights-sliders">
-        {#each BLOCK_TYPES as bt}
+        {#each TOPIC_TYPES as bt}
           <div class="weight-row" data-testid="weight-{bt.key}">
             <div class="weight-label">
               <span class="weight-name">{bt.label}</span>
@@ -170,7 +174,7 @@
 
       <div class="weights-chart">
         <h4>Distribution</h4>
-        {#each BLOCK_TYPES as bt}
+        {#each TOPIC_TYPES as bt}
           <div class="bar-row">
             <span class="bar-label">{bt.label}</span>
             <div class="bar-track">
@@ -186,14 +190,14 @@
     </div>
   </Card>
 
-  <!-- ═══ B. Block Prompts ═══ -->
+  <!-- ═══ B. Topic Prompts ═══ -->
   <Card>
     <div class="section-header">
-      <h3>Block Prompts</h3>
-      <p class="section-desc">Customize the instruction given to the LLM for each block type.</p>
+      <h3>Topic Prompts</h3>
+      <p class="section-desc">Customize the instruction given to the LLM for each topic type.</p>
     </div>
 
-    {#each BLOCK_TYPES.filter((b) => b.key !== 'silence') as bt}
+    {#each TOPIC_TYPES.filter((b) => b.key !== 'silence') as bt}
       <div class="prompt-accordion" data-testid="prompt-{bt.key}">
         <button
           class="prompt-header"
@@ -329,14 +333,14 @@
   <Card>
     <div class="section-header">
       <h3>Simulator</h3>
-      <p class="section-desc">Preview block selection distribution over 100 ticks.</p>
+      <p class="section-desc">Preview topic selection distribution over 100 ticks.</p>
     </div>
 
     <Button onclick={simulate} data-testid="simulate-btn">Simulate 100 Ticks</Button>
 
     {#if simResults}
       <div class="sim-results">
-        {#each BLOCK_TYPES as bt}
+        {#each TOPIC_TYPES as bt}
           <div class="sim-row">
             <span class="sim-label">{bt.label}</span>
             <div class="sim-track">
@@ -361,20 +365,20 @@
   .algo-panel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg, 1.5rem);
+    gap: var(--space-6);
   }
 
   .section-header {
-    margin-bottom: var(--space-md, 1rem);
+    margin-bottom: var(--space-4);
   }
   .section-header h3 {
-    margin: 0 0 0.25rem;
-    font-size: var(--font-lg, 1.125rem);
+    margin: 0 0 var(--space-1);
+    font-size: var(--font-lg);
     color: var(--color-text-primary);
   }
   .section-desc {
     margin: 0;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
   }
 
@@ -382,56 +386,56 @@
   .weights-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--space-xl, 2rem);
+    gap: var(--space-8);
   }
 
   .weight-row {
-    margin-bottom: var(--space-sm, 0.5rem);
+    margin-bottom: var(--space-2);
   }
   .weight-label {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--space-1);
   }
   .weight-name {
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
   }
   .weight-pct {
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
   }
 
   .weights-chart h4 {
-    margin: 0 0 var(--space-sm, 0.5rem);
-    font-size: var(--font-base, 0.875rem);
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
   }
   .bar-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.375rem;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1-5);
   }
   .bar-label {
     width: 120px;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     flex-shrink: 0;
   }
   .bar-track {
     flex: 1;
     height: 16px;
-    background: var(--color-surface-raised, #2a2a2a);
-    border-radius: 4px;
+    background: var(--color-surface-raised);
+    border-radius: var(--radius-sm);
     overflow: hidden;
   }
   .bar-fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     transition: width 0.2s ease;
-    background: var(--color-accent, #6366f1);
+    background: var(--color-accent);
   }
   .bar-solo_observation { background: #6366f1; }
   .bar-emotional_reaction { background: #f43f5e; }
@@ -447,58 +451,58 @@
   .bar-value {
     width: 36px;
     text-align: right;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
   }
 
   /* ── Prompts ── */
   .prompt-accordion {
-    border-bottom: 1px solid var(--color-border, #333);
+    border-bottom: 1px solid var(--color-border);
   }
   .prompt-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    padding: var(--space-sm, 0.5rem) 0;
+    padding: var(--space-2) 0;
     background: none;
     border: none;
     color: var(--color-text-primary);
     cursor: pointer;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
   }
   .prompt-chevron {
-    font-size: 0.75rem;
+    font-size: var(--font-brand-sm);
     color: var(--color-text-secondary);
   }
   .prompt-body {
-    padding: 0 0 var(--space-md, 1rem);
+    padding: 0 0 var(--space-4);
   }
   .reset-btn {
-    margin-top: 0.5rem;
-    padding: 0.25rem 0.75rem;
-    font-size: var(--font-base, 0.875rem);
-    background: var(--color-surface-raised, #2a2a2a);
+    margin-top: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-base);
+    background: var(--color-surface-raised);
     color: var(--color-text-primary);
-    border: 1px solid var(--color-border, #333);
-    border-radius: 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
   .reset-btn:hover {
-    background: var(--color-surface-hover, #333);
+    background: var(--white-a8);
   }
 
   /* ── Memory ── */
   .memory-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: var(--space-md, 1rem);
+    gap: var(--space-4);
   }
   .memory-field label {
     display: block;
-    margin-bottom: 0.25rem;
-    font-size: var(--font-base, 0.875rem);
+    margin-bottom: var(--space-1);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
   }
   .full-width {
@@ -507,51 +511,51 @@
   .toggle-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-2);
     grid-column: 1 / -1;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     cursor: pointer;
   }
   .toggle-row input[type="checkbox"] {
     width: 18px;
     height: 18px;
-    accent-color: var(--color-accent, #6366f1);
+    accent-color: var(--color-accent);
   }
 
   /* ── Simulator ── */
   .sim-results {
-    margin-top: var(--space-md, 1rem);
+    margin-top: var(--space-4);
   }
   .sim-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.375rem;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1-5);
   }
   .sim-label {
     width: 120px;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     flex-shrink: 0;
   }
   .sim-track {
     flex: 1;
     height: 16px;
-    background: var(--color-surface-raised, #2a2a2a);
-    border-radius: 4px;
+    background: var(--color-surface-raised);
+    border-radius: var(--radius-sm);
     overflow: hidden;
   }
   .sim-fill {
     height: 100%;
-    background: var(--color-accent, #6366f1);
-    border-radius: 4px;
+    background: var(--color-accent);
+    border-radius: var(--radius-sm);
     transition: width 0.2s ease;
   }
   .sim-count {
     width: 28px;
     text-align: right;
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
   }
@@ -560,35 +564,35 @@
   .visuals-grid {
     display: flex;
     flex-direction: column;
-    gap: var(--space-md, 1rem);
+    gap: var(--space-4);
   }
   .visual-field label {
     display: block;
-    margin-bottom: 0.25rem;
-    font-size: var(--font-base, 0.875rem);
+    margin-bottom: var(--space-1);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
   }
   .slider-with-labels {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
   .slider-with-labels :global(.slider-input) {
     flex: 1;
   }
   .slider-hint {
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-secondary);
     flex-shrink: 0;
     width: 32px;
   }
   .visual-value {
-    font-size: var(--font-base, 0.875rem);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     font-variant-numeric: tabular-nums;
     text-align: center;
     display: block;
-    margin-top: 0.25rem;
+    margin-top: var(--space-1);
   }
 
   /* ── Save Bar ── */

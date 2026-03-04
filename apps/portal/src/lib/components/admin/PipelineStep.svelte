@@ -69,24 +69,21 @@
 
 <style>
   .pipeline-step {
-    background: rgba(10, 22, 42, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-xl);
     overflow: hidden;
     transition: border-color 0.15s;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 1px 3px rgba(0, 0, 0, 0.4),
-      0 4px 12px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--panel-shadow);
   }
 
   .step-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 16px;
+    gap: var(--space-2-5);
+    padding: var(--space-3) var(--space-4);
     border-bottom: 1px solid transparent;
   }
 
@@ -100,7 +97,7 @@
     color: var(--color-text-muted);
     cursor: pointer;
     padding: 0;
-    font-size: 0.8rem;
+    font-size: var(--font-xs);
     line-height: 1;
   }
 
@@ -120,25 +117,25 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--white-a6);
     color: var(--color-text-secondary);
-    font-size: 0.8125rem;
+    font-size: var(--font-xs);
     font-weight: 700;
     flex-shrink: 0;
   }
 
   .step-title {
-    font-size: 0.9375rem;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--color-text-primary);
     flex: 1;
   }
 
   .badge {
-    font-size: 0.75rem;
+    font-size: var(--font-brand-sm);
     font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 10px;
+    padding: var(--space-0-5) var(--space-2-5);
+    border-radius: var(--radius-xl);
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
@@ -149,19 +146,19 @@
   }
 
   .badge-running {
-    background: rgba(59, 151, 151, 0.15);
+    background: var(--teal-a15);
     color: var(--color-teal);
     animation: pulse 1.5s ease-in-out infinite;
   }
 
   .badge-done {
-    background: rgba(74, 222, 128, 0.15);
-    color: #4ade80;
+    background: var(--start-a15);
+    color: var(--color-success);
   }
 
   .badge-error {
-    background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
+    background: var(--error-a15);
+    color: var(--color-error);
   }
 
   @keyframes pulse {
@@ -170,12 +167,12 @@
   }
 
   .step-content {
-    padding: 16px;
+    padding: var(--space-4);
   }
 
   .step-error {
-    color: #f87171;
-    font-size: 0.8125rem;
-    margin-top: 8px;
+    color: var(--color-error);
+    font-size: var(--font-xs);
+    margin-top: var(--space-2);
   }
 </style>

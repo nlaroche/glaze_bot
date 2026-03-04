@@ -256,7 +256,7 @@
   }
 
   input, select {
-    background: rgba(10, 22, 42, 0.6);
+    background: var(--navy-a60);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
@@ -293,7 +293,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: rgba(10, 22, 42, 0.95);
+    background: var(--navy-a80);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     list-style: none;
@@ -368,14 +368,14 @@
   }
 
   .badge-level-error {
-    background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
+    background: var(--error-a15);
+    color: var(--color-error);
   }
 
-  .badge-common { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+  .badge-common { background: var(--rarity-common-bg); color: var(--rarity-common); }
   .badge-rare { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
-  .badge-epic { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
-  .badge-legendary { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  .badge-epic { background: var(--rarity-epic-bg); color: var(--rarity-epic); }
+  .badge-legendary { background: var(--rarity-legendary-bg); color: var(--rarity-legendary); }
 
   /* ─── Table ─── */
   .log-table-wrapper {
@@ -397,7 +397,7 @@
   }
 
   .log-table th {
-    background: rgba(10, 22, 42, 0.8);
+    background: var(--navy-a80);
     padding: var(--space-2) var(--space-2-5);
     text-align: left;
     font-weight: 600;
@@ -410,13 +410,13 @@
 
   .log-table td {
     padding: var(--space-1-5) var(--space-2-5);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--white-a4);
     color: var(--color-text-primary);
     vertical-align: top;
   }
 
   .log-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--white-a2);
   }
 
   .col-time {
@@ -442,7 +442,7 @@
   }
 
   .data-toggle {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--white-a6);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     color: var(--color-text-secondary);
@@ -453,7 +453,7 @@
   }
 
   .data-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--white-a10);
     color: var(--color-text-primary);
   }
 
@@ -463,11 +463,11 @@
 
   .data-row td {
     padding: 0 var(--space-2-5) var(--space-2);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--white-a6);
   }
 
   .json-data {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--black-a30);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-2-5);
@@ -489,11 +489,11 @@
   }
 
   .error-banner {
-    background: rgba(248, 113, 113, 0.1);
+    background: var(--error-a12);
     border: 1px solid rgba(248, 113, 113, 0.3);
     border-radius: var(--radius-md);
     padding: var(--space-2) var(--space-3);
-    color: #f87171;
+    color: var(--color-error);
     font-size: var(--font-base);
   }
 

@@ -62,21 +62,21 @@
   /* Override shared-ui PartyManager h2 */
   .party-section :global(h2) {
     font-family: var(--font-brand);
-    font-size: 1.1rem;
+    font-size: var(--font-xl);
     font-weight: 400;
     letter-spacing: 1px;
   }
 
   /* Glass surfaces for party slots and picker */
   .party-section :global(.slot) {
-    background: rgba(10, 22, 42, 0.5);
+    background: var(--navy-a50);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border-color: var(--white-a6);
   }
 
   .party-section :global(.picker) {
-    background: rgba(10, 22, 42, 0.5);
+    background: var(--navy-a50);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
     border-color: var(--white-a6);

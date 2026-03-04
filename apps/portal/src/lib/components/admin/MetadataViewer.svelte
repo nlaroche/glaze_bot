@@ -39,22 +39,22 @@
 
 <style>
   .metadata-viewer {
-    margin-top: 12px;
+    margin-top: var(--space-3);
     border-top: 1px solid var(--glass-border);
-    padding-top: 8px;
+    padding-top: var(--space-2);
   }
 
   .toggle-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-1-5);
     background: none;
     border: none;
     color: var(--color-text-muted);
     font-family: inherit;
-    font-size: 0.75rem;
+    font-size: var(--font-brand-sm);
     cursor: pointer;
-    padding: 4px 0;
+    padding: var(--space-1) 0;
     transition: color 0.15s;
   }
 
@@ -65,7 +65,7 @@
   .chevron {
     display: inline-block;
     transition: transform 0.15s;
-    font-size: 0.7rem;
+    font-size: var(--font-micro);
   }
 
   .chevron.open {
@@ -78,20 +78,20 @@
   }
 
   .metadata-content {
-    margin-top: 8px;
+    margin-top: var(--space-2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .metadata-section {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .section-label {
-    font-size: 0.7rem;
+    font-size: var(--font-micro);
     font-weight: 600;
     text-transform: uppercase;
     color: var(--color-text-muted);
@@ -99,12 +99,12 @@
   }
 
   pre {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--black-a30);
     border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 0.7rem;
-    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-sm);
+    color: var(--color-text-primary);
     overflow-x: auto;
     max-height: 200px;
     overflow-y: auto;

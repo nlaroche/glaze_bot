@@ -171,7 +171,7 @@
 
   .collage-card {
     position: absolute;
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     overflow: hidden;
     animation: collage-float 8s ease-in-out infinite alternate;
   }
@@ -181,7 +181,7 @@
     height: 100%;
     object-fit: cover;
     display: block;
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
   }
 
   @keyframes collage-float {
@@ -203,9 +203,9 @@
   .pack-body {
     width: 80px;
     height: 120px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: linear-gradient(160deg, rgba(176, 106, 255, 0.4) 0%, rgba(10, 14, 24, 0.6) 50%, rgba(59, 151, 151, 0.3) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--white-a10);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -217,7 +217,7 @@
 
   .pack-label-top {
     font-family: var(--font-brand);
-    font-size: 10px;
+    font-size: var(--font-micro);
     color: rgba(253, 181, 206, 0.7);
     letter-spacing: 3px;
     z-index: 1;

@@ -19,16 +19,18 @@
 
 <style>
   .card {
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
     border-radius: var(--panel-radius);
     padding: var(--space-5);
-    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--panel-shadow);
   }
   .card-title {
-    font-size: var(--font-md);
+    font-size: var(--font-xl);
     font-weight: 600;
-    color: var(--color-text-primary);
+    color: var(--color-heading);
+    font-family: var(--font-brand);
+    letter-spacing: -0.01em;
     margin: 0 0 var(--space-4);
   }
 </style>
