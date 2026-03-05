@@ -1,4 +1,4 @@
-// Edge function: generate-character
+// Edge function: generate-character (batch_id + voice dedup support)
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   handleCors,
