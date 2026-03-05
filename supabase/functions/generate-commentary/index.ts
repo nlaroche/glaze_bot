@@ -26,6 +26,18 @@ const DEFAULT_TEMPERATURE = 0.9;
 const DEFAULT_PRESENCE_PENALTY = 1.5;
 const DEFAULT_FREQUENCY_PENALTY = 0.8;
 
+/** Hard word-count cap — safety net because some models ignore max_tokens for text. */
+const MAX_WORDS = 35;
+
+function truncateToWordLimit(text: string, limit: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= limit) return text;
+  // Find the last sentence boundary within the limit
+  const truncated = words.slice(0, limit).join(" ");
+  const lastSentence = truncated.match(/^(.*[.!?])\s*/);
+  return lastSentence ? lastSentence[1] : truncated;
+}
+
 interface Personality {
   energy: number;
   positivity: number;
@@ -419,6 +431,29 @@ Deno.serve(async (req: Request) => {
         reqBody.tool_choice = forceVisuals ? "required" : "auto";
       }
 
+      // Log request (omit frame_b64 to keep logs readable)
+      const logMessages = messages.map((m) => {
+        if (m.role === "user" && Array.isArray(m.content)) {
+          return { role: m.role, content: (m.content as Array<Record<string, unknown>>).map((c) =>
+            c.type === "image_url" ? { type: "image_url", size: "omitted" } : c
+          )};
+        }
+        return m;
+      });
+      console.log("[generate-commentary] REQUEST", JSON.stringify({
+        model: visionModel,
+        provider: "dashscope",
+        max_tokens: effectiveMaxTokens,
+        temperature,
+        block_type,
+        block_prompt,
+        has_tools: !!providerTools,
+        force_visuals: forceVisuals,
+        message_count: messages.length,
+        system_prompt_length: fullSystemPrompt.length,
+        user_text: textParts.join(" | "),
+      }));
+
       const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
@@ -429,6 +464,17 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Dashscope ${res.status}: ${errText}`);
       }
       const data = await res.json();
+
+      // Log response
+      console.log("[generate-commentary] RESPONSE", JSON.stringify({
+        model: visionModel,
+        finish_reason: data.choices?.[0]?.finish_reason,
+        usage: data.usage,
+        raw_content_length: (data.choices?.[0]?.message?.content ?? "").length,
+        has_tool_calls: !!(data.choices?.[0]?.message?.tool_calls?.length),
+        raw_content_preview: (data.choices?.[0]?.message?.content ?? "").slice(0, 300),
+      }));
+
       const rawContent = data.choices?.[0]?.message?.content?.trim() ?? "";
       let reply = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
       // Qwen sometimes wraps the entire response in <think> despite /no_think.
@@ -483,6 +529,12 @@ Deno.serve(async (req: Request) => {
         reqBody.tool_choice = forceVisuals ? { type: "any" } : { type: "auto" };
       }
 
+      console.log("[generate-commentary] REQUEST", JSON.stringify({
+        model: visionModel, provider: "anthropic", max_tokens: effectiveMaxTokens,
+        temperature, block_type, block_prompt, has_tools: !!providerTools,
+        system_prompt_length: fullSystemPrompt.length, user_text: textParts.join(" | "),
+      }));
+
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
@@ -497,6 +549,13 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Anthropic ${res.status}: ${errText}`);
       }
       const data = await res.json();
+
+      console.log("[generate-commentary] RESPONSE", JSON.stringify({
+        model: visionModel, finish_reason: data.stop_reason,
+        usage: data.usage, content_blocks: (data.content ?? []).length,
+        raw_text_preview: (data.content ?? []).filter((b: {type:string}) => b.type === "text").map((b: {text:string}) => b.text).join(" ").slice(0, 300),
+      }));
+
       // Extract text from content blocks (skip tool_use blocks)
       const textBlocks = (data.content ?? []).filter((b: { type: string }) => b.type === "text");
       const reply = textBlocks.map((b: { text: string }) => b.text?.trim()).join(" ").trim();
@@ -538,6 +597,12 @@ Deno.serve(async (req: Request) => {
         reqBody.tool_choice = forceVisuals ? "required" : "auto";
       }
 
+      console.log("[generate-commentary] REQUEST", JSON.stringify({
+        model: visionModel, provider: "gemini", max_tokens: effectiveMaxTokens,
+        temperature, block_type, block_prompt, has_tools: !!providerTools,
+        system_prompt_length: fullSystemPrompt.length, user_text: textParts.join(" | "),
+      }));
+
       const res = await fetch(
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         {
@@ -551,6 +616,12 @@ Deno.serve(async (req: Request) => {
         throw new Error(`Gemini ${res.status}: ${errText}`);
       }
       const data = await res.json();
+
+      console.log("[generate-commentary] RESPONSE", JSON.stringify({
+        model: visionModel, finish_reason: data.choices?.[0]?.finish_reason,
+        usage: data.usage, raw_content_preview: (data.choices?.[0]?.message?.content ?? "").slice(0, 300),
+      }));
+
       const reply = data.choices?.[0]?.message?.content?.trim() ?? "";
       const visuals = enable_visuals
         ? parseToolCalls("gemini", data)
@@ -637,8 +708,21 @@ Deno.serve(async (req: Request) => {
     }
 
     // Check for [SILENCE]
-    const text =
+    let text: string | null =
       result.text.toUpperCase().includes("[SILENCE]") ? null : result.text;
+
+    // Hard word-count cap — models (especially Qwen3) often ignore max_tokens for text
+    if (text) {
+      const before = text;
+      text = truncateToWordLimit(text, MAX_WORDS);
+      if (text !== before) {
+        console.log("[generate-commentary] TRUNCATED", JSON.stringify({
+          original_words: before.split(/\s+/).length,
+          truncated_words: text.split(/\s+/).length,
+          original_preview: before.slice(0, 200),
+        }));
+      }
+    }
 
     return jsonResponse({
       text,
