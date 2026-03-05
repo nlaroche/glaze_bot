@@ -18,6 +18,7 @@ const DASHSCOPE_BASE_URL =
   Deno.env.get("VISION_BASE_URL") ??
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 const VISION_MODEL = Deno.env.get("VISION_MODEL") ?? "qwen3-vl-flash";
+const TEXT_MODEL = Deno.env.get("TEXT_MODEL") ?? "qwen-plus";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
@@ -26,17 +27,8 @@ const DEFAULT_TEMPERATURE = 0.9;
 const DEFAULT_PRESENCE_PENALTY = 1.5;
 const DEFAULT_FREQUENCY_PENALTY = 0.8;
 
-/** Hard word-count cap — safety net because some models ignore max_tokens for text. */
-const MAX_WORDS = 35;
-
-function truncateToWordLimit(text: string, limit: number): string {
-  const words = text.split(/\s+/);
-  if (words.length <= limit) return text;
-  // Find the last sentence boundary within the limit
-  const truncated = words.slice(0, limit).join(" ");
-  const lastSentence = truncated.match(/^(.*[.!?])\s*/);
-  return lastSentence ? lastSentence[1] : truncated;
-}
+/** Topics where the model needs to SEE the frame to be specific about what's on screen */
+const VISION_TOPICS = new Set(["solo_observation", "emotional_reaction", "question"]);
 
 interface Personality {
   energy: number;
@@ -136,7 +128,7 @@ Deno.serve(async (req: Request) => {
       return errorResponse("system_prompt is required", 400);
     }
 
-    // Fetch commentary config from gacha_config (same pattern as generate-character)
+    // Fetch commentary config from gacha_config
     const serviceClient = getServiceClient();
     const { data: configRow } = await serviceClient
       .from("gacha_config")
@@ -165,6 +157,8 @@ Deno.serve(async (req: Request) => {
         : visionProvider === "gemini"
           ? "gemini-2.5-flash"
           : VISION_MODEL);
+    const textModel =
+      (commentary.textModel as string) ?? TEXT_MODEL;
 
     if (visionProvider === "anthropic" && !ANTHROPIC_API_KEY) {
       return errorResponse("Anthropic API key not configured", 500);
@@ -172,18 +166,24 @@ Deno.serve(async (req: Request) => {
     if (visionProvider === "gemini" && !GEMINI_API_KEY) {
       return errorResponse("Gemini API key not configured", 500);
     }
-    if (visionProvider === "dashscope" && !DASHSCOPE_API_KEY) {
+    if (!DASHSCOPE_API_KEY) {
       return errorResponse("Dashscope API key not configured", 500);
     }
 
+    // ── Routing decision ──────────────────────────────────────────
+    // Vision model: screen-focused topics + player interaction with visual tools
+    // Text model: character-driven topics (tangent, hot_take, backstory, banter, etc.)
+    const forceVisuals = !!(enable_visuals && player_text && frame_b64);
+    const needsVision = forceVisuals || (VISION_TOPICS.has(block_type ?? "") && !!frame_b64);
+
     // ── Handle multi-character blocks (quip_banter / hype_chain) ──
+    // Always use text model — they're talking to each other, not describing screen
     if ((block_type === "quip_banter" || block_type === "hype_chain") && participants && participants.length >= 2) {
       const characterDescs = participants.map((p) => {
         const mod = buildPersonalityModifier(p.personality);
         return `- ${p.name}: ${p.system_prompt?.slice(0, 300) ?? "A commentator."}${mod}`;
       }).join("\n");
 
-      // Find personality contrasts to seed the interaction
       const p1 = participants[0].personality;
       const p2 = participants[1].personality;
       let contrastHint = "";
@@ -202,7 +202,7 @@ Deno.serve(async (req: Request) => {
         ? `Two co-casters are watching a game together. Write a 2-line exchange where they TALK TO EACH OTHER — not just react to the screen separately. One says something, the other RESPONDS to what they said. They can disagree, tease, build on each other's point, or have their personalities clash. The screen is context, but the exchange is between THEM.${contrastHint}\n\nCharacters:\n${characterDescs}`
         : `Two co-casters react to the SAME moment on screen. Character A says something, then Character B responds DIRECTLY to A's take — agreeing loudly, pushing back, one-upping, or riffing off it. They must acknowledge each other, not just independently comment.${contrastHint}\n\nCharacters:\n${characterDescs}`;
 
-      const multiSystemPrompt = `${multiDirective}\n\nRULES:\n- Each line: 1 sentence, under 20 words. Spoken aloud via TTS.\n- The second line MUST reference or respond to the first line.\n- Stay in character voice but react to EACH OTHER.\n\nReturn ONLY a JSON array: [{\"character\": \"Name\", \"line\": \"their line\"}, ...]\nNo other text. No markdown fences. Just the JSON array.`;
+      const multiSystemPrompt = `${multiDirective}\n\nRULES:\n- Each line: 1 sentence, under 20 words. Spoken aloud via TTS.\n- The second line MUST reference or respond to the first line.\n- Stay in character voice but react to EACH OTHER.\n\nReturn ONLY a JSON array: [{"character": "Name", "line": "their line"}, ...]\nNo other text. No markdown fences. Just the JSON array.`;
 
       const multiTextParts: string[] = [];
       if (scene_context) {
@@ -217,81 +217,48 @@ Deno.serve(async (req: Request) => {
       }
       multiTextParts.push("Write the exchange now.");
 
-      const multiUserContent: Array<Record<string, unknown>> = [];
-      if (frame_b64) {
-        multiUserContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
-      }
-      multiUserContent.push({ type: "text", text: multiTextParts.join("\n") });
-
-      const multiMessages = [
-        { role: "system", content: multiSystemPrompt },
-        { role: "user", content: multiUserContent },
-      ];
-
-      // Use the same provider dispatch, but with multi-character prompt
-      let multiResult: { text: string; usage: { input_tokens: number; output_tokens: number } };
-      // Scale max tokens for multi-character: need room for N lines of JSON,
-      // but respect the user's configured maxTokens as a per-line budget.
+      // Multi-character always uses text model (no image needed)
       const participantCount = participants.length;
-      const multiMaxTokens = maxTokens * participantCount + 40; // +40 for JSON array wrapper
-      const multiReqBody: Record<string, unknown> = {
-        model: visionModel,
-        messages: multiMessages,
-        max_tokens: multiMaxTokens,
-        temperature,
-      };
+      const multiMaxTokens = maxTokens * participantCount + 40;
 
-      if (visionProvider === "anthropic") {
-        // Anthropic format
-        const anthropicBlocks: Array<Record<string, unknown>> = [];
-        if (frame_b64) {
-          anthropicBlocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } });
-        }
-        anthropicBlocks.push({ type: "text", text: multiTextParts.join("\n") });
+      console.log("[generate-commentary] REQUEST", JSON.stringify({
+        model: textModel, provider: "dashscope", path: "multi-character",
+        max_tokens: multiMaxTokens, temperature, block_type, block_prompt,
+      }));
 
-        const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({ model: visionModel, max_tokens: multiMaxTokens, temperature, system: multiSystemPrompt, messages: [{ role: "user", content: anthropicBlocks }] }),
-        });
-        if (!anthropicRes.ok) {
-          const errText = await anthropicRes.text();
-          return errorResponse(`Multi-character API error: ${errText}`, 502);
-        }
-        const aData = await anthropicRes.json();
-        const aText = (aData.content ?? []).filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join(" ").trim();
-        multiResult = { text: aText, usage: { input_tokens: aData.usage?.input_tokens ?? 0, output_tokens: aData.usage?.output_tokens ?? 0 } };
-      } else if (visionProvider === "gemini") {
-        const gRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
-          body: JSON.stringify(multiReqBody),
-        });
-        if (!gRes.ok) { const e = await gRes.text(); return errorResponse(`Multi-character API error: ${e}`, 502); }
-        const gData = await gRes.json();
-        multiResult = { text: gData.choices?.[0]?.message?.content?.trim() ?? "", usage: { input_tokens: gData.usage?.prompt_tokens ?? 0, output_tokens: gData.usage?.completion_tokens ?? 0 } };
-      } else {
-        const dRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
-          body: JSON.stringify({ ...multiReqBody, presence_penalty: presencePenalty, frequency_penalty: frequencyPenalty }),
-        });
-        if (!dRes.ok) { const e = await dRes.text(); return errorResponse(`Multi-character API error: ${e}`, 502); }
-        const dData = await dRes.json();
-        const dRaw = dData.choices?.[0]?.message?.content?.trim() ?? "";
-        let dText = dRaw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-        // If think-stripping emptied the response, try extracting from think block
-        if (!dText && dRaw.includes("<think>")) {
-          const m = dRaw.match(/<think>([\s\S]*?)<\/think>/);
-          if (m) dText = m[1].trim();
-        }
-        multiResult = { text: dText, usage: { input_tokens: dData.usage?.prompt_tokens ?? 0, output_tokens: dData.usage?.completion_tokens ?? 0 } };
+      const multiRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
+        body: JSON.stringify({
+          model: textModel,
+          messages: [
+            { role: "system", content: multiSystemPrompt },
+            { role: "user", content: multiTextParts.join("\n") },
+          ],
+          max_tokens: multiMaxTokens,
+          temperature,
+          presence_penalty: presencePenalty,
+          frequency_penalty: frequencyPenalty,
+        }),
+      });
+      if (!multiRes.ok) {
+        const e = await multiRes.text();
+        return errorResponse(`Multi-character API error: ${e}`, 502);
       }
+      const multiData = await multiRes.json();
+      const multiRaw = multiData.choices?.[0]?.message?.content?.trim() ?? "";
 
-      // Try to parse JSON array from response
+      console.log("[generate-commentary] RESPONSE", JSON.stringify({
+        model: textModel, path: "multi-character",
+        finish_reason: multiData.choices?.[0]?.finish_reason,
+        usage: multiData.usage,
+        raw_content_preview: multiRaw.slice(0, 300),
+      }));
+
+      // Parse JSON array from response
       let parsed: Array<{ character: string; line: string }> | null = null;
       try {
-        const jsonMatch = multiResult.text.match(/\[[\s\S]*\]/);
+        const jsonMatch = multiRaw.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           const arr = JSON.parse(jsonMatch[0]);
           if (Array.isArray(arr) && arr.length > 0 && arr[0].character && arr[0].line) {
@@ -299,44 +266,36 @@ Deno.serve(async (req: Request) => {
           }
         }
       } catch {
-        console.error("[generate-commentary] Failed to parse multi-character JSON:", multiResult.text.slice(0, 200));
+        console.error("[generate-commentary] Failed to parse multi-character JSON:", multiRaw.slice(0, 200));
       }
 
       if (parsed && parsed.length > 0) {
-        return jsonResponse({ lines: parsed, text: multiResult.text, usage: multiResult.usage });
+        return jsonResponse({ lines: parsed, text: multiRaw, usage: { input_tokens: multiData.usage?.prompt_tokens ?? 0, output_tokens: multiData.usage?.completion_tokens ?? 0 } });
       }
 
-      // Fallback: JSON parse failed or LLM returned plain text.
-      // Never return raw JSON to the user — attribute the whole response
-      // to the primary character, stripping any JSON artifacts.
-      const fallbackText = multiResult.text
-        .replace(/```json\s*/gi, "")
-        .replace(/```\s*/g, "")
-        .replace(/^\s*\[[\s\S]*\]\s*$/, "") // If it's ONLY a JSON array, discard entirely
-        .trim();
+      // Fallback: strip JSON artifacts
+      const fallbackText = multiRaw
+        .replace(/```json\s*/gi, "").replace(/```\s*/g, "")
+        .replace(/^\s*\[[\s\S]*\]\s*$/, "").trim();
 
       if (!fallbackText || fallbackText.startsWith("[") || fallbackText.startsWith("{")) {
-        // Still looks like JSON — return silence rather than leaking JSON to the user
-        return jsonResponse({ text: null, usage: multiResult.usage });
+        return jsonResponse({ text: null, usage: { input_tokens: multiData.usage?.prompt_tokens ?? 0, output_tokens: multiData.usage?.completion_tokens ?? 0 } });
       }
-
-      return jsonResponse({ text: fallbackText, usage: multiResult.usage });
+      return jsonResponse({ text: fallbackText, usage: { input_tokens: multiData.usage?.prompt_tokens ?? 0, output_tokens: multiData.usage?.completion_tokens ?? 0 } });
     }
 
-    // System prompt = character persona + personality modifier + output constraints.
-    // What to actually SAY comes from the topic prompt in the user message.
+    // ── Build system prompt ────────────────────────────────────────
     const personalityMod = buildPersonalityModifier(personality);
 
     let fullSystemPrompt = system_prompt + personalityMod
       + `\n\nYou are watching a player's screen and commentating live. Your responses are spoken aloud via TTS.`
       + `\n\n[OUTPUT FORMAT]\n1-2 sentences max, under 30 words. No emojis. If nothing is happening: [SILENCE]`;
 
-    // Inject memories from past sessions
     if (memories && memories.length > 0) {
       fullSystemPrompt += "\n\n[MEMORIES FROM PAST SESSIONS]\n" + memories.map((m) => `- ${m}`).join("\n");
     }
 
-    // Anti-repetition: extract recent assistant responses and instruct model to avoid them
+    // Anti-repetition
     if (history && history.length > 0) {
       const recentResponses = history
         .filter((h) => h.role === "assistant")
@@ -348,23 +307,15 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (enable_visuals) {
+    // Visual tool addendum only for vision path with tools
+    if (forceVisuals) {
       fullSystemPrompt += buildVisualSystemAddendum(frame_dims);
     }
 
-    // Only add token headroom when tool calls are forced (player interaction).
-    // For auto tool_choice, the model can choose text-only within the normal budget.
-    const forceVisuals = !!(enable_visuals && player_text && frame_b64);
+    // Token budget: vision path with forced tools gets extra headroom for tool JSON
     const effectiveMaxTokens = forceVisuals ? maxTokens + 120 : maxTokens;
 
-    // Get provider-specific tool definitions
-    // Include request_search tool when Gemini key is available (used for web search grounding)
-    const includeSearch = !!GEMINI_API_KEY;
-    const providerTools = enable_visuals
-      ? toProviderTools(visionProvider as "dashscope" | "anthropic" | "gemini", includeSearch)
-      : null;
-
-    // Build text context for the user message
+    // Build user message text
     const textParts: string[] = [];
     if (scene_context) {
       if (scene_context.game_name) {
@@ -377,79 +328,204 @@ Deno.serve(async (req: Request) => {
       textParts.push(`Game: ${game_hint}`);
     }
     if (react_to) {
-      textParts.push(
-        `Co-caster ${react_to.name} just said: "${react_to.text}"`,
-      );
+      textParts.push(`Co-caster ${react_to.name} just said: "${react_to.text}"`);
     }
     if (player_text) {
-      // Direct player message — no topic constraint, respond freely
       textParts.push(`Player said: "${player_text}"`);
       textParts.push(`Respond directly and conversationally. Stay in character. Keep it brief.`);
-      if (enable_visuals && frame_b64) {
+      if (forceVisuals) {
         textParts.push('If they ask about anything on screen, use arrow or circle to point at it.');
       }
     }
-    // The topic prompt from the scheduler is THE instruction.
     if (block_prompt) {
       textParts.push(`[YOUR TASK: ${block_prompt}]`);
     }
-    textParts.push("/no_think");
 
-    // ── Provider-specific API helpers ──────────────────────────────
+    // ── Route to the right model ──────────────────────────────────
 
-    interface VisionResult {
+    interface LLMResult {
       text: string;
       visuals: Array<Record<string, unknown>>;
       usage: { input_tokens: number; output_tokens: number };
       searchQuery?: string;
     }
 
-    async function callDashscope(): Promise<VisionResult> {
-      const userContent: Array<Record<string, unknown>> = [];
-      if (frame_b64) {
-        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+    let result: LLMResult;
+
+    if (needsVision) {
+      // ── VISION PATH: send frame to VL model ──────────────────
+      const includeSearch = !!GEMINI_API_KEY;
+      const providerTools = forceVisuals
+        ? toProviderTools(visionProvider as "dashscope" | "anthropic" | "gemini", includeSearch)
+        : null;
+
+      // Add /no_think for Qwen VL models
+      const visionTextParts = [...textParts, "/no_think"];
+
+      console.log("[generate-commentary] REQUEST", JSON.stringify({
+        model: visionModel, provider: visionProvider, path: "vision",
+        max_tokens: effectiveMaxTokens, temperature, block_type, block_prompt,
+        has_tools: !!providerTools, force_visuals: forceVisuals,
+        system_prompt_length: fullSystemPrompt.length,
+        user_text: textParts.join(" | "),
+      }));
+
+      if (visionProvider === "anthropic") {
+        const userBlocks: Array<Record<string, unknown>> = [];
+        if (frame_b64) {
+          userBlocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } });
+        }
+        userBlocks.push({ type: "text", text: visionTextParts.filter((p) => p !== "/no_think").join("\n") });
+        const messages: Array<Record<string, unknown>> = [];
+        if (history?.length) {
+          for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+        }
+        messages.push({ role: "user", content: userBlocks });
+
+        const reqBody: Record<string, unknown> = {
+          model: visionModel, max_tokens: effectiveMaxTokens, temperature,
+          system: fullSystemPrompt, messages,
+        };
+        if (providerTools) {
+          reqBody.tools = providerTools;
+          reqBody.tool_choice = forceVisuals ? { type: "any" } : { type: "auto" };
+        }
+
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify(reqBody),
+        });
+        if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+
+        console.log("[generate-commentary] RESPONSE", JSON.stringify({
+          model: visionModel, path: "vision", finish_reason: data.stop_reason,
+          usage: data.usage,
+        }));
+
+        const textBlocks = (data.content ?? []).filter((b: { type: string }) => b.type === "text");
+        const reply = textBlocks.map((b: { text: string }) => b.text?.trim()).join(" ").trim();
+        result = {
+          text: reply,
+          visuals: forceVisuals ? parseToolCalls("anthropic", data) : [],
+          usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
+          searchQuery: forceVisuals ? extractSearchToolCall("anthropic", data)?.query : undefined,
+        };
+      } else if (visionProvider === "gemini") {
+        const userContent: Array<Record<string, unknown>> = [];
+        if (frame_b64) {
+          userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+        }
+        userContent.push({ type: "text", text: visionTextParts.filter((p) => p !== "/no_think").join("\n") });
+        const messages: Array<Record<string, unknown>> = [
+          { role: "system", content: fullSystemPrompt },
+        ];
+        if (history?.length) {
+          for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+        }
+        messages.push({ role: "user", content: userContent });
+
+        const reqBody: Record<string, unknown> = {
+          model: visionModel, messages, max_tokens: effectiveMaxTokens, temperature,
+        };
+        if (providerTools) {
+          reqBody.tools = providerTools;
+          reqBody.tool_choice = forceVisuals ? "required" : "auto";
+        }
+
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
+          body: JSON.stringify(reqBody),
+        });
+        if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+
+        console.log("[generate-commentary] RESPONSE", JSON.stringify({
+          model: visionModel, path: "vision", finish_reason: data.choices?.[0]?.finish_reason,
+          usage: data.usage,
+        }));
+
+        result = {
+          text: data.choices?.[0]?.message?.content?.trim() ?? "",
+          visuals: forceVisuals ? parseToolCalls("gemini", data) : [],
+          usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
+          searchQuery: forceVisuals ? extractSearchToolCall("gemini", data)?.query : undefined,
+        };
+      } else {
+        // Dashscope VL
+        const userContent: Array<Record<string, unknown>> = [];
+        if (frame_b64) {
+          userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
+        }
+        userContent.push({ type: "text", text: visionTextParts.join("\n") });
+        const messages: Array<Record<string, unknown>> = [
+          { role: "system", content: fullSystemPrompt },
+        ];
+        if (history?.length) {
+          for (const entry of history) messages.push({ role: entry.role, content: entry.content });
+        }
+        messages.push({ role: "user", content: userContent });
+
+        const reqBody: Record<string, unknown> = {
+          model: visionModel, messages, max_tokens: effectiveMaxTokens, temperature,
+          presence_penalty: presencePenalty, frequency_penalty: frequencyPenalty,
+        };
+        if (providerTools) {
+          reqBody.tools = providerTools;
+          reqBody.tool_choice = forceVisuals ? "required" : "auto";
+        }
+
+        const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
+          body: JSON.stringify(reqBody),
+        });
+        if (!res.ok) throw new Error(`Dashscope ${res.status}: ${await res.text()}`);
+        const data = await res.json();
+
+        console.log("[generate-commentary] RESPONSE", JSON.stringify({
+          model: visionModel, path: "vision",
+          finish_reason: data.choices?.[0]?.finish_reason,
+          usage: data.usage,
+          raw_content_preview: (data.choices?.[0]?.message?.content ?? "").slice(0, 300),
+        }));
+
+        const rawContent = data.choices?.[0]?.message?.content?.trim() ?? "";
+        let reply = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+        // Qwen VL sometimes wraps entire response in <think> despite /no_think
+        if (!reply && rawContent.includes("<think>")) {
+          const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
+          if (thinkMatch) {
+            const thinkLines = thinkMatch[1].trim().split("\n").filter((l: string) => l.trim());
+            const lastLine = thinkLines[thinkLines.length - 1]?.trim() ?? "";
+            if (lastLine.length > 5 && lastLine.length < 200 && !lastLine.startsWith("I need") && !lastLine.startsWith("The user")) {
+              reply = lastLine;
+            }
+          }
+        }
+
+        result = {
+          text: reply,
+          visuals: forceVisuals ? parseToolCalls("dashscope", data) : [],
+          usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
+          searchQuery: forceVisuals ? extractSearchToolCall("dashscope", data)?.query : undefined,
+        };
       }
-      userContent.push({ type: "text", text: textParts.join("\n") });
+    } else {
+      // ── TEXT PATH: no image, use text model (respects max_tokens) ──
       const messages: Array<Record<string, unknown>> = [
         { role: "system", content: fullSystemPrompt },
       ];
       if (history?.length) {
         for (const entry of history) messages.push({ role: entry.role, content: entry.content });
       }
-      messages.push({ role: "user", content: userContent });
+      messages.push({ role: "user", content: textParts.join("\n") });
 
-      const reqBody: Record<string, unknown> = {
-        model: visionModel,
-        messages,
-        max_tokens: effectiveMaxTokens,
-        temperature,
-        presence_penalty: presencePenalty,
-        frequency_penalty: frequencyPenalty,
-      };
-      if (providerTools) {
-        reqBody.tools = providerTools;
-        reqBody.tool_choice = forceVisuals ? "required" : "auto";
-      }
-
-      // Log request (omit frame_b64 to keep logs readable)
-      const logMessages = messages.map((m) => {
-        if (m.role === "user" && Array.isArray(m.content)) {
-          return { role: m.role, content: (m.content as Array<Record<string, unknown>>).map((c) =>
-            c.type === "image_url" ? { type: "image_url", size: "omitted" } : c
-          )};
-        }
-        return m;
-      });
       console.log("[generate-commentary] REQUEST", JSON.stringify({
-        model: visionModel,
-        provider: "dashscope",
-        max_tokens: effectiveMaxTokens,
-        temperature,
-        block_type,
-        block_prompt,
-        has_tools: !!providerTools,
-        force_visuals: forceVisuals,
-        message_count: messages.length,
+        model: textModel, provider: "dashscope", path: "text",
+        max_tokens: effectiveMaxTokens, temperature, block_type, block_prompt,
         system_prompt_length: fullSystemPrompt.length,
         user_text: textParts.join(" | "),
       }));
@@ -457,202 +533,36 @@ Deno.serve(async (req: Request) => {
       const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${DASHSCOPE_API_KEY}` },
-        body: JSON.stringify(reqBody),
+        body: JSON.stringify({
+          model: textModel,
+          messages,
+          max_tokens: effectiveMaxTokens,
+          temperature,
+          presence_penalty: presencePenalty,
+          frequency_penalty: frequencyPenalty,
+        }),
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Dashscope ${res.status}: ${errText}`);
+        throw new Error(`Text model ${res.status}: ${errText}`);
       }
       const data = await res.json();
 
-      // Log response
       console.log("[generate-commentary] RESPONSE", JSON.stringify({
-        model: visionModel,
+        model: textModel, path: "text",
         finish_reason: data.choices?.[0]?.finish_reason,
         usage: data.usage,
-        raw_content_length: (data.choices?.[0]?.message?.content ?? "").length,
-        has_tool_calls: !!(data.choices?.[0]?.message?.tool_calls?.length),
         raw_content_preview: (data.choices?.[0]?.message?.content ?? "").slice(0, 300),
       }));
 
-      const rawContent = data.choices?.[0]?.message?.content?.trim() ?? "";
-      let reply = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-      // Qwen sometimes wraps the entire response in <think> despite /no_think.
-      // If stripping left us empty but there was content, extract from the think block.
-      if (!reply && rawContent.includes("<think>")) {
-        const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
-        if (thinkMatch) {
-          // Take the last line from the think block — often the actual commentary
-          const thinkLines = thinkMatch[1].trim().split("\n").filter((l: string) => l.trim());
-          const lastLine = thinkLines[thinkLines.length - 1]?.trim() ?? "";
-          // Only use it if it looks like commentary (not reasoning/planning)
-          if (lastLine.length > 5 && lastLine.length < 200 && !lastLine.startsWith("I need") && !lastLine.startsWith("The user")) {
-            reply = lastLine;
-          }
-        }
-      }
-      const visuals = enable_visuals
-        ? parseToolCalls("dashscope", data)
-        : [];
-      const search = enable_visuals ? extractSearchToolCall("dashscope", data) : null;
-      return {
-        text: reply,
-        visuals,
+      result = {
+        text: data.choices?.[0]?.message?.content?.trim() ?? "",
+        visuals: [],
         usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
-        searchQuery: search?.query,
       };
     }
 
-    async function callAnthropic(): Promise<VisionResult> {
-      // Anthropic Messages API — no /no_think, no presence/frequency penalty
-      const anthropicTextParts = textParts.filter((p) => p !== "/no_think");
-      const userBlocks: Array<Record<string, unknown>> = [];
-      if (frame_b64) {
-        userBlocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: frame_b64 } });
-      }
-      userBlocks.push({ type: "text", text: anthropicTextParts.join("\n") });
-      const messages: Array<Record<string, unknown>> = [];
-      if (history?.length) {
-        for (const entry of history) messages.push({ role: entry.role, content: entry.content });
-      }
-      messages.push({ role: "user", content: userBlocks });
-
-      const reqBody: Record<string, unknown> = {
-        model: visionModel,
-        max_tokens: effectiveMaxTokens,
-        temperature,
-        system: fullSystemPrompt,
-        messages,
-      };
-      if (providerTools) {
-        reqBody.tools = providerTools;
-        reqBody.tool_choice = forceVisuals ? { type: "any" } : { type: "auto" };
-      }
-
-      console.log("[generate-commentary] REQUEST", JSON.stringify({
-        model: visionModel, provider: "anthropic", max_tokens: effectiveMaxTokens,
-        temperature, block_type, block_prompt, has_tools: !!providerTools,
-        system_prompt_length: fullSystemPrompt.length, user_text: textParts.join(" | "),
-      }));
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify(reqBody),
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Anthropic ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-
-      console.log("[generate-commentary] RESPONSE", JSON.stringify({
-        model: visionModel, finish_reason: data.stop_reason,
-        usage: data.usage, content_blocks: (data.content ?? []).length,
-        raw_text_preview: (data.content ?? []).filter((b: {type:string}) => b.type === "text").map((b: {text:string}) => b.text).join(" ").slice(0, 300),
-      }));
-
-      // Extract text from content blocks (skip tool_use blocks)
-      const textBlocks = (data.content ?? []).filter((b: { type: string }) => b.type === "text");
-      const reply = textBlocks.map((b: { text: string }) => b.text?.trim()).join(" ").trim();
-      const visuals = enable_visuals
-        ? parseToolCalls("anthropic", data)
-        : [];
-      const search = enable_visuals ? extractSearchToolCall("anthropic", data) : null;
-      return {
-        text: reply,
-        visuals,
-        usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
-        searchQuery: search?.query,
-      };
-    }
-
-    async function callGemini(): Promise<VisionResult> {
-      // Gemini uses OpenAI-compatible format via generativelanguage endpoint
-      const userContent: Array<Record<string, unknown>> = [];
-      if (frame_b64) {
-        userContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${frame_b64}` } });
-      }
-      userContent.push({ type: "text", text: textParts.filter((p) => p !== "/no_think").join("\n") });
-      const messages: Array<Record<string, unknown>> = [
-        { role: "system", content: fullSystemPrompt },
-      ];
-      if (history?.length) {
-        for (const entry of history) messages.push({ role: entry.role, content: entry.content });
-      }
-      messages.push({ role: "user", content: userContent });
-
-      const reqBody: Record<string, unknown> = {
-        model: visionModel,
-        messages,
-        max_tokens: effectiveMaxTokens,
-        temperature,
-      };
-      if (providerTools) {
-        reqBody.tools = providerTools;
-        reqBody.tool_choice = forceVisuals ? "required" : "auto";
-      }
-
-      console.log("[generate-commentary] REQUEST", JSON.stringify({
-        model: visionModel, provider: "gemini", max_tokens: effectiveMaxTokens,
-        temperature, block_type, block_prompt, has_tools: !!providerTools,
-        system_prompt_length: fullSystemPrompt.length, user_text: textParts.join(" | "),
-      }));
-
-      const res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${GEMINI_API_KEY}` },
-          body: JSON.stringify(reqBody),
-        },
-      );
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-
-      console.log("[generate-commentary] RESPONSE", JSON.stringify({
-        model: visionModel, finish_reason: data.choices?.[0]?.finish_reason,
-        usage: data.usage, raw_content_preview: (data.choices?.[0]?.message?.content ?? "").slice(0, 300),
-      }));
-
-      const reply = data.choices?.[0]?.message?.content?.trim() ?? "";
-      const visuals = enable_visuals
-        ? parseToolCalls("gemini", data)
-        : [];
-      const search = enable_visuals ? extractSearchToolCall("gemini", data) : null;
-      return {
-        text: reply,
-        visuals,
-        usage: { input_tokens: data.usage?.prompt_tokens ?? 0, output_tokens: data.usage?.completion_tokens ?? 0 },
-        searchQuery: search?.query,
-      };
-    }
-
-    // ── Call the selected provider ──────────────────────────────────
-
-    let result: VisionResult;
-    try {
-      if (visionProvider === "anthropic") {
-        result = await callAnthropic();
-      } else if (visionProvider === "gemini") {
-        result = await callGemini();
-      } else {
-        result = await callDashscope();
-      }
-    } catch (providerErr) {
-      const msg = providerErr instanceof Error ? providerErr.message : String(providerErr);
-      console.error(`[generate-commentary] ${visionProvider} error:`, msg);
-      return errorResponse(`Vision API error: ${msg}`, 502);
-    }
-
-    // ── Handle request_search → Gemini search grounding ────────────
+    // ── Handle request_search -> Gemini search grounding ────────────
     if (result.searchQuery && GEMINI_API_KEY) {
       try {
         const searchRes = await fetch(
@@ -669,22 +579,13 @@ Deno.serve(async (req: Request) => {
         );
         if (searchRes.ok) {
           const searchData = await searchRes.json();
-          // Extract summary text from response
           const summaryParts = searchData.candidates?.[0]?.content?.parts ?? [];
-          const summary = summaryParts
-            .map((p: { text?: string }) => p.text ?? "")
-            .join("")
-            .trim();
-          // Extract source URLs from grounding metadata
-          const groundingChunks =
-            searchData.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
+          const summary = summaryParts.map((p: { text?: string }) => p.text ?? "").join("").trim();
+          const groundingChunks = searchData.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
           const sources: Array<{ title: string; uri: string }> = [];
           for (const chunk of groundingChunks) {
             if (chunk.web?.uri) {
-              sources.push({
-                title: chunk.web.title ?? chunk.web.uri,
-                uri: chunk.web.uri,
-              });
+              sources.push({ title: chunk.web.title ?? chunk.web.uri, uri: chunk.web.uri });
             }
           }
           if (summary) {
@@ -708,21 +609,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // Check for [SILENCE]
-    let text: string | null =
+    const text =
       result.text.toUpperCase().includes("[SILENCE]") ? null : result.text;
-
-    // Hard word-count cap — models (especially Qwen3) often ignore max_tokens for text
-    if (text) {
-      const before = text;
-      text = truncateToWordLimit(text, MAX_WORDS);
-      if (text !== before) {
-        console.log("[generate-commentary] TRUNCATED", JSON.stringify({
-          original_words: before.split(/\s+/).length,
-          truncated_words: text.split(/\s+/).length,
-          original_preview: before.slice(0, 200),
-        }));
-      }
-    }
 
     return jsonResponse({
       text,
