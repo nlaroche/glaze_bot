@@ -55,7 +55,7 @@ export function useCommentaryControls({ session, debug }: UseCommentaryControlsO
       await invoke('start_ptt_listener', { keyCode: debug.pttKey });
 
       unlistenPress = await listen('ptt-pressed', () => {
-        if (pttActive) return;
+        if (pttActive || !session.isRunning) return;
         pttActive = true;
         setRecording(true);
         logDebug('stt-request', { mode: 'ptt', key: debug.pttKey });
