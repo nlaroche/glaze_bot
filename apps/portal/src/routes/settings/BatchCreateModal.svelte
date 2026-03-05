@@ -150,7 +150,7 @@
 
 {#if open}
   <div class="backdrop" onclick={running ? undefined : handleClose} role="presentation">
-    <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog">
+    <div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
       <div class="modal-header">
         <h2>Batch Create</h2>
         {#if !running}
