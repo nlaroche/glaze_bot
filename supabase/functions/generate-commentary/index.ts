@@ -21,34 +21,10 @@ const VISION_MODEL = Deno.env.get("VISION_MODEL") ?? "qwen3-vl-flash";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
-/** Default style nudges — one is picked at random per call for variety */
-const DEFAULT_STYLE_NUDGES = [
-  "React to ONE specific thing you see on screen.",
-  "Reference a movie, show, or meme this reminds you of.",
-  "Make a bold prediction about what happens next.",
-  "Roast the player's decision. Be specific.",
-  "Ask a rhetorical question about what just happened.",
-  "Give a backhanded compliment about the play.",
-  "Pick one thing on screen and fixate on it.",
-  "React to health, gold, or resources — not just the action.",
-  "Notice something small in the background nobody else would.",
-  "Express a strong opinion about something on screen that doesn't matter.",
-  "Compare the player to a fictional character based on what they did.",
-  "React to the PACE — is it frantic, slow, tense?",
-];
-
-const DEFAULT_DIRECTIVE = `You are a live gaming commentator watching the player's screen. Your CHARACTER VOICE is flavor — it should color HOW you say things, not WHAT you talk about. DO NOT roleplay or narrate in-character. DO NOT address the player with in-character nicknames or catchphrases. DO NOT use emojis.
-
-Your job: react to what is ACTUALLY HAPPENING on screen right now. Be specific. Name the things you see. If someone dies, say they died. If the player makes a mistake, call it out. If something cool happens, hype it.
-
-Think of yourself as a Twitch co-caster, not a D&D character.`;
-
 const DEFAULT_MAX_TOKENS = 50;
 const DEFAULT_TEMPERATURE = 0.9;
 const DEFAULT_PRESENCE_PENALTY = 1.5;
 const DEFAULT_FREQUENCY_PENALTY = 0.8;
-const DEFAULT_RESPONSE_INSTRUCTION =
-  "1-2 sentences max, under 30 words. React to the screen. No roleplay, no emojis, no catchphrases. If nothing is happening: [SILENCE]";
 
 interface Personality {
   energy: number;
@@ -160,9 +136,6 @@ Deno.serve(async (req: Request) => {
       ((configRow?.config as Record<string, unknown>)?.commentary as
         | Record<string, unknown>
         | undefined) ?? {};
-    const directive = (commentary.directive as string) ?? DEFAULT_DIRECTIVE;
-    const nudges =
-      (commentary.styleNudges as string[]) ?? DEFAULT_STYLE_NUDGES;
     const maxTokens =
       (commentary.maxTokens as number) ?? DEFAULT_MAX_TOKENS;
     const temperature =
@@ -171,8 +144,6 @@ Deno.serve(async (req: Request) => {
       (commentary.presencePenalty as number) ?? DEFAULT_PRESENCE_PENALTY;
     const frequencyPenalty =
       (commentary.frequencyPenalty as number) ?? DEFAULT_FREQUENCY_PENALTY;
-    const responseInstruction =
-      (commentary.responseInstruction as string) ?? DEFAULT_RESPONSE_INSTRUCTION;
     const visionProvider =
       (commentary.visionProvider as string) ?? "dashscope";
     const visionModel =
@@ -340,13 +311,13 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ text: fallbackText, usage: multiResult.usage });
     }
 
-    // Build full system prompt: character persona + commentary role + output format.
-    // The topic-specific instruction (what to actually say) comes from the scheduler
-    // via block_prompt in the user message — not here. This just sets the role and tone.
-    const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
+    // System prompt = character persona + personality modifier + output constraints.
+    // What to actually SAY comes from the topic prompt in the user message.
+    const personalityMod = buildPersonalityModifier(personality);
 
-    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective
-      + `\n\n[OUTPUT FORMAT]\nKeep responses to 1-2 short sentences. This is spoken aloud via TTS so be concise.\nOnly respond with [SILENCE] if the screen is completely static with zero activity — menus, loading screens, or idle lobbies. If ANYTHING is happening on screen, comment on it.`;
+    let fullSystemPrompt = system_prompt + personalityMod
+      + `\n\nYou are watching a player's screen and commentating live. Your responses are spoken aloud via TTS.`
+      + `\n\n[OUTPUT FORMAT]\n1-2 sentences max, under 30 words. No emojis. If nothing is happening: [SILENCE]`;
 
     // Inject memories from past sessions
     if (memories && memories.length > 0) {
@@ -369,9 +340,10 @@ Deno.serve(async (req: Request) => {
       fullSystemPrompt += buildVisualSystemAddendum(frame_dims);
     }
 
-    // Add token headroom for tool call JSON when visuals are enabled,
-    // but don't inflate the text budget (keeps responses concise)
-    const effectiveMaxTokens = enable_visuals ? maxTokens + 120 : maxTokens;
+    // Only add token headroom when tool calls are forced (player interaction).
+    // For auto tool_choice, the model can choose text-only within the normal budget.
+    const forceVisuals = !!(enable_visuals && player_text && frame_b64);
+    const effectiveMaxTokens = forceVisuals ? maxTokens + 120 : maxTokens;
 
     // Get provider-specific tool definitions
     // Include request_search tool when Gemini key is available (used for web search grounding)
@@ -380,24 +352,14 @@ Deno.serve(async (req: Request) => {
       ? toProviderTools(visionProvider as "dashscope" | "anthropic" | "gemini", includeSearch)
       : null;
 
-    // When the player is talking and we have a frame, force at least one visual tool call
-    // so the model actually points at things instead of just describing them
-    const forceVisuals = !!(enable_visuals && player_text && frame_b64);
-
-    // Pick a random style nudge
-    const nudge = nudges[Math.floor(Math.random() * nudges.length)];
-
     // Build text context for the user message
     const textParts: string[] = [];
     if (scene_context) {
       if (scene_context.game_name) {
-        textParts.push(`Game detected: ${scene_context.game_name}`);
+        textParts.push(`Game: ${scene_context.game_name}`);
       }
       if (scene_context.descriptions.length > 0) {
-        textParts.push("Recent scene context:");
-        for (const desc of scene_context.descriptions) {
-          textParts.push(`- ${desc}`);
-        }
+        textParts.push("Scene: " + scene_context.descriptions.join("; "));
       }
     } else if (game_hint) {
       textParts.push(`Game: ${game_hint}`);
@@ -408,23 +370,18 @@ Deno.serve(async (req: Request) => {
       );
     }
     if (player_text) {
+      // Direct player message — no topic constraint, respond freely
       textParts.push(`Player said: "${player_text}"`);
-      const interactionInstruction = (commentary.interactionInstruction as string) ??
-        'When the player speaks to you, respond directly and conversationally. Acknowledge what they said, stay in character. Keep it brief.';
-      textParts.push(`[${interactionInstruction}]`);
+      textParts.push(`Respond directly and conversationally. Stay in character. Keep it brief.`);
       if (enable_visuals && frame_b64) {
-        textParts.push('[IMPORTANT: The player is talking to you. If they are asking about ANYTHING on screen, you MUST use arrow or circle to point at it. Do not just describe it — call the tool.]');
+        textParts.push('If they ask about anything on screen, use arrow or circle to point at it.');
       }
     }
-    // The topic prompt from the scheduler is THE instruction for what to say.
-    // Style nudges are only used when no topic was assigned (fallback).
+    // The topic prompt from the scheduler is THE instruction.
     if (block_prompt) {
       textParts.push(`[YOUR TASK: ${block_prompt}]`);
-    } else {
-      textParts.push(`[Style hint: ${nudge}]`);
     }
     textParts.push("/no_think");
-    textParts.push(responseInstruction);
 
     // ── Provider-specific API helpers ──────────────────────────────
 
