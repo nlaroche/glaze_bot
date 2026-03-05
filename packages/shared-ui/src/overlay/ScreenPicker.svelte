@@ -90,7 +90,7 @@
             onclick={() => handleSelect(source)}
             ondblclick={() => { handleSelect(source); handleConfirm(); }}
           >
-            <div class="source-thumbnail">
+            <div class="source-thumbnail" class:loading={!source.thumbnail}>
               {#if source.thumbnail}
                 <img src={source.thumbnail} alt={source.name} />
               {:else}
@@ -263,6 +263,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .source-thumbnail.loading {
+    background: linear-gradient(
+      110deg,
+      var(--black-a40) 30%,
+      rgba(255, 255, 255, 0.06) 50%,
+      var(--black-a40) 70%
+    );
+    background-size: 200% 100%;
+    animation: thumb-shimmer 1.5s ease-in-out infinite;
+  }
+
+  @keyframes thumb-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
   }
 
   .source-thumbnail img {

@@ -21,7 +21,74 @@ fn capture_thumbnail(img: &image::RgbaImage, max_w: u32, max_h: u32) -> Option<S
     Some(format!("data:image/jpeg;base64,{}", b64))
 }
 
-/// List available capture sources (monitors and windows).
+/// List available capture sources instantly (no thumbnails — names only).
+#[tauri::command]
+pub fn list_sources_fast() -> Vec<CaptureSource> {
+    let mut sources = Vec::new();
+
+    if let Ok(monitors) = Monitor::all() {
+        for (i, mon) in monitors.iter().enumerate() {
+            sources.push(CaptureSource {
+                id: format!("monitor-{}", i),
+                name: if monitors.len() == 1 {
+                    "Primary Display".to_string()
+                } else {
+                    format!("Display {} {}", i + 1, if mon.is_primary() { "(Primary)" } else { "" })
+                },
+                source_type: "monitor".to_string(),
+                thumbnail: None,
+            });
+        }
+    }
+
+    if let Ok(windows) = Window::all() {
+        for win in windows {
+            let title = win.title().to_string();
+            if title.len() < 2 { continue; }
+            let lower = title.to_lowercase();
+            if lower.contains("task switching")
+                || lower == "program manager"
+                || lower == "windows input experience"
+                || lower == "msrdc"
+            { continue; }
+            sources.push(CaptureSource {
+                id: format!("window-{}", win.id()),
+                name: title,
+                source_type: "window".to_string(),
+                thumbnail: None,
+            });
+        }
+    }
+
+    sources
+}
+
+/// Capture a thumbnail for a single source by ID.
+/// Runs on a background thread so it doesn't block UI input.
+#[tauri::command]
+pub async fn get_source_thumbnail(source_id: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || -> Option<String> {
+        if source_id.starts_with("monitor-") {
+            let idx: usize = source_id.strip_prefix("monitor-")?.parse().ok()?;
+            let monitors = Monitor::all().ok()?;
+            let mon = monitors.get(idx)?;
+            let img = mon.capture_image().ok()?;
+            capture_thumbnail(&img, 320, 200)
+        } else if source_id.starts_with("window-") {
+            let wid: u32 = source_id.strip_prefix("window-")?.parse().ok()?;
+            let windows = Window::all().ok()?;
+            let win = windows.into_iter().find(|w| w.id() == wid)?;
+            let img = win.capture_image().ok()?;
+            if img.pixels().all(|p| p.0[3] == 0) { return None; }
+            capture_thumbnail(&img, 320, 200)
+        } else {
+            None
+        }
+    }).await.ok().flatten()
+}
+
+/// List available capture sources (monitors and windows) with thumbnails.
+/// NOTE: Slow — captures every window. Prefer list_sources_fast + get_source_thumbnail.
 #[tauri::command]
 pub fn list_sources() -> Vec<CaptureSource> {
     let mut sources = Vec::new();

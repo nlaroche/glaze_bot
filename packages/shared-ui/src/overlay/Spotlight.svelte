@@ -53,7 +53,6 @@
     role="dialog"
     aria-modal="true"
   >
-    <!-- stopPropagation prevents mousedown inside content from bubbling to backdrop -->
     <div class="spotlight-content" class:entering={animating} onmousedown={(e) => e.stopPropagation()} use:motion={{ type: 'scale-in', fast: true }}>
       {@render children()}
     </div>

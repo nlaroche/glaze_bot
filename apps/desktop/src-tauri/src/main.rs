@@ -119,6 +119,8 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             capture::list_sources,
+            capture::list_sources_fast,
+            capture::get_source_thumbnail,
             capture::grab_frame,
             audio::init_whisper,
             audio::start_recording,

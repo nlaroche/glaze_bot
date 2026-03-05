@@ -11,25 +11,58 @@ export function useScreenCapture({ session, onStop }: UseScreenCaptureOptions) {
   let pickerInitialTab = $state<'screen' | 'app'>('screen');
   let captureSources = $state<CaptureSource[]>([]);
   let loadingSources = $state(false);
+  let thumbnailAbort: AbortController | null = null;
 
   async function openPicker(tab: 'screen' | 'app') {
     pickerInitialTab = tab;
-    loadingSources = true;
     pickerOpen = true;
+
+    // Cancel any in-flight thumbnail fetches from a previous open
+    thumbnailAbort?.abort();
+    thumbnailAbort = new AbortController();
+    const signal = thumbnailAbort.signal;
+
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const sources: any[] = await invoke('list_sources');
+
+      // Phase 1: instant — names only, no screenshots
+      loadingSources = true;
+      const sources: any[] = await invoke('list_sources_fast');
       captureSources = sources.map((s) => ({
         id: s.id,
         name: s.name,
         type: s.source_type === 'monitor' ? 'screen' as const : 'window' as const,
-        thumbnail: s.thumbnail ?? undefined,
+        thumbnail: undefined,
       }));
+      loadingSources = false;
+
+      // Phase 2: lazy — fetch thumbnails one at a time in the background
+      // Prioritize the currently active tab so visible cards load first
+      const activeType = tab === 'screen' ? 'screen' : 'window';
+      const sorted = [
+        ...captureSources.filter(s => s.type === activeType),
+        ...captureSources.filter(s => s.type !== activeType),
+      ];
+
+      for (const source of sorted) {
+        if (signal.aborted) break;
+        try {
+          const thumb: string | null = await invoke('get_source_thumbnail', { sourceId: source.id });
+          if (signal.aborted) break;
+          if (thumb) {
+            captureSources = captureSources.map(s =>
+              s.id === source.id ? { ...s, thumbnail: thumb } : s
+            );
+          }
+        } catch {
+          // Skip failed thumbnails silently
+        }
+      }
     } catch (e) {
       console.error('Failed to list sources:', e);
       captureSources = [];
+      loadingSources = false;
     }
-    loadingSources = false;
   }
 
   function handleSourceSelect(source: CaptureSource) {
@@ -39,13 +72,13 @@ export function useScreenCapture({ session, onStop }: UseScreenCaptureOptions) {
 
   function closePicker() {
     pickerOpen = false;
+    thumbnailAbort?.abort();
   }
 
   async function stopSharing() {
     if (session.isRunning) {
       onStop();
     }
-    // Hide overlay window when share stops — but preserve the preference
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('hide_overlay');
