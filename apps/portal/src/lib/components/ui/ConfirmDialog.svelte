@@ -1,5 +1,6 @@
 <script lang="ts">
   import Button from './Button.svelte';
+  import { motion } from '@glazebot/shared-ui';
 
   let {
     open = false,
@@ -24,7 +25,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="backdrop" onclick={oncancel} data-testid="confirm-dialog-backdrop">
-    <div class="dialog" onclick={(e) => e.stopPropagation()} data-testid="confirm-dialog">
+    <div class="dialog" onclick={(e) => e.stopPropagation()} data-testid="confirm-dialog" use:motion={{ type: 'scale-in', fast: true }}>
       <h3 class="dialog-title">{title}</h3>
       <p class="dialog-message">{message}</p>
       <div class="dialog-actions">
@@ -62,15 +63,9 @@
     padding: var(--space-6);
     min-width: 340px;
     max-width: 440px;
-    animation: slideUp var(--transition-base) ease;
     box-shadow:
       0 0 60px var(--teal-a5),
       0 8px 32px var(--black-a40);
-  }
-
-  @keyframes slideUp {
-    from { transform: translateY(8px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
   }
 
   .dialog-title {

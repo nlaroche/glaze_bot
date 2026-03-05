@@ -1,3 +1,314 @@
+// ─── Animation Feel System ──────────────────────────────────────────
+// One global "feel" that defines HOW things move — anticipation, overshoot,
+// squash & stretch that make animations juicy. The motion itself (enter
+// from left, scale in, land, etc.) is chosen at runtime by the component.
+// Tweak 5 sliders, apply everywhere.
+
+export interface AnimationsConfig {
+  anticipation: number;   // 0–1: wind-up before launching
+  overshoot: number;      // 0–1: flies past the target before settling
+  bounciness: number;     // 0–1: how many settle oscillations
+  squishiness: number;    // 0–1: squash on impact, stretch during travel
+  speed: number;          // base duration in ms (100–2000)
+}
+
+// ── Juicy defaults — playful and game-like out of the box ──
+export const DEFAULT_ANIMATIONS: AnimationsConfig = {
+  anticipation: 0.35,
+  overshoot: 0.5,
+  bounciness: 0.45,
+  squishiness: 0.4,
+  speed: 500,
+};
+
+// ── Motion types that components can use ──
+export const MOTION_TYPES = [
+  { key: 'enter-left',   label: 'Enter Left',   desc: 'Slide in from the left' },
+  { key: 'enter-right',  label: 'Enter Right',  desc: 'Slide in from the right' },
+  { key: 'enter-top',    label: 'Enter Top',     desc: 'Slide in from above' },
+  { key: 'enter-bottom', label: 'Enter Bottom',  desc: 'Slide in from below' },
+  { key: 'scale-in',     label: 'Scale In',      desc: 'Grow from nothing' },
+  { key: 'pop',          label: 'Pop',            desc: 'Punch in with scale' },
+  { key: 'land',         label: 'Land',           desc: 'Drop from above, heavy impact' },
+] as const;
+
+export type MotionType = typeof MOTION_TYPES[number]['key'];
+
+// ── Quick-set starting points for the sliders ──
+export const FEEL_PRESETS: { id: string; name: string; desc: string; values: AnimationsConfig }[] = [
+  { id: 'snappy',   name: 'Snappy',   desc: 'Quick, crisp micro-interactions',     values: { anticipation: 0.15, overshoot: 0.3,  bounciness: 0.2,  squishiness: 0.15, speed: 280 } },
+  { id: 'bouncy',   name: 'Bouncy',   desc: 'Playful spring, cards & notifications', values: { anticipation: 0.3,  overshoot: 0.55, bounciness: 0.6,  squishiness: 0.4,  speed: 500 } },
+  { id: 'elastic',  name: 'Elastic',  desc: 'Rubber-band snap, game elements',     values: { anticipation: 0.4,  overshoot: 0.8,  bounciness: 0.5,  squishiness: 0.7,  speed: 550 } },
+  { id: 'heavy',    name: 'Heavy',    desc: 'Weighty slam, drops & impacts',       values: { anticipation: 0.6,  overshoot: 0.2,  bounciness: 0.3,  squishiness: 0.85, speed: 650 } },
+  { id: 'smooth',   name: 'Smooth',   desc: 'Clean easing, no personality',        values: { anticipation: 0.0,  overshoot: 0.0,  bounciness: 0.0,  squishiness: 0.0,  speed: 400 } },
+  { id: 'dramatic', name: 'Dramatic', desc: 'Big theatrical reveals',              values: { anticipation: 0.7,  overshoot: 0.7,  bounciness: 0.65, squishiness: 0.6,  speed: 750 } },
+];
+
+// ── Keyframe generation ─────────────────────────────────────────────
+// Uses a continuous spring simulation sampled at 60 points, so the
+// browser just linearly interpolates between closely-spaced values.
+// No per-keyframe easing = no "seams" between segments. One fluid motion.
+
+function f(n: number, d = 3): string { return n.toFixed(d); }
+
+const MOTION_SAMPLES = 60;
+
+type CurvePoint = { offset: number; value: number };
+
+/**
+ * Evaluate an underdamped spring at time t (0–1 normalized).
+ * Returns position where 0 = start, 1 = target.
+ * Overshoots past 1 and oscillates based on params.
+ */
+function evalSpring(t: number, overshoot: number, bounciness: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+
+  // Damping ratio: controls oscillation.
+  // overshoot controls how BIG the first peak is.
+  // bounciness controls how LONG oscillations persist.
+  const effectiveBounce = Math.max(overshoot * 0.7, bounciness);
+  const zeta = Math.max(0.1, 1 - effectiveBounce * 0.9);
+
+  // Natural frequency — low enough that motion fills the full duration.
+  const omega = 2.5 + bounciness * 3; // 2.5 to 5.5
+
+  // Time scaling — just enough for the spring to settle by t≈0.9
+  const scaledT = t * (1.5 + bounciness * 0.5); // 1.5 to 2.0
+
+  if (zeta >= 0.999) {
+    // Critically damped: smooth approach, no oscillation
+    return 1 - (1 + omega * scaledT) * Math.exp(-omega * scaledT);
+  }
+
+  // Underdamped: oscillates around target
+  const omegaD = omega * Math.sqrt(1 - zeta * zeta);
+  const envelope = Math.exp(-zeta * omega * scaledT);
+  return 1 - envelope * (
+    Math.cos(omegaD * scaledT) +
+    (zeta * omega / omegaD) * Math.sin(omegaD * scaledT)
+  );
+}
+
+/**
+ * Evaluate the full motion at time t, including anticipation.
+ * Anticipation is a smooth sine pullback before the spring launches.
+ */
+function evalMotion(t: number, anticipation: number, overshoot: number, bounciness: number): number {
+  // Anticipation phase: first 12–20% of timeline
+  const antLen = anticipation > 0.02 ? 0.12 + anticipation * 0.08 : 0;
+
+  if (antLen > 0 && t < antLen) {
+    const p = t / antLen;
+    // Sine arc: 0 → -peak → back to ~0 (smooth, no hard edges)
+    return -anticipation * 0.4 * Math.sin(p * Math.PI);
+  }
+
+  // Main motion: remap remaining time to 0–1 and run through spring
+  const mt = antLen > 0 ? (t - antLen) / (1 - antLen) : t;
+  return evalSpring(mt, overshoot, bounciness);
+}
+
+/**
+ * Build a densely-sampled motion curve.
+ * 60 points with linear interpolation = perfectly smooth animation.
+ */
+function buildMotionCurve(
+  anticipation: number,
+  overshoot: number,
+  bounciness: number,
+): CurvePoint[] {
+  const points: CurvePoint[] = [];
+  for (let i = 0; i <= MOTION_SAMPLES; i++) {
+    const t = i / MOTION_SAMPLES;
+    points.push({ offset: t, value: evalMotion(t, anticipation, overshoot, bounciness) });
+  }
+  return points;
+}
+
+/**
+ * Compute squash/stretch scale factors from velocity at each curve point.
+ * Fast travel = stretch in direction of motion.
+ * Sudden deceleration (impact) = squash perpendicular.
+ * Thresholds are low so the effect is visible at normal spring speeds.
+ */
+function buildSquashCurve(
+  curve: CurvePoint[],
+  squishiness: number,
+): { scaleMain: number; scaleCross: number }[] {
+  if (squishiness < 0.02) return curve.map(() => ({ scaleMain: 1, scaleCross: 1 }));
+
+  return curve.map((point, i) => {
+    if (i === 0 || i === curve.length - 1) return { scaleMain: 1, scaleCross: 1 };
+
+    const prev = curve[i - 1];
+    const velocity = (point.value - prev.value) / (point.offset - prev.offset);
+    const absVel = Math.abs(velocity);
+
+    const next = curve[i + 1];
+    const nextVelocity = next ? (next.value - point.value) / (next.offset - point.offset) : 0;
+    const decel = absVel - Math.abs(nextVelocity);
+    const isImpact = absVel > 0.6 && decel > absVel * 0.25;
+
+    if (isImpact) {
+      // Squash: proportional to deceleration force
+      const force = Math.min(decel / 4, 1);
+      const sq = squishiness * 0.4 * force;
+      return { scaleMain: 1 - sq, scaleCross: 1 + sq * 0.8 };
+    } else if (absVel > 0.8) {
+      // Stretch: proportional to velocity during travel
+      const velFactor = Math.min((absVel - 0.8) / 3, 1);
+      const st = squishiness * 0.3 * velFactor;
+      return { scaleMain: 1 + st, scaleCross: 1 - st * 0.6 };
+    }
+    return { scaleMain: 1, scaleCross: 1 };
+  });
+}
+
+/**
+ * Compute rotation angles (degrees) from velocity — "follow-through".
+ * Objects tilt in the direction of travel and rock back on arrival.
+ * Subtle: max ±8 degrees. Only used for directional motions.
+ */
+function buildRotationCurve(
+  curve: CurvePoint[],
+  squishiness: number,
+): number[] {
+  // Rotation intensity scales with squishiness (it's a physical feel thing)
+  const maxDeg = 6 + squishiness * 6; // 6 to 12 degrees max
+  if (squishiness < 0.02) return curve.map(() => 0);
+
+  return curve.map((point, i) => {
+    if (i === 0 || i === curve.length - 1) return 0;
+
+    const prev = curve[i - 1];
+    const velocity = (point.value - prev.value) / (point.offset - prev.offset);
+
+    // Tilt proportional to velocity, clamped
+    const raw = velocity * 2.5; // scale velocity to degrees
+    return Math.max(-maxDeg, Math.min(maxDeg, raw));
+  });
+}
+
+/**
+ * Build Web Animations API keyframes for a motion + feel config.
+ * Uses 60 densely-sampled points — no per-keyframe easing needed.
+ */
+export function buildMotionKeyframes(motion: MotionType, feel: AnimationsConfig): Keyframe[] {
+  const curve = buildMotionCurve(feel.anticipation, feel.overshoot, feel.bounciness);
+  const squash = buildSquashCurve(curve, feel.squishiness);
+  const rotation = buildRotationCurve(curve, feel.squishiness);
+
+  switch (motion) {
+    case 'enter-left':
+    case 'enter-right': {
+      const sign = motion === 'enter-left' ? -1 : 1;
+      const dist = 150;
+      return curve.map((pt, i) => {
+        const x = (1 - pt.value) * sign * dist;
+        const sx = squash[i].scaleMain;
+        const sy = squash[i].scaleCross;
+        // Tilt in direction of travel (negative sign so it leans forward)
+        const rot = rotation[i] * -sign;
+        const opacity = Math.min(1, Math.max(0, pt.value * 1.8));
+        return {
+          transform: `translateX(${f(x)}%) rotate(${f(rot)}deg) scaleX(${f(sx)}) scaleY(${f(sy)})`,
+          opacity,
+          offset: pt.offset,
+        };
+      });
+    }
+
+    case 'enter-top':
+    case 'enter-bottom': {
+      const sign = motion === 'enter-top' ? -1 : 1;
+      const dist = 120;
+      return curve.map((pt, i) => {
+        const y = (1 - pt.value) * sign * dist;
+        const sy = squash[i].scaleMain;
+        const sx = squash[i].scaleCross;
+        // Subtle tilt during vertical travel
+        const rot = rotation[i] * 0.5;
+        const opacity = Math.min(1, Math.max(0, pt.value * 1.8));
+        return {
+          transform: `translateY(${f(y)}%) rotate(${f(rot)}deg) scaleX(${f(sx)}) scaleY(${f(sy)})`,
+          opacity,
+          offset: pt.offset,
+        };
+      });
+    }
+
+    case 'scale-in': {
+      return curve.map((pt, i) => {
+        const base = Math.max(0, pt.value);
+        const sx = base * squash[i].scaleCross;
+        const sy = base * squash[i].scaleMain;
+        // Tiny rotation wobble on scale-in
+        const rot = rotation[i] * 0.3;
+        return {
+          transform: `scaleX(${f(Math.max(0.001, sx))}) scaleY(${f(Math.max(0.001, sy))}) rotate(${f(rot)}deg)`,
+          opacity: Math.min(1, Math.max(0, pt.value * 1.5)),
+          offset: pt.offset,
+        };
+      });
+    }
+
+    case 'pop': {
+      return curve.map((pt, i) => {
+        const s = Math.max(0, 0.2 + pt.value * 0.8);
+        const sx = s * squash[i].scaleCross;
+        const sy = s * squash[i].scaleMain;
+        // Small rotation adds life to the pop
+        const rot = rotation[i] * 0.4;
+        return {
+          transform: `scaleX(${f(Math.max(0.001, sx))}) scaleY(${f(Math.max(0.001, sy))}) rotate(${f(rot)}deg)`,
+          offset: pt.offset,
+        };
+      });
+    }
+
+    case 'land': {
+      const dist = 100;
+      return curve.map((pt, i) => {
+        const y = (1 - pt.value) * -dist;
+        const sy = squash[i].scaleMain;
+        const sx = squash[i].scaleCross;
+        // Tilt forward on landing, rock back on impact
+        const rot = rotation[i] * 0.6;
+        const opacity = Math.min(1, Math.max(0, pt.value * 1.8));
+        return {
+          transform: `translateY(${f(y)}%) rotate(${f(rot)}deg) scaleX(${f(sx)}) scaleY(${f(sy)})`,
+          opacity,
+          offset: pt.offset,
+        };
+      });
+    }
+
+    default:
+      return [
+        { opacity: 0, offset: 0 },
+        { opacity: 1, offset: 1 },
+      ];
+  }
+}
+
+/**
+ * Apply a motion + feel to an element using the Web Animations API.
+ * Returns the Animation instance for control (cancel, finish, etc.).
+ */
+export function applyMotion(
+  el: HTMLElement,
+  motion: MotionType,
+  feel: AnimationsConfig,
+): Animation {
+  const keyframes = buildMotionKeyframes(motion, feel);
+  return el.animate(keyframes, {
+    duration: feel.speed,
+    easing: 'linear', // timing is baked into keyframe offsets
+    fill: 'both', // 'both' = first keyframe applies instantly (no flash), last persists
+  });
+}
+
 // ─── GlazeBot Config Schema ─────────────────────────────────────────
 // Typed shape for the gacha_config.config JSONB column.
 // DEFAULT_CONFIG provides sensible defaults and doubles as the schema
@@ -33,6 +344,8 @@ export interface VisualConfig {
   dropShadow: boolean;      // default true
 }
 
+export interface TopicCountRange { min: number; max: number; }
+
 export interface CommentaryConfig {
   visionProvider: string;
   visionModel: string;
@@ -45,8 +358,8 @@ export interface CommentaryConfig {
   responseInstruction: string;
   interactionInstruction: string;
   context: ContextConfig;
-  blockWeights: Record<string, number>;
-  blockPrompts: Record<string, string>;
+  topicWeights: Record<string, number>;
+  topicPrompts: Record<string, string>;
   memory: MemoryConfig;
   visuals: VisualConfig;
 }
@@ -76,6 +389,13 @@ export interface GlazeBotConfig {
 
   // Commentary
   commentary: CommentaryConfig;
+
+  // Per-character topic assignment
+  topicCountByRarity: Record<string, TopicCountRange>;
+  legendaryCustomTopicCount: number;
+
+  // Animation feel (optional — admin-tuned global feel)
+  animations?: AnimationsConfig;
 }
 
 // ─── Default Config ────────────────────────────────────────────────
@@ -96,6 +416,13 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
   imageModel: "gemini-2.0-flash-preview-image-generation",
   imageConfig: { imageSize: "1024x1024", aspectRatio: "1:1" },
   tokenPools: {},
+  topicCountByRarity: {
+    common: { min: 3, max: 4 },
+    rare: { min: 5, max: 6 },
+    epic: { min: 7, max: 8 },
+    legendary: { min: 9, max: 10 },
+  },
+  legendaryCustomTopicCount: 2,
   commentary: {
     visionProvider: "dashscope",
     visionModel: "qwen3-vl-flash",
@@ -118,7 +445,7 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
       interval: 3,
       bufferSize: 10,
     },
-    blockWeights: {
+    topicWeights: {
       solo_observation: 25,
       emotional_reaction: 20,
       question: 12,
@@ -131,7 +458,7 @@ export const DEFAULT_CONFIG: GlazeBotConfig = {
       tangent: 4,
       silence: 10,
     },
-    blockPrompts: {
+    topicPrompts: {
       solo_observation:
         "React to what you see on screen. Be specific about ONE thing.",
       emotional_reaction:
@@ -197,11 +524,11 @@ function collectMissingKeys(
       !Array.isArray(targetVal)
     ) {
       // Skip Record<string, ...> fields where we don't know the keys ahead of time
-      // (tokenPools, blockWeights, blockPrompts, traitRanges, promptQuality, rarityGuidance)
       const recordKeys = new Set([
         "tokenPools",
-        "blockWeights",
-        "blockPrompts",
+        "topicWeights",
+        "topicPrompts",
+        "topicCountByRarity",
         "traitRanges",
         "promptQuality",
         "rarityGuidance",
@@ -225,7 +552,7 @@ function collectMissingKeys(
  * Returns a human-readable error string listing missing keys, or null if valid.
  * Uses DEFAULT_CONFIG as the schema — any new field added there is automatically checked.
  *
- * Optional keys (traitRanges, promptQuality, rarityGuidance) are skipped.
+ * Optional keys (traitRanges, promptQuality, rarityGuidance, animations) are skipped.
  */
 export function validateConfig(cfg: unknown): string | null {
   if (cfg === null || typeof cfg !== "object" || Array.isArray(cfg)) {
@@ -239,6 +566,7 @@ export function validateConfig(cfg: unknown): string | null {
     "traitRanges",
     "promptQuality",
     "rarityGuidance",
+    "animations",
   ]);
 
   const missing: string[] = [];
@@ -261,8 +589,9 @@ export function validateConfig(cfg: unknown): string | null {
     ) {
       const recordKeys = new Set([
         "tokenPools",
-        "blockWeights",
-        "blockPrompts",
+        "topicWeights",
+        "topicPrompts",
+        "topicCountByRarity",
         "traitRanges",
         "promptQuality",
         "rarityGuidance",

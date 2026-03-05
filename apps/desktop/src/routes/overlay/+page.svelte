@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import VisualRenderer from '$lib/overlay/VisualRenderer.svelte';
   import { pushVisuals, setCaptureBounds } from '$lib/overlay/primitiveRegistry.svelte';
+  import { motion } from '@glazebot/shared-ui';
 
   interface Bubble {
     id: number;
@@ -186,7 +187,7 @@
   <VisualRenderer />
   <div class="bubble-container">
     {#if pttActive}
-      <div class="ptt-indicator">
+      <div class="ptt-indicator" use:motion={{ type: 'scale-in', fast: true }}>
         <div class="ptt-mic">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="5" y="1" width="6" height="9" rx="3" fill="rgba(255,80,80,0.9)"/>
@@ -212,6 +213,7 @@
       <div
         class="bubble-wrapper"
         style="opacity: {opacity}; transform: translateX({tx}px);"
+        use:motion={'pop'}
       >
         <div class="speech-bubble">
           {#if msg.image}
@@ -395,12 +397,6 @@
     background: rgba(10, 14, 24, 0.88);
     border: 1px solid rgba(255, 80, 80, 0.3);
     border-radius: 24px;
-    animation: ptt-fade-in 0.15s ease-out;
-  }
-
-  @keyframes ptt-fade-in {
-    from { opacity: 0; transform: translateY(8px) scale(0.95); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   .ptt-mic {

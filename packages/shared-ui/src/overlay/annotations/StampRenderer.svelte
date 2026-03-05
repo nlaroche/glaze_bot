@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { StampCommand, StampIcon } from '@glazebot/shared-types';
+  import { motion } from '../../motion/index.js';
 
   interface Props {
     command: StampCommand;
@@ -36,8 +37,8 @@
     top: {top}%;
     font-size: {size}px;
     transform: translate(-50%, -50%) rotate({rotation}deg);
-    animation-duration: {popDuration}s;
   "
+  use:motion={'pop'}
 >
   {icon}
 </div>
@@ -46,13 +47,7 @@
   .stamp {
     position: absolute;
     pointer-events: none;
-    animation: stamp-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     line-height: 1;
     filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
-  }
-  @keyframes stamp-pop {
-    0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
-    60% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
-    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   }
 </style>

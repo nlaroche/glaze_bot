@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { motion } from '@glazebot/shared-ui';
 
   let visible = $state(false);
 
@@ -38,7 +39,7 @@
   });
 </script>
 
-<div class="tray-menu" class:visible>
+<div class="tray-menu" class:visible use:motion={{ type: 'pop', fast: true }}>
   <div class="header">
     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="var(--color-teal, #3B9797)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="10"></circle>
@@ -93,15 +94,7 @@
     box-shadow:
       0 0 20px rgba(59, 151, 151, 0.15),
       0 8px 32px rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    transform: scale(0.95) translateY(4px);
-    transition: opacity 0.15s ease-out, transform 0.15s ease-out;
     user-select: none;
-  }
-
-  .tray-menu.visible {
-    opacity: 1;
-    transform: scale(1) translateY(0);
   }
 
   .header {

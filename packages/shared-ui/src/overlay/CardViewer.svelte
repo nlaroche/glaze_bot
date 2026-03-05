@@ -4,6 +4,7 @@
   import CharacterCard from '../gacha/CharacterCard.svelte';
   import RarityBadge from '../gacha/RarityBadge.svelte';
   import { onMount } from 'svelte';
+  import { motion } from '../motion/index.js';
 
   interface Props {
     character: GachaCharacter | null;
@@ -90,7 +91,7 @@
   {#if character}
     <div class="viewer-layout">
       <!-- Left: Card (scaled up) -->
-      <div class="viewer-card" class:show={showInfo}>
+      <div class="viewer-card" class:show={showInfo} use:motion={'enter-left'}>
         <div class="card-scale-wrapper">
           <CharacterCard
             {character}
@@ -101,7 +102,7 @@
       </div>
 
       <!-- Right: Info panel -->
-      <div class="info-panel" class:show={showInfo}>
+      <div class="info-panel" class:show={showInfo} use:motion={{ type: 'enter-right', delay: 100 }}>
         <!-- Name + Rarity badge -->
         <div class="info-header">
           <div class="name-block">
@@ -199,14 +200,6 @@
   /* ── Card side (scaled up) ── */
   .viewer-card {
     flex-shrink: 0;
-    transform: translateX(-40px);
-    opacity: 0;
-    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
-  }
-
-  .viewer-card.show {
-    transform: translateX(0);
-    opacity: 1;
   }
 
   .card-scale-wrapper {
@@ -221,14 +214,6 @@
     flex-direction: column;
     gap: var(--space-4, 1rem);
     max-height: 85vh;
-    transform: translateX(30px);
-    opacity: 0;
-    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s, opacity 0.4s ease 0.1s;
-  }
-
-  .info-panel.show {
-    transform: translateX(0);
-    opacity: 1;
   }
 
   /* ── Header ── */

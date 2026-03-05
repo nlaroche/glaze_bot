@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { motion } from '../motion/index.js';
 
   interface Props {
     open: boolean;
@@ -15,12 +16,10 @@
   $effect(() => {
     if (open) {
       visible = true;
-      // Trigger enter animation next frame
-      requestAnimationFrame(() => { animating = true; });
+      animating = true;
     } else if (visible) {
       animating = false;
-      // Wait for exit animation
-      const t = setTimeout(() => { visible = false; }, 350);
+      const t = setTimeout(() => { visible = false; }, 120);
       return () => clearTimeout(t);
     }
   });
@@ -38,7 +37,6 @@
   let backdropEl: HTMLDivElement | undefined = $state();
 
   onMount(() => {
-    // Focus trap
     backdropEl?.focus();
   });
 </script>
@@ -56,7 +54,7 @@
     aria-modal="true"
   >
     <!-- stopPropagation prevents mousedown inside content from bubbling to backdrop -->
-    <div class="spotlight-content" class:entering={animating} onmousedown={(e) => e.stopPropagation()}>
+    <div class="spotlight-content" class:entering={animating} onmousedown={(e) => e.stopPropagation()} use:motion={{ type: 'scale-in', fast: true }}>
       {@render children()}
     </div>
   </div>
@@ -70,14 +68,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Start state */
     background: rgba(0, 0, 0, 0);
     backdrop-filter: blur(0px);
     -webkit-backdrop-filter: blur(0px);
     transition:
-      background 0.35s ease,
-      backdrop-filter 0.35s ease,
-      -webkit-backdrop-filter 0.35s ease;
+      background 0.12s ease,
+      backdrop-filter 0.12s ease,
+      -webkit-backdrop-filter 0.12s ease;
     outline: none;
   }
 
@@ -88,13 +85,11 @@
   }
 
   .spotlight-content {
-    transform: scale(0.85);
-    opacity: 0;
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+    transition: opacity 0.1s ease, transform 0.1s ease;
   }
 
-  .spotlight-content.entering {
-    transform: scale(1);
-    opacity: 1;
+  .spotlight-content:not(.entering) {
+    opacity: 0;
+    transform: scale(0.95);
   }
 </style>

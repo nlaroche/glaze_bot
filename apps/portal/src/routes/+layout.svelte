@@ -7,12 +7,30 @@
   import NightSkyBackground from '$lib/components/NightSkyBackground.svelte';
   import SidebarIcon from '$lib/components/SidebarIcon.svelte';
   import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+  import { setGlobalFeel } from '@glazebot/shared-ui';
+  import { DEFAULT_ANIMATIONS, type AnimationsConfig } from '@glazebot/shared-types';
+  import { getGachaConfig } from '@glazebot/supabase-client';
 
   let { children } = $props();
   const auth = getAuthState();
 
   onMount(() => {
     initializeAuth();
+  });
+
+  // Load animation feel from config once authenticated
+  let feelLoaded = false;
+  $effect(() => {
+    if (auth.isAuthenticated && !feelLoaded) {
+      feelLoaded = true;
+      getGachaConfig()
+        .then((row) => {
+          const cfg = row?.config as Record<string, unknown> | undefined;
+          const feel = (cfg?.animations as AnimationsConfig) ?? DEFAULT_ANIMATIONS;
+          setGlobalFeel(feel);
+        })
+        .catch(() => setGlobalFeel(DEFAULT_ANIMATIONS));
+    }
   });
 
   // Redirect unauthenticated users to /login (except if already on /login)
@@ -30,7 +48,7 @@
   ];
 
   const adminNav: { href: string; label: string; icon: NavIcon }[] = [
-    { href: '/settings', label: 'Admin', icon: 'admin' },
+    { href: '/settings', label: 'Settings', icon: 'admin' },
     { href: '/logs', label: 'Logs', icon: 'logs' },
   ];
 

@@ -9,10 +9,28 @@
   import { getAuthState, initializeAuth } from '$lib/stores/auth.svelte';
   import { getThemeStore } from '$lib/stores/theme.svelte';
   import { startLogFlushing } from '$lib/stores/debug.svelte';
+  import { setGlobalFeel } from '@glazebot/shared-ui';
+  import { DEFAULT_ANIMATIONS, type AnimationsConfig } from '@glazebot/shared-types';
+  import { getGachaConfig } from '@glazebot/supabase-client';
 
   let { children } = $props();
   const auth = getAuthState();
   const theme = getThemeStore();
+
+  // Load animation feel from config once authenticated
+  let feelLoaded = false;
+  $effect(() => {
+    if (auth.isAuthenticated && !feelLoaded) {
+      feelLoaded = true;
+      getGachaConfig()
+        .then((row) => {
+          const cfg = row?.config as Record<string, unknown> | undefined;
+          const feel = (cfg?.animations as AnimationsConfig) ?? DEFAULT_ANIMATIONS;
+          setGlobalFeel(feel);
+        })
+        .catch(() => setGlobalFeel(DEFAULT_ANIMATIONS));
+    }
+  });
 
   const isOverlay = $derived(page.url.pathname.startsWith('/overlay'));
   const isTrayMenu = $derived(page.url.pathname.startsWith('/tray-menu'));

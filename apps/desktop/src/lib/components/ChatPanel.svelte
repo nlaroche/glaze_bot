@@ -3,6 +3,7 @@
   import { getSessionStore, getActiveParty, sendUserMessage } from '$lib/stores/session.svelte';
   import { getDebugStore } from '$lib/stores/debug.svelte';
   import { getCollectionStore } from '$lib/stores/collection.svelte';
+  import { motion } from '@glazebot/shared-ui';
 
   const auth = getAuthState();
   const session = getSessionStore();
@@ -192,14 +193,14 @@
 <!-- Text input bar (always visible, disabled when not running) -->
 <div class="input-bar" class:input-bar-disabled={!hasParty}>
     {#if session.sttBubbleText}
-      <div class="stt-bubble">
+      <div class="stt-bubble" use:motion={{ type: 'enter-bottom', fast: true }}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="var(--color-teal)" stroke-width="1.5"/><path d="M6 3v3l2 1" stroke="var(--color-teal)" stroke-width="1.2" stroke-linecap="round"/></svg>
         <span>{session.sttBubbleText}</span>
       </div>
     {/if}
     <!-- @mention autocomplete dropdown -->
     {#if mentionQuery !== null && mentionCandidates.length > 0}
-      <div class="mention-dropdown">
+      <div class="mention-dropdown" use:motion={{ type: 'enter-bottom', fast: true }}>
         {#each mentionCandidates as char, i (char.id)}
           <button
             class="mention-option"
@@ -427,12 +428,6 @@
     border: 1px solid var(--teal-a20);
     font-size: var(--font-sm);
     color: var(--color-light-teal);
-    animation: stt-fade 0.2s ease-in;
-  }
-
-  @keyframes stt-fade {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   /* ── @mention dropdown ── */
@@ -451,12 +446,6 @@
     gap: 2px;
     box-shadow: 0 -4px 16px var(--black-a40);
     z-index: 10;
-    animation: mention-slide 0.15s ease-out;
-  }
-
-  @keyframes mention-slide {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   .mention-option {

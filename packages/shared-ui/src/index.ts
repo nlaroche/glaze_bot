@@ -8,6 +8,8 @@ export { default as PackOpener } from './gacha/PackOpener.svelte';
 export { default as CollectionGrid } from './gacha/CollectionGrid.svelte';
 export { default as PartyManager } from './gacha/PartyManager.svelte';
 export { default as CharacterDetail } from './gacha/CharacterDetail.svelte';
+export { default as TopicChip } from './gacha/TopicChip.svelte';
+export { default as TopicBreakdown } from './gacha/TopicBreakdown.svelte';
 export { default as Spotlight } from './overlay/Spotlight.svelte';
 export { default as ContextMenu } from './overlay/ContextMenu.svelte';
 export { default as CardViewer } from './overlay/CardViewer.svelte';
@@ -18,3 +20,5 @@ export { default as CircleRenderer } from './overlay/annotations/CircleRenderer.
 export { default as HighlightRectRenderer } from './overlay/annotations/HighlightRectRenderer.svelte';
 export { default as FreehandPathRenderer } from './overlay/annotations/FreehandPathRenderer.svelte';
 export { default as StampRenderer } from './overlay/annotations/StampRenderer.svelte';
+export { motion, setGlobalFeel, getGlobalFeel, playMotionOut } from './motion/index.js';
+export type { MotionParams } from './motion/index.js';

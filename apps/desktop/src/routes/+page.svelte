@@ -29,8 +29,11 @@
 
   // Context menu + card viewer + memory inspector (trivial UI state — stays inline)
   let contextMenu = $state<{ x: number; y: number; character: GachaCharacter; inPartySlot?: number } | null>(null);
+  let contextMenuKey = $state(0);
   function openContextMenu(e: MouseEvent, char: GachaCharacter, partySlot?: number) {
+    e.stopPropagation();
     contextMenu = { x: e.clientX, y: e.clientY, character: char, inPartySlot: partySlot };
+    contextMenuKey++;
   }
   let viewerCharacter = $state<GachaCharacter | null>(null);
   let memoryInspectCharacter = $state<GachaCharacter | null>(null);
@@ -218,6 +221,7 @@
 </div>
 
 {#if contextMenu}
+  {#key contextMenuKey}
   <ContextMenu
     x={contextMenu.x}
     y={contextMenu.y}
@@ -245,6 +249,7 @@
         : []),
     ]}
   />
+  {/key}
 {/if}
 
 <CardViewer

@@ -1,11 +1,18 @@
 <script lang="ts">
   import type { FloatingTextCommand } from '@glazebot/shared-types';
+  import { motion } from '@glazebot/shared-ui';
 
   let { command }: { command: FloatingTextCommand } = $props();
 
   let color = $derived(command.color || '#FFFFFF');
   let fontSize = $derived(command.font_size || 48);
   let animation = $derived(command.animation || 'rise');
+  // Map rise/slam to motion types, others stay as CSS
+  let motionType = $derived(
+    animation === 'rise' ? 'enter-bottom' as const :
+    animation === 'slam' ? 'land' as const :
+    null
+  );
   let durationMs = $derived(command.duration_ms || 4000);
 
   let positionStyle = $derived(anchorToCSS(command.position || 'center'));
@@ -26,12 +33,22 @@
   }
 </script>
 
-<div
-  class="floating-text anim-{animation}"
-  style="{positionStyle} color: {color}; font-size: {fontSize}px; animation-duration: {durationMs}ms;"
->
-  {command.text}
-</div>
+{#if motionType}
+  <div
+    class="floating-text"
+    style="{positionStyle} color: {color}; font-size: {fontSize}px;"
+    use:motion={motionType}
+  >
+    {command.text}
+  </div>
+{:else}
+  <div
+    class="floating-text anim-{animation}"
+    style="{positionStyle} color: {color}; font-size: {fontSize}px; animation-duration: {durationMs}ms;"
+  >
+    {command.text}
+  </div>
+{/if}
 
 <style>
   .floating-text {
@@ -43,24 +60,11 @@
     pointer-events: none;
     animation-fill-mode: forwards;
   }
-  .anim-rise {
-    animation-name: float-rise;
-  }
   .anim-shake {
     animation-name: float-shake;
   }
   .anim-pulse {
     animation-name: float-pulse;
-  }
-  .anim-slam {
-    animation-name: float-slam;
-  }
-
-  @keyframes float-rise {
-    0% { opacity: 0; transform: translateY(20px); }
-    15% { opacity: 1; transform: translateY(0); }
-    80% { opacity: 1; }
-    100% { opacity: 0; transform: translateY(-40px); }
   }
   @keyframes float-shake {
     0% { opacity: 0; }
@@ -80,14 +84,6 @@
     30% { transform: scale(1); }
     50% { transform: scale(1.05); }
     60% { transform: scale(1); }
-    80% { opacity: 1; }
-    100% { opacity: 0; }
-  }
-  @keyframes float-slam {
-    0% { opacity: 0; transform: scale(3); }
-    15% { opacity: 1; transform: scale(1); }
-    20% { transform: scale(1.1); }
-    25% { transform: scale(1); }
     80% { opacity: 1; }
     100% { opacity: 0; }
   }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { StatComparisonCommand } from '@glazebot/shared-types';
+  import { motion } from '@glazebot/shared-ui';
 
   let { command }: { command: StatComparisonCommand } = $props();
 
@@ -38,7 +39,7 @@
   }
 </script>
 
-<div class="stat-panel" style={positionStyle}>
+<div class="stat-panel" style={positionStyle} use:motion={'enter-top'}>
   <div class="stat-title">{command.title}</div>
   <div class="stat-header">
     <span class="side-name left">{command.left.name}</span>
@@ -72,7 +73,6 @@
     padding: 16px;
     min-width: 280px;
     max-width: 400px;
-    animation: panel-slide-in 0.4s ease-out;
     font-family: system-ui, sans-serif;
   }
   .stat-title {
@@ -130,9 +130,5 @@
     font-weight: 600;
     color: rgba(255, 255, 255, 0.9);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  }
-  @keyframes panel-slide-in {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { toast } from '$lib/stores/toast.svelte';
+  import { motion } from '@glazebot/shared-ui';
 </script>
 
 {#if toast.items.length > 0}
@@ -10,6 +11,7 @@
         class:dismissing={t.dismissing}
         data-testid="toast-{t.type}"
         role="status"
+        use:motion={{ type: 'enter-right', fast: true }}
       >
         <span class="toast-icon">
           {#if t.type === 'success'}
@@ -58,11 +60,12 @@
       0 2px 8px rgba(0, 0, 0, 0.2);
     min-width: 300px;
     max-width: 460px;
-    animation: toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   }
 
   .toast.dismissing {
-    animation: toast-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+    opacity: 0;
+    transform: translateX(80px) scale(0.9);
+    transition: opacity 0.3s ease, transform 0.3s ease;
   }
 
   /* ── Success — muted green that complements the teal/pink theme ── */
@@ -128,27 +131,4 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
-  /* ── Slide in from right ── */
-  @keyframes toast-in {
-    from {
-      opacity: 0;
-      transform: translateX(60px) scale(0.92);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0) scale(1);
-    }
-  }
-
-  /* ── Slide out to right ── */
-  @keyframes toast-out {
-    from {
-      opacity: 1;
-      transform: translateX(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateX(80px) scale(0.9);
-    }
-  }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { InfoTableCommand } from '@glazebot/shared-types';
+  import { motion } from '@glazebot/shared-ui';
 
   let { command }: { command: InfoTableCommand } = $props();
 
@@ -21,7 +22,7 @@
   }
 </script>
 
-<div class="table-panel" style={positionStyle}>
+<div class="table-panel" style={positionStyle} use:motion={'enter-top'}>
   <div class="table-title">{command.title}</div>
   <table>
     <thead>
@@ -50,7 +51,6 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
     padding: 16px;
-    animation: panel-slide-in 0.4s ease-out;
     font-family: system-ui, sans-serif;
   }
   .table-title {
@@ -79,9 +79,5 @@
   }
   tr:last-child td {
     border-bottom: none;
-  }
-  @keyframes panel-slide-in {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 </style>

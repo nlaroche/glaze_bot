@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { motion } from '../motion/index.js';
 
   interface MenuItem {
     label: string;
@@ -26,15 +27,17 @@
     // Adjust position if menu would overflow viewport
     if (menuEl) {
       const rect = menuEl.getBoundingClientRect();
-      if (rect.right > window.innerWidth) {
-        adjustedX = x - rect.width;
-      }
-      if (rect.bottom > window.innerHeight) {
-        adjustedY = y - rect.height;
-      }
+      if (rect.right > window.innerWidth) adjustedX = x - rect.width;
+      if (rect.bottom > window.innerHeight) adjustedY = y - rect.height;
     }
 
     function handleClickOutside(e: MouseEvent) {
+      if (menuEl && !menuEl.contains(e.target as Node)) {
+        onclose();
+      }
+    }
+
+    function handleContextOutside(e: MouseEvent) {
       if (menuEl && !menuEl.contains(e.target as Node)) {
         onclose();
       }
@@ -44,16 +47,15 @@
       if (e.key === 'Escape') onclose();
     }
 
-    // Delay listener to avoid catching the triggering right-click
     requestAnimationFrame(() => {
       window.addEventListener('click', handleClickOutside);
-      window.addEventListener('contextmenu', handleClickOutside);
+      window.addEventListener('contextmenu', handleContextOutside);
       window.addEventListener('keydown', handleEscape);
     });
 
     return () => {
       window.removeEventListener('click', handleClickOutside);
-      window.removeEventListener('contextmenu', handleClickOutside);
+      window.removeEventListener('contextmenu', handleContextOutside);
       window.removeEventListener('keydown', handleEscape);
     };
   });
@@ -64,6 +66,7 @@
   bind:this={menuEl}
   style="left: {adjustedX}px; top: {adjustedY}px"
   role="menu"
+  use:motion={{ type: 'pop', fast: true }}
 >
   {#each items as item}
     {#if item.separator}
@@ -99,18 +102,6 @@
     box-shadow:
       0 8px 32px var(--black-a50),
       0 2px 8px var(--black-a30);
-    animation: menu-in var(--transition-fast) ease-out;
-  }
-
-  @keyframes menu-in {
-    from {
-      opacity: 0;
-      transform: scale(0.95) translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
   }
 
   .menu-item {

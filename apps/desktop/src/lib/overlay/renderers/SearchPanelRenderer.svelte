@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-shell';
   import { dismissVisual, pinVisual, unpinVisual } from '../primitiveRegistry.svelte';
+  import { motion } from '@glazebot/shared-ui';
 
   let { command }: { command: SearchPanelCommand } = $props();
 
@@ -108,6 +109,7 @@
   class="search-panel"
   class:minimized
   style={positionStyle}
+  use:motion={'enter-top'}
 >
   <!-- Title bar (draggable) -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -166,7 +168,6 @@
     display: flex;
     flex-direction: column;
     font-family: system-ui, sans-serif;
-    animation: panel-slide-in 0.4s ease-out;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     overflow: hidden;
     z-index: 1000;
@@ -287,8 +288,4 @@
     text-decoration: underline;
   }
 
-  @keyframes panel-slide-in {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
 </style>

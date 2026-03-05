@@ -40,6 +40,10 @@
   // Burst bloom — fires after anticipation beat
   let burstFired = $state(false);
 
+  // Ground-pound impact effects per card slot
+  let impactFlash: boolean[] = $state([false, false, false]);
+  let impactPuffs: boolean[] = $state([false, false, false]);
+
   // Wind streaks
   let windStreaks: { id: number; x: number; y: number; angle: number; length: number; speed: number; delay: number; color: string }[] = $state([]);
 
@@ -98,6 +102,8 @@
       // Start animation immediately, fetch in parallel
       flippedCards = [false, false, false];
       cardVisible = [false, false, false];
+      impactFlash = [false, false, false];
+      impactPuffs = [false, false, false];
 
       const fetchPromise = onrequestopen();
 
@@ -139,6 +145,8 @@
     packCards = pickThreeCards();
     flippedCards = [false, false, false];
     cardVisible = [false, false, false];
+    impactFlash = [false, false, false];
+    impactPuffs = [false, false, false];
 
     // Shake phase — buildup from gentle to intense over 2s
     phase = 'shake';
@@ -194,11 +202,20 @@
     // Let the explosion breathe — full bloom plays out ~1.6s total
     await wait(1000);
 
-    // Reveal phase — cards arrive while outer haze still lingers
+    // Reveal phase — cards ground-pound in one at a time
     phase = 'reveal';
     for (let i = 0; i < packCards.length; i++) {
-      await wait(350);
+      await wait(400);
       cardVisible[i] = true;
+      // Wait for the slam to hit (card falls for ~300ms)
+      await wait(300);
+      // Ground-pound impact: camera shake + flash + wind puffs
+      screenShake = true;
+      impactFlash[i] = true;
+      impactPuffs[i] = true;
+      setTimeout(() => { screenShake = false; }, 400);
+      setTimeout(() => { impactFlash[i] = false; }, 350);
+      setTimeout(() => { impactPuffs[i] = false; }, 800);
     }
 
     phase = 'done';
@@ -255,6 +272,8 @@
     shakeIntensity = 0;
     legendaryFlash = false;
     legendaryCardIndex = -1;
+    impactFlash = [false, false, false];
+    impactPuffs = [false, false, false];
   }
 
   function wait(ms: number): Promise<void> {
@@ -393,6 +412,19 @@
     <div class="cards-container" data-testid="cards-container">
       {#each packCards as char, i}
         <div class="card-slot" class:visible={cardVisible[i]} style="--card-index: {i};" data-testid="card-slot">
+          <!-- Ground-pound impact flash -->
+          {#if impactFlash[i]}
+            <div class="impact-flash"></div>
+          {/if}
+          <!-- Ground-pound wind puffs -->
+          {#if impactPuffs[i]}
+            <div class="impact-puffs">
+              <div class="puff puff-l"></div>
+              <div class="puff puff-r"></div>
+              <div class="puff puff-cl"></div>
+              <div class="puff puff-cr"></div>
+            </div>
+          {/if}
           <!-- Legendary flash — positioned relative to this card -->
           {#if legendaryFlash && legendaryCardIndex === i}
             <div class="legendary-flash" data-testid="legendary-flash">
@@ -1137,37 +1169,145 @@
     display: flex;
     gap: var(--space-5);
     justify-content: center;
-    align-items: center;
+    align-items: flex-end;
     padding: var(--space-5);
   }
 
   .card-slot {
     position: relative;
+    transform-origin: center bottom;
     opacity: 0;
-    transform: translateY(300px) scale(0.2);
   }
 
   .card-slot.visible {
-    animation: cardLand 1s var(--ease-bounce) forwards;
+    opacity: 1;
+    animation: cardSlam 0.35s cubic-bezier(0.45, 0, 0.85, 0.25);
   }
 
-  @keyframes cardLand {
-    0% { opacity: 0; transform: translateY(300px) scale(0.2); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+  @keyframes cardSlam {
+    0% {
+      opacity: 0;
+      transform: translateY(-550px) scaleX(0.92) scaleY(1.18);
+    }
+    60% {
+      opacity: 1;
+      transform: translateY(-80px) scaleX(0.92) scaleY(1.14);
+    }
+    78% {
+      opacity: 1;
+      transform: translateY(0) scaleX(1.14) scaleY(0.82);
+    }
+    90% {
+      transform: translateY(0) scaleX(0.97) scaleY(1.04);
+    }
+    100% {
+      transform: translateY(0) scaleX(1) scaleY(1);
+    }
   }
 
-  /* ── Bottom actions ── */
-  .bottom-actions {
+  /* ── Ground-pound impact flash ── */
+  .impact-flash {
+    position: absolute;
+    left: -40px;
+    right: -40px;
+    bottom: -30px;
+    height: 80px;
+    z-index: 40;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center 70%,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 230, 190, 0.6) 25%,
+      rgba(255, 200, 140, 0.2) 55%,
+      transparent 80%
+    );
+    animation: impactFlashAnim 0.3s cubic-bezier(0.16, 0.6, 0.4, 1) forwards;
+    mix-blend-mode: screen;
+    transform-origin: center bottom;
+  }
+
+  @keyframes impactFlashAnim {
+    0% { opacity: 1; transform: scaleX(0.4) scaleY(0.3); }
+    25% { opacity: 1; transform: scaleX(1.3) scaleY(0.8); }
+    100% { opacity: 0; transform: scaleX(1.8) scaleY(1.2); }
+  }
+
+  /* ── Ground-pound wind puffs ── */
+  .impact-puffs {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    height: 0;
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  .puff {
+    position: absolute;
+    bottom: 0;
+    width: 36px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center,
+      rgba(255, 255, 255, 0.4) 0%,
+      rgba(210, 220, 240, 0.2) 50%,
+      transparent 100%
+    );
+  }
+
+  .puff-l {
+    animation: puffLeft 0.6s cubic-bezier(0.16, 0.6, 0.4, 1) forwards;
+  }
+  .puff-r {
+    animation: puffRight 0.6s cubic-bezier(0.16, 0.6, 0.4, 1) forwards;
+  }
+  .puff-cl {
+    animation: puffCenterLeft 0.55s cubic-bezier(0.16, 0.6, 0.4, 1) 0.04s forwards;
     opacity: 0;
-    transform: translateY(10px);
+  }
+  .puff-cr {
+    animation: puffCenterRight 0.55s cubic-bezier(0.16, 0.6, 0.4, 1) 0.04s forwards;
+    opacity: 0;
+  }
+
+  @keyframes puffLeft {
+    0% { opacity: 0.8; transform: translate(0, 0) scale(0.3); }
+    35% { opacity: 0.7; }
+    100% { opacity: 0; transform: translate(-110px, -15px) scale(2) rotate(-12deg); }
+  }
+
+  @keyframes puffRight {
+    0% { opacity: 0.8; transform: translate(0, 0) scale(0.3); }
+    35% { opacity: 0.7; }
+    100% { opacity: 0; transform: translate(110px, -15px) scale(2) rotate(12deg); }
+  }
+
+  @keyframes puffCenterLeft {
+    0% { opacity: 0.6; transform: translate(0, 0) scale(0.2); }
+    25% { opacity: 0.5; }
+    100% { opacity: 0; transform: translate(-65px, -30px) scale(1.5) rotate(-6deg); }
+  }
+
+  @keyframes puffCenterRight {
+    0% { opacity: 0.6; transform: translate(0, 0) scale(0.2); }
+    25% { opacity: 0.5; }
+    100% { opacity: 0; transform: translate(65px, -30px) scale(1.5) rotate(6deg); }
+  }
+
+  /* ── Bottom actions — absolutely positioned so it doesn't shift card layout ── */
+  .bottom-actions {
+    position: absolute;
+    bottom: var(--space-6);
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    opacity: 0;
     transition: opacity 0.4s var(--ease-arrive), transform 0.4s var(--ease-arrive);
     pointer-events: none;
-    margin-top: var(--space-2);
   }
 
   .bottom-actions.visible {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
     pointer-events: auto;
   }
 
