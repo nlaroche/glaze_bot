@@ -24,6 +24,7 @@
   import TagFilter from '$lib/components/ui/TagFilter.svelte';
   import type { Tag } from '$lib/components/ui/TagFilter.svelte';
   import WorkshopWizardModal from './WorkshopWizardModal.svelte';
+  import BatchCreateModal from './BatchCreateModal.svelte';
 
   // ─── Types ──────────────────────────────────────────────────────────
   interface TokenPoolEntry { value: string; weight: number; }
@@ -86,6 +87,7 @@
   let detailPanelOpen = $state(false);
   let workingCharacter: GachaCharacter | null = $state(null);
   let viewerCharacter: GachaCharacter | null = $state(null);
+  let batchModalOpen = $state(false);
 
   // ─── Constants ─────────────────────────────────────────────────────
   const tableColumns: Column[] = [
@@ -95,6 +97,7 @@
     { key: 'voice_name', label: 'Voice', sortable: true, width: '120px' },
     { key: 'avatar_url', label: 'Sprite', width: '70px' },
     { key: 'is_default', label: '\u2605', sortable: true, width: '50px' },
+    { key: 'batch_id', label: 'Batch', sortable: true, width: '120px' },
     { key: 'created_at', label: 'Created', sortable: true, width: '100px' },
     { key: 'view', label: '', width: '50px' },
     { key: 'actions', label: '', width: '50px' },
@@ -112,6 +115,17 @@
     { key: 'is:default', label: 'Default', group: 'Features' },
   ];
 
+  // Dynamic batch tags derived from characters
+  const allFilterTags = $derived.by(() => {
+    const batchIds = [...new Set(characters.map(c => c.batch_id).filter(Boolean))].sort();
+    const batchTags: Tag[] = batchIds.map(id => ({
+      key: `batch:${id}`,
+      label: id!,
+      group: 'Batch',
+    }));
+    return [...filterTags, ...batchTags];
+  });
+
   // ─── Derived ───────────────────────────────────────────────────────
   const filtered = $derived.by(() => {
     let result = characters;
@@ -119,7 +133,8 @@
       const q = searchQuery.toLowerCase();
       result = result.filter((c) =>
         c.name.toLowerCase().includes(q) ||
-        c.description?.toLowerCase().includes(q)
+        c.description?.toLowerCase().includes(q) ||
+        c.batch_id?.toLowerCase().includes(q)
       );
     }
     if (activeTags.length > 0) {
@@ -135,6 +150,7 @@
           if (group === 'status') return values.some(v => v === 'active' ? c.is_active : !c.is_active);
           if (group === 'has') return values.some(v => { if (v === 'voice') return !!c.voice_id; if (v === 'sprite') return !!c.avatar_url; return false; });
           if (group === 'is') return values.some(v => { if (v === 'default') return c.is_default; return false; });
+          if (group === 'batch') return values.includes(c.batch_id ?? '');
           return true;
         });
       }
@@ -349,6 +365,13 @@
           Delete All
         </Button>
         <Button
+          variant="ghost"
+          onclick={() => batchModalOpen = true}
+          testid="batch-create-btn"
+        >
+          Batch Create
+        </Button>
+        <Button
           variant="primary"
           onclick={() => {
             workingCharacter = null;
@@ -361,7 +384,7 @@
       </div>
     </div>
     <TagFilter
-      tags={filterTags}
+      tags={allFilterTags}
       active={activeTags}
       onchange={(tags) => activeTags = tags}
     />
@@ -414,6 +437,8 @@
             >
               {row.is_default ? '\u2605' : '\u2606'}
             </button>
+          {:else if column.key === 'batch_id'}
+            <span class="cell-batch">{row.batch_id ?? '\u2014'}</span>
           {:else if column.key === 'created_at'}
             <span class="cell-muted">{formatDate(row.created_at)}</span>
           {:else if column.key === 'view'}
@@ -498,6 +523,13 @@
   {imageSystemInfo}
   onclose={closeDetailPanel}
   oncharacterupdated={handleCharacterUpdated}
+/>
+
+<!-- Batch Create Modal -->
+<BatchCreateModal
+  open={batchModalOpen}
+  onclose={() => batchModalOpen = false}
+  oncomplete={() => oncharacterschanged()}
 />
 
 <!-- Card Viewer -->
@@ -587,6 +619,17 @@
   .cell-muted {
     color: var(--color-text-muted);
     font-size: var(--font-base);
+  }
+
+  .cell-batch {
+    color: var(--color-text-muted);
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-sm);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    display: inline-block;
   }
 
   .cell-sprite {

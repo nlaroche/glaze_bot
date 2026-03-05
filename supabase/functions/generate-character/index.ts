@@ -24,6 +24,8 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
 interface GenerateRequest {
   rarity: string;
+  batch_id?: string;
+  exclude_voice_ids?: string[];
 }
 
 async function fetchVoices(): Promise<{ id: string; name: string }[]> {
@@ -485,9 +487,13 @@ Deno.serve(async (req: Request) => {
 
     // Parse request body
     let rarity = "common";
+    let batchId: string | undefined;
+    let excludeVoiceIds: string[] = [];
     try {
       const body: GenerateRequest = await req.json();
       if (body.rarity) rarity = body.rarity;
+      if (body.batch_id) batchId = body.batch_id;
+      if (body.exclude_voice_ids) excludeVoiceIds = body.exclude_voice_ids;
     } catch {
       // Default to common if no body
     }
@@ -541,15 +547,20 @@ Deno.serve(async (req: Request) => {
       // Non-fatal — character works without topic assignments
     }
 
-    // Assign random voice from Fish Audio
+    // Assign random voice from Fish Audio (excluding already-used voices)
     const voices = await fetchVoices();
+    const excludeSet = new Set(excludeVoiceIds);
+    const available = excludeSet.size > 0
+      ? voices.filter((v) => !excludeSet.has(v.id))
+      : voices;
     let voiceId: string | null = null;
     let voiceName: string | null = null;
-    if (voices.length > 0) {
-      const pick = voices[Math.floor(Math.random() * voices.length)];
+    const voicePool = available.length > 0 ? available : voices; // fallback to all if none left
+    if (voicePool.length > 0) {
+      const pick = voicePool[Math.floor(Math.random() * voicePool.length)];
       voiceId = pick.id;
       voiceName = pick.name;
-      logger.log("voice.assign.success", { voiceId, voiceName });
+      logger.log("voice.assign.success", { voiceId, voiceName, excluded: excludeSet.size });
     } else {
       logger.warn("voice.assign.skip", { reason: "no voices available" });
     }
@@ -572,6 +583,7 @@ Deno.serve(async (req: Request) => {
         voice_name: voiceName,
         topic_assignments: topicResult.topic_assignments,
         custom_topics: topicResult.custom_topics,
+        ...(batchId ? { batch_id: batchId } : {}),
       })
       .select()
       .single();

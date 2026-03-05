@@ -415,7 +415,7 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   });
 
   $effect(() => {
-    if (activeTab === 'voices') { loadFishVoices(); loadVoiceUsageMap(); }
+    if (activeTab === 'voices' || activeTab === 'workshop') { loadFishVoices(); loadVoiceUsageMap(); }
   });
 
   // Persist active tab to localStorage

@@ -1,17 +1,12 @@
 <script lang="ts">
   import Card from '$lib/components/ui/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
-  import TagFilter from '$lib/components/ui/TagFilter.svelte';
-  import TextInput from '$lib/components/ui/TextInput.svelte';
-  import NumberInput from '$lib/components/ui/NumberInput.svelte';
-  import Select from '$lib/components/ui/Select.svelte';
-  import { SliderInput, ToggleSwitch, CharacterCard } from '@glazebot/shared-ui';
+  import { SliderInput, CharacterCard } from '@glazebot/shared-ui';
   import {
-    ANIMATION_VERB_LIBRARY,
-    SEED_ANIMATION_PRESETS,
-    EASING_CURVES,
-    applyAnimationPreset,
-    type AnimationPreset,
+    DEFAULT_ANIMATIONS,
+    FEEL_PRESETS,
+    MOTION_TYPES,
+    applyMotion,
     type AnimationsConfig,
   } from '@glazebot/shared-types';
   import type { GachaCharacter } from '@glazebot/shared-types';
@@ -23,158 +18,103 @@
 
   let { config, onsave }: Props = $props();
 
-  // ── Mock character for preview ──
-  const MOCK_CHARACTER: GachaCharacter = {
-    id: 'preview-mock',
-    user_id: 'preview',
-    name: 'Animation Preview',
-    description: 'A character for previewing animations',
-    system_prompt: '',
-    backstory: 'Born to be animated.',
-    rarity: 'epic',
-    avatar_seed: 'animation-preview',
-    is_active: true,
-    is_default: false,
-    created_at: new Date().toISOString(),
-    personality: { energy: 80, positivity: 70, formality: 30, talkativeness: 60, attitude: 50, humor: 90 },
-  };
+  // ── Mock characters for preview (different rarities for visual variety) ──
+  const PREVIEW_CHARS: GachaCharacter[] = [
+    {
+      id: 'prev-1', user_id: 'p', name: 'Enter Left', description: '', system_prompt: '',
+      backstory: '', rarity: 'epic', avatar_seed: 'anim-1', is_active: true, is_default: false,
+      created_at: new Date().toISOString(),
+      personality: { energy: 90, positivity: 80, formality: 20, talkativeness: 70, attitude: 60, humor: 95 },
+    },
+    {
+      id: 'prev-2', user_id: 'p', name: 'Scale In', description: '', system_prompt: '',
+      backstory: '', rarity: 'legendary', avatar_seed: 'anim-2', is_active: true, is_default: false,
+      created_at: new Date().toISOString(),
+      personality: { energy: 60, positivity: 50, formality: 70, talkativeness: 40, attitude: 30, humor: 50 },
+    },
+    {
+      id: 'prev-3', user_id: 'p', name: 'Land', description: '', system_prompt: '',
+      backstory: '', rarity: 'rare', avatar_seed: 'anim-3', is_active: true, is_default: false,
+      created_at: new Date().toISOString(),
+      personality: { energy: 75, positivity: 65, formality: 45, talkativeness: 80, attitude: 55, humor: 70 },
+    },
+    {
+      id: 'prev-4', user_id: 'p', name: 'Pop', description: '', system_prompt: '',
+      backstory: '', rarity: 'common', avatar_seed: 'anim-4', is_active: true, is_default: false,
+      created_at: new Date().toISOString(),
+      personality: { energy: 40, positivity: 90, formality: 10, talkativeness: 55, attitude: 85, humor: 60 },
+    },
+  ];
+
+  // Motion type each preview card demonstrates
+  const SHOWCASE_MOTIONS: { motion: typeof MOTION_TYPES[number]['key']; charIdx: number }[] = [
+    { motion: 'enter-left',  charIdx: 0 },
+    { motion: 'enter-right', charIdx: 0 },
+    { motion: 'scale-in',    charIdx: 1 },
+    { motion: 'pop',         charIdx: 3 },
+    { motion: 'land',        charIdx: 2 },
+    { motion: 'enter-bottom', charIdx: 1 },
+  ];
 
   // ── Extract from config ──
-  function getPresets(): Record<string, AnimationPreset> {
-    const animCfg = config.animations as AnimationsConfig | undefined;
-    return structuredClone(animCfg?.presets ?? {});
+  function getFeel(): AnimationsConfig {
+    const saved = config.animations as AnimationsConfig | undefined;
+    if (saved && typeof saved.anticipation === 'number') return { ...saved };
+    return { ...DEFAULT_ANIMATIONS };
   }
 
   // ── State ──
-  let presets: Record<string, AnimationPreset> = $state(getPresets());
-  let activeVerbFilters: string[] = $state([]);
-  let selectedPresetId: string | null = $state(null);
+  let feel: AnimationsConfig = $state(getFeel());
   let saving = $state(false);
-  let previewEl: HTMLDivElement | undefined = $state(undefined);
-  let currentAnimation: Animation | null = $state(null);
-  let seedPresetToAdd = $state('');
-  let pendingDeleteId: string | null = $state(null);
+  let showcaseEls: (HTMLDivElement | undefined)[] = $state(Array(SHOWCASE_MOTIONS.length).fill(undefined));
+  let animations: (Animation | null)[] = $state(Array(SHOWCASE_MOTIONS.length).fill(null));
+  let activeFeelPreset: string | null = $state(null);
 
-  // ── Derived ──
-  let filteredPresetIds = $derived.by(() => {
-    const ids = Object.keys(presets);
-    if (activeVerbFilters.length === 0) return ids;
-    return ids.filter((id) => activeVerbFilters.includes(presets[id].verb));
+  // Re-sync when config prop changes
+  $effect(() => {
+    const _ = config;
+    feel = getFeel();
   });
 
-  let selectedPreset = $derived(selectedPresetId ? presets[selectedPresetId] ?? null : null);
+  // ── Auto-replay on slider change ──
+  let replayTimer: ReturnType<typeof setTimeout> | null = null;
 
-  let verbTags = $derived(
-    ANIMATION_VERB_LIBRARY.map((v) => ({ key: v.key, label: `${v.icon} ${v.label}` }))
-  );
-
-  let seedOptions = $derived(
-    SEED_ANIMATION_PRESETS.map((s) => ({ value: s.id, label: `${s.name} (${s.verb})` }))
-  );
-
-  let easingOptions = $derived([
-    ...Object.keys(EASING_CURVES).map((k) => ({ value: k, label: k })),
-    { value: 'custom', label: 'Custom' },
-  ]);
-
-  const directionOptions = [
-    { value: 'normal', label: 'Normal' },
-    { value: 'reverse', label: 'Reverse' },
-    { value: 'alternate', label: 'Alternate' },
-    { value: 'alternate-reverse', label: 'Alternate Reverse' },
-  ];
-
-  const fillModeOptions = [
-    { value: 'none', label: 'None' },
-    { value: 'forwards', label: 'Forwards' },
-    { value: 'backwards', label: 'Backwards' },
-    { value: 'both', label: 'Both' },
-  ];
-
-  const PROPERTY_SUGGESTIONS = [
-    { value: 'transform', label: 'transform' },
-    { value: 'opacity', label: 'opacity' },
-    { value: 'filter', label: 'filter' },
-    { value: 'scale', label: 'scale' },
-    { value: 'rotate', label: 'rotate' },
-    { value: 'translate', label: 'translate' },
-    { value: 'color', label: 'color' },
-    { value: 'background-color', label: 'background-color' },
-    { value: 'box-shadow', label: 'box-shadow' },
-  ];
+  function scheduleReplay() {
+    if (replayTimer) clearTimeout(replayTimer);
+    replayTimer = setTimeout(() => playAll(), 120);
+  }
 
   // ── Actions ──
-  function addFromTemplate() {
-    const seed = SEED_ANIMATION_PRESETS.find((s) => s.id === seedPresetToAdd);
-    if (!seed) return;
-    let id = seed.id;
-    let counter = 1;
-    while (presets[id]) {
-      id = `${seed.id}-${counter++}`;
+  function applyFeelPreset(preset: typeof FEEL_PRESETS[number]) {
+    feel = { ...preset.values };
+    activeFeelPreset = preset.id;
+    scheduleReplay();
+  }
+
+  function updateFeel(key: keyof AnimationsConfig, value: number) {
+    feel = { ...feel, [key]: value };
+    activeFeelPreset = null;
+    scheduleReplay();
+  }
+
+  function playAll() {
+    for (let i = 0; i < SHOWCASE_MOTIONS.length; i++) {
+      const el = showcaseEls[i];
+      if (!el) continue;
+      animations[i]?.cancel();
+      // Stagger each card by a small delay for a cascade effect
+      const delay = i * 80;
+      setTimeout(() => {
+        animations[i] = applyMotion(el, SHOWCASE_MOTIONS[i].motion, feel);
+      }, delay);
     }
-    const clone: AnimationPreset = structuredClone({ ...seed, id });
-    if (id !== seed.id) clone.name = `${seed.name} ${counter - 1}`;
-    presets[id] = clone;
-    presets = { ...presets };
-    selectedPresetId = id;
-    seedPresetToAdd = '';
-  }
-
-  function removePreset(id: string) {
-    delete presets[id];
-    presets = { ...presets };
-    if (selectedPresetId === id) selectedPresetId = null;
-    pendingDeleteId = null;
-  }
-
-  function addKeyframe() {
-    if (!selectedPreset) return;
-    const existing = selectedPreset.keyframes;
-    const lastOffset = existing.length > 0 ? existing[existing.length - 1].offset : 0;
-    const newOffset = Math.min(lastOffset + 0.25, 1);
-    selectedPreset.keyframes = [
-      ...existing,
-      { offset: newOffset, properties: { transform: 'none' } },
-    ];
-    presets = { ...presets };
-  }
-
-  function removeKeyframe(kfIndex: number) {
-    if (!selectedPreset) return;
-    selectedPreset.keyframes = selectedPreset.keyframes.filter((_, i) => i !== kfIndex);
-    presets = { ...presets };
-  }
-
-  function addPropertyToKeyframe(kfIndex: number) {
-    if (!selectedPreset) return;
-    selectedPreset.keyframes[kfIndex].properties['opacity'] = '1';
-    presets = { ...presets };
-  }
-
-  function removeProperty(kfIndex: number, propKey: string) {
-    if (!selectedPreset) return;
-    const props = selectedPreset.keyframes[kfIndex].properties;
-    delete props[propKey];
-    selectedPreset.keyframes[kfIndex].properties = { ...props };
-    presets = { ...presets };
-  }
-
-  function playPreview() {
-    if (!previewEl || !selectedPreset) return;
-    currentAnimation?.cancel();
-    currentAnimation = applyAnimationPreset(previewEl, selectedPreset);
-  }
-
-  function resetPreview() {
-    currentAnimation?.cancel();
-    currentAnimation = null;
   }
 
   // ── Save ──
   async function save() {
     saving = true;
     try {
-      const updated = { ...config, animations: { presets: structuredClone(presets) } };
+      const updated = { ...config, animations: { ...feel } };
       await onsave(updated);
     } finally {
       saving = false;
@@ -183,274 +123,136 @@
 </script>
 
 <div class="animations-panel" data-testid="animations-panel">
-  <div class="panel-layout">
-    <!-- ═══ Left: Controls ═══ -->
-    <div class="controls-col">
 
-      <!-- Preset Library -->
-      <Card>
-        <div class="section-header">
-          <h3>Animation Presets</h3>
-          <p class="section-desc">Add presets from templates, then click one to edit its keyframes and timing.</p>
-        </div>
+  <!-- Quick-set feel buttons -->
+  <Card>
+    <div class="section-header">
+      <h3>Animation Feel</h3>
+      <p class="section-desc">Controls how everything in the app moves. Pick a starting feel, then fine-tune with the sliders below.</p>
+    </div>
 
-        <!-- Verb filter -->
-        <div class="verb-filter">
-          <TagFilter
-            tags={verbTags}
-            active={activeVerbFilters}
-            onchange={(v) => activeVerbFilters = v}
-          />
-        </div>
+    <div class="feel-buttons">
+      {#each FEEL_PRESETS as preset (preset.id)}
+        <button
+          class="feel-btn"
+          class:active={activeFeelPreset === preset.id}
+          onclick={() => applyFeelPreset(preset)}
+          data-testid="feel-{preset.id}"
+        >
+          <span class="feel-btn-name">{preset.name}</span>
+          <span class="feel-btn-desc">{preset.desc}</span>
+        </button>
+      {/each}
+    </div>
+  </Card>
 
-        <!-- Add from template -->
-        <div class="add-preset-row">
-          <Select
-            label="Template"
-            bind:value={seedPresetToAdd}
-            options={seedOptions}
-            testid="seed-preset-select"
-          />
-          <Button onclick={addFromTemplate} disabled={!seedPresetToAdd} variant="primary" testid="add-preset-btn">Add</Button>
-        </div>
+  <!-- Sliders -->
+  <Card>
+    <div class="section-header">
+      <h3>Tweak the Feel</h3>
+      <p class="section-desc">Drag any slider — the showcase below replays automatically.</p>
+    </div>
 
-        <!-- Preset list -->
-        <div class="preset-list">
-          {#each filteredPresetIds as id (id)}
-            {@const preset = presets[id]}
-            <button
-              class="preset-item"
-              class:selected={selectedPresetId === id}
-              onclick={() => selectedPresetId = id}
-              data-testid="preset-row-{id}"
-            >
-              <div class="preset-info">
-                <span class="preset-name">{preset.name}</span>
-                <span class="preset-meta"><span class="verb-tag">{preset.verb}</span> {preset.duration}ms</span>
-              </div>
-              <div class="preset-item-actions">
-                {#if pendingDeleteId === id}
-                  <button class="action-btn destructive" onclick={(e: Event) => { e.stopPropagation(); removePreset(id); }}>Confirm</button>
-                  <button class="action-btn" onclick={(e: Event) => { e.stopPropagation(); pendingDeleteId = null; }}>Cancel</button>
-                {:else}
-                  <button class="action-btn destructive" onclick={(e: Event) => { e.stopPropagation(); pendingDeleteId = id; }} title="Remove preset">x</button>
-                {/if}
-              </div>
-            </button>
-          {/each}
+    <div class="feel-sliders">
+      <div class="slider-row">
+        <SliderInput
+          label="Wind-up"
+          value={feel.anticipation}
+          min={0}
+          max={1}
+          step={0.01}
+          onchange={(e: Event & { currentTarget: EventTarget & HTMLInputElement }) => updateFeel('anticipation', Number(e.currentTarget.value))}
+          testid="slider-anticipation"
+        />
+        <span class="slider-hint-text">Pulls back before launching — the bigger the wind-up, the more powerful the release feels</span>
+      </div>
 
-          {#if filteredPresetIds.length === 0}
-            <p class="empty-msg">No presets yet. Pick a template above and click Add.</p>
-          {/if}
-        </div>
-      </Card>
+      <div class="slider-row">
+        <SliderInput
+          label="Overshoot"
+          value={feel.overshoot}
+          min={0}
+          max={1}
+          step={0.01}
+          onchange={(e: Event & { currentTarget: EventTarget & HTMLInputElement }) => updateFeel('overshoot', Number(e.currentTarget.value))}
+          testid="slider-overshoot"
+        />
+        <span class="slider-hint-text">Flies past the target before settling — makes motion feel energetic and alive</span>
+      </div>
 
-      <!-- Keyframe Editor (shown when a preset is selected) -->
-      {#if selectedPreset}
-        <Card>
-          <div class="section-header">
-            <h3>Keyframes — {selectedPreset.name}</h3>
-            <p class="section-desc">Each keyframe has an offset (0–100%) and one or more CSS properties.</p>
-          </div>
+      <div class="slider-row">
+        <SliderInput
+          label="Bounce"
+          value={feel.bounciness}
+          min={0}
+          max={1}
+          step={0.01}
+          onchange={(e: Event & { currentTarget: EventTarget & HTMLInputElement }) => updateFeel('bounciness', Number(e.currentTarget.value))}
+          testid="slider-bounciness"
+        />
+        <span class="slider-hint-text">How many times it oscillates before settling — more = springier, playful</span>
+      </div>
 
-          <div class="name-field">
-            <TextInput
-              label="Preset Name"
-              bind:value={selectedPreset.name}
-              testid="preset-name-input"
-            />
-          </div>
+      <div class="slider-row">
+        <SliderInput
+          label="Squish"
+          value={feel.squishiness}
+          min={0}
+          max={1}
+          step={0.01}
+          onchange={(e: Event & { currentTarget: EventTarget & HTMLInputElement }) => updateFeel('squishiness', Number(e.currentTarget.value))}
+          testid="slider-squishiness"
+        />
+        <span class="slider-hint-text">Squash on impact, stretch during travel — makes things feel physical and weighty</span>
+      </div>
 
-          {#each selectedPreset.keyframes as kf, kfIdx (kfIdx)}
-            <div class="keyframe-block">
-              <div class="keyframe-header">
-                <NumberInput
-                  label="Offset %"
-                  value={Math.round(kf.offset * 100)}
-                  min={0}
-                  max={100}
-                  step={1}
-                  onchange={(e: Event) => {
-                    kf.offset = Math.max(0, Math.min(1, Number((e.currentTarget as HTMLInputElement).value) / 100));
-                    presets = { ...presets };
-                  }}
-                  testid="kf-offset-{kfIdx}"
-                />
-                <button class="action-btn destructive" onclick={() => removeKeyframe(kfIdx)}>Remove</button>
-              </div>
-
-              {#each Object.entries(kf.properties) as [propKey, propVal], pIdx (propKey)}
-                <div class="property-row">
-                  <Select
-                    label="Property"
-                    value={propKey}
-                    options={PROPERTY_SUGGESTIONS}
-                    onchange={(e: Event) => {
-                      const newKey = (e.currentTarget as HTMLSelectElement).value;
-                      if (newKey !== propKey) {
-                        const value = kf.properties[propKey];
-                        delete kf.properties[propKey];
-                        kf.properties[newKey] = value;
-                        presets = { ...presets };
-                      }
-                    }}
-                    testid="prop-key-{kfIdx}-{pIdx}"
-                  />
-                  <TextInput
-                    label="Value"
-                    value={propVal}
-                    testid="prop-val-{kfIdx}-{pIdx}"
-                  />
-                  <button class="action-btn destructive" onclick={() => removeProperty(kfIdx, propKey)}>x</button>
-                </div>
-              {/each}
-
-              <button class="action-btn" onclick={() => addPropertyToKeyframe(kfIdx)} data-testid="add-prop-{kfIdx}">+ Property</button>
-            </div>
-          {/each}
-
-          <button class="action-btn" onclick={addKeyframe} data-testid="add-keyframe-btn">+ Keyframe</button>
-        </Card>
-
-        <!-- Timing & Easing -->
-        <Card>
-          <div class="section-header">
-            <h3>Timing & Easing</h3>
-            <p class="section-desc">Duration, delay, easing curve, and playback direction.</p>
-          </div>
-
-          <div class="timing-grid">
-            <NumberInput
-              label="Duration (ms)"
-              bind:value={selectedPreset.duration}
-              min={0}
-              max={10000}
-              step={50}
-              testid="duration-input"
-            />
-            <NumberInput
-              label="Delay (ms)"
-              bind:value={selectedPreset.delay}
-              min={0}
-              max={5000}
-              step={50}
-              testid="delay-input"
-            />
-          </div>
-
-          <SliderInput
-            label="Duration"
-            bind:value={selectedPreset.duration}
-            min={0}
-            max={3000}
-            step={10}
-            suffix="ms"
-            testid="duration-slider"
-          />
-
-          <div class="easing-grid">
-            <Select
-              label="Easing"
-              bind:value={selectedPreset.easing}
-              options={easingOptions}
-              testid="easing-select"
-            />
-            <Select
-              label="Direction"
-              bind:value={selectedPreset.direction}
-              options={directionOptions}
-              testid="direction-select"
-            />
-            <Select
-              label="Fill Mode"
-              bind:value={selectedPreset.fillMode}
-              options={fillModeOptions}
-              testid="fill-select"
-            />
-          </div>
-
-          {#if selectedPreset.easing === 'custom'}
-            <TextInput
-              label="Custom Easing"
-              bind:value={selectedPreset.customEasing}
-              placeholder="cubic-bezier(0.4, 0, 0.2, 1)"
-              testid="custom-easing-input"
-            />
-          {/if}
-
-          <div class="iterations-row">
-            {#if selectedPreset.iterations !== 'infinite'}
-              <NumberInput
-                label="Iterations"
-                value={selectedPreset.iterations as number}
-                min={1}
-                max={100}
-                step={1}
-                onchange={(e: Event) => {
-                  if (selectedPreset) {
-                    selectedPreset.iterations = Number((e.currentTarget as HTMLInputElement).value);
-                    presets = { ...presets };
-                  }
-                }}
-                testid="iterations-input"
-              />
-            {/if}
-            <ToggleSwitch
-              label="Infinite"
-              checked={selectedPreset.iterations === 'infinite'}
-              onchange={() => {
-                if (selectedPreset) {
-                  selectedPreset.iterations = selectedPreset.iterations === 'infinite' ? 1 : 'infinite';
-                  presets = { ...presets };
-                }
-              }}
-            />
-          </div>
-        </Card>
-      {/if}
-
-      <!-- Save -->
-      <div class="save-bar">
-        <Button onclick={save} disabled={saving} variant="primary" testid="save-animations">
-          {saving ? 'Saving...' : 'Save Animation Presets'}
-        </Button>
+      <div class="slider-row">
+        <SliderInput
+          label="Speed"
+          value={feel.speed}
+          min={100}
+          max={2000}
+          step={10}
+          suffix="ms"
+          onchange={(e: Event & { currentTarget: EventTarget & HTMLInputElement }) => updateFeel('speed', Number(e.currentTarget.value))}
+          testid="slider-speed"
+        />
+        <span class="slider-hint-text">Total animation duration — slower lets you see every detail, faster feels snappy</span>
       </div>
     </div>
+  </Card>
 
-    <!-- ═══ Right: Preview (always visible) ═══ -->
-    <div class="preview-col">
-      <Card>
-        <div class="section-header">
-          <h3>Preview</h3>
-          <p class="section-desc">
-            {#if selectedPreset}
-              Playing: <strong>{selectedPreset.name}</strong> ({selectedPreset.duration}ms, {selectedPreset.easing})
-            {:else}
-              Select a preset on the left to preview it here.
-            {/if}
-          </p>
-        </div>
+  <!-- Showcase grid: all motions at once -->
+  <Card>
+    <div class="section-header">
+      <h3>Motion Showcase</h3>
+      <p class="section-desc">Every motion type with your current feel. Hit Replay to see them all.</p>
+    </div>
 
-        <div class="preview-area">
-          <div bind:this={previewEl} class="preview-target">
-            <CharacterCard character={MOCK_CHARACTER} />
+    <div class="showcase-controls">
+      <Button variant="primary" onclick={playAll} testid="play-all-btn">Replay All</Button>
+    </div>
+
+    <div class="showcase-grid">
+      {#each SHOWCASE_MOTIONS as item, i (i)}
+        {@const motionInfo = MOTION_TYPES.find(m => m.key === item.motion)}
+        <div class="showcase-cell">
+          <span class="showcase-label">{motionInfo?.label ?? item.motion}</span>
+          <div class="showcase-stage">
+            <div bind:this={showcaseEls[i]} class="showcase-target">
+              <CharacterCard character={PREVIEW_CHARS[item.charIdx]} />
+            </div>
           </div>
         </div>
-        <div class="preview-controls">
-          <Button
-            variant="primary"
-            onclick={playPreview}
-            disabled={!selectedPreset}
-            testid="play-preview-btn"
-          >Play</Button>
-          <Button
-            variant="secondary"
-            onclick={resetPreview}
-            testid="reset-preview-btn"
-          >Reset</Button>
-        </div>
-      </Card>
+      {/each}
     </div>
+  </Card>
+
+  <!-- Save -->
+  <div class="save-bar">
+    <Button onclick={save} disabled={saving} variant="primary" testid="save-animations">
+      {saving ? 'Saving...' : 'Save Animation Feel'}
+    </Button>
   </div>
 </div>
 
@@ -459,26 +261,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-  }
-
-  /* ── Two-column layout: controls left, preview right ── */
-  .panel-layout {
-    display: grid;
-    grid-template-columns: 3fr 2fr;
-    gap: var(--space-5);
-    align-items: start;
-  }
-
-  .controls-col {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
-    min-width: 0;
-  }
-
-  .preview-col {
-    position: sticky;
-    top: var(--space-4);
   }
 
   /* ── Section Headers ── */
@@ -500,184 +282,107 @@
     line-height: 1.5;
   }
 
-  /* ── Verb Filter ── */
-  .verb-filter {
-    margin-bottom: var(--space-3);
-  }
-
-  /* ── Add Preset ── */
-  .add-preset-row {
-    display: flex;
+  /* ── Feel Buttons ── */
+  .feel-buttons {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: var(--space-3);
-    align-items: flex-end;
-    margin-bottom: var(--space-4);
   }
 
-  /* ── Preset List ── */
-  .preset-list {
+  .feel-btn {
     display: flex;
     flex-direction: column;
-    gap: 0;
-  }
-
-  .preset-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    padding: var(--space-2-5) var(--space-3);
-    border: none;
-    border-bottom: 1px solid var(--color-border);
-    background: none;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    background: var(--navy-a20);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
     cursor: pointer;
     text-align: left;
-    width: 100%;
     font-family: inherit;
-    transition: background var(--transition-base) ease;
+    transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
   }
-  .preset-item:hover {
-    background: var(--navy-a20);
-  }
-  .preset-item.selected {
+  .feel-btn:hover {
     background: var(--navy-a40);
+    border-color: var(--color-accent);
+    transform: translateY(-1px);
+  }
+  .feel-btn.active {
+    background: var(--navy-a40);
+    border-color: var(--color-accent);
   }
 
-  .preset-info {
+  .feel-btn-name {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+  .feel-btn-desc {
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+  }
+
+  /* ── Feel Sliders ── */
+  .feel-sliders {
     display: flex;
     flex-direction: column;
-    gap: var(--space-0-5);
+    gap: var(--space-5);
   }
 
-  .preset-name {
-    font-size: var(--font-base);
-    color: var(--color-text-primary);
-    font-weight: 500;
-  }
-
-  .preset-meta {
+  .slider-row {
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-xs);
-    color: var(--color-text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .verb-tag {
-    font-size: var(--font-xs);
-    font-weight: 600;
-    padding: var(--space-0-5) var(--space-1-5);
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    color: var(--color-text-primary);
-    text-transform: capitalize;
-  }
-
-  .preset-item-actions {
-    display: flex;
+    flex-direction: column;
     gap: var(--space-1);
-    flex-shrink: 0;
   }
 
-  .empty-msg {
+  .slider-hint-text {
+    font-size: var(--font-sm);
     color: var(--color-text-secondary);
-    font-size: var(--font-base);
-    text-align: center;
-    padding: var(--space-4);
+    line-height: 1.4;
   }
 
-  /* ── Action Buttons ── */
-  .action-btn {
-    padding: var(--space-1) var(--space-2);
-    font-size: var(--font-xs);
-    font-weight: 600;
-    background: var(--color-surface-raised);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background var(--transition-fast);
-  }
-  .action-btn:hover {
-    background: var(--white-a8);
-  }
-  .action-btn.destructive {
-    color: var(--color-error-soft);
-    border-color: var(--error-a20);
-  }
-  .action-btn.destructive:hover {
-    background: var(--error-a12);
-  }
-
-  /* ── Keyframe Editor ── */
-  .name-field {
+  /* ── Showcase ── */
+  .showcase-controls {
     margin-bottom: var(--space-4);
   }
 
-  .keyframe-block {
-    padding: var(--space-3);
-    margin-bottom: var(--space-3);
-    background: var(--navy-a30);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+  .showcase-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
   }
 
-  .keyframe-header {
+  .showcase-cell {
     display: flex;
-    align-items: flex-end;
-    gap: var(--space-3);
-    margin-bottom: var(--space-2);
-  }
-
-  .property-row {
-    display: flex;
-    align-items: flex-end;
+    flex-direction: column;
+    align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-2);
   }
 
-  /* ── Timing & Easing ── */
-  .timing-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
+  .showcase-label {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    text-align: center;
   }
 
-  .easing-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: var(--space-3);
-    margin-top: var(--space-3);
-  }
-
-  .iterations-row {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-3);
-    margin-top: var(--space-3);
-  }
-
-  /* ── Preview ── */
-  .preview-area {
+  .showcase-stage {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: var(--space-5);
-    min-height: 300px;
+    min-height: 220px;
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--navy-a20);
+    padding: var(--space-3);
   }
 
-  .preview-target {
+  .showcase-target {
     display: inline-block;
-  }
-
-  .preview-controls {
-    display: flex;
-    gap: var(--space-3);
-    justify-content: center;
-    padding-top: var(--space-3);
+    transform-origin: center center;
   }
 
   /* ── Save Bar ── */

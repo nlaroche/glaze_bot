@@ -23,6 +23,7 @@ export {
   getGachaConfig,
   updateGachaConfig,
   generateTestCharacter,
+  generateBatchCharacter,
   generateCharacterText,
   generateCharacterImage,
   assignCharacterVoice,

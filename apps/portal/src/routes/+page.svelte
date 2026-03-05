@@ -101,18 +101,23 @@
 
 <style>
   .home {
-    padding: var(--space-7) var(--space-8) var(--space-8);
+    padding: var(--space-8) var(--space-8) var(--space-12);
     display: flex;
     flex-direction: column;
     gap: var(--space-7);
-    max-width: 1000px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
   }
 
   /* ── Page Header ── */
   .page-header {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: var(--space-2);
+    padding: var(--space-4) 0;
   }
 
   .page-title {
@@ -133,14 +138,14 @@
   .stats-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-3);
+    gap: var(--space-5);
   }
 
   .stat-card {
     display: flex;
     align-items: center;
-    gap: var(--space-3-5);
-    padding: var(--space-4);
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: var(--panel-radius);
@@ -175,31 +180,24 @@
   }
 
   .stat-label {
-    font-size: var(--font-sm);
-    color: var(--color-text-muted);
+    font-size: var(--font-base);
+    color: var(--color-text-secondary);
     font-weight: 500;
   }
 
   /* ── Download Card ── */
   .download-card {
-    position: relative;
-    background: var(--color-surface-raised);
     border: 1px solid transparent;
     border-radius: var(--panel-radius);
-    padding: var(--space-7);
+    padding: var(--space-8) var(--space-8);
     display: flex;
     flex-direction: column;
+    align-items: center;
+    text-align: center;
     gap: var(--space-4);
-    background-clip: padding-box;
-  }
-
-  .download-card::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: var(--panel-radius);
-    background: linear-gradient(135deg, var(--color-teal), var(--rarity-epic), var(--color-pink));
-    z-index: -1;
+    background:
+      linear-gradient(var(--color-surface-raised), var(--color-surface-raised)) padding-box,
+      linear-gradient(135deg, var(--color-teal), var(--rarity-epic), var(--color-pink)) border-box;
   }
 
   .download-heading {
@@ -212,17 +210,18 @@
   }
 
   .download-desc {
-    font-size: var(--font-md);
+    font-size: var(--font-base);
     color: var(--color-text-primary);
     line-height: 1.6;
     margin: 0;
-    max-width: 560px;
+    max-width: 520px;
   }
 
   .download-buttons {
     display: flex;
-    gap: var(--space-4);
-    padding-top: var(--space-2);
+    justify-content: center;
+    gap: var(--space-5);
+    padding-top: var(--space-3);
   }
 
   .download-btn-wrap {
@@ -249,8 +248,8 @@
   }
 
   .download-soon {
-    font-size: var(--font-sm);
-    color: var(--color-text-muted);
+    font-size: var(--font-base);
+    color: var(--color-text-secondary);
     font-weight: 400;
   }
 </style>

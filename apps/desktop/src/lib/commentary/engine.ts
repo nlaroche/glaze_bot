@@ -6,9 +6,9 @@ import { ConversationHistory } from './history';
 import { TtsPlayer } from './tts';
 import { MessagePipeline } from './pipeline';
 import { ContextLoop } from './context-loop';
-import { BlockScheduler } from './scheduler';
+import { TopicScheduler } from './scheduler';
 import { getMemories, addMemory, formatMemoriesForPrompt } from '../stores/characterMemory';
-import type { EngineState, FrameResult, MessageRequest, BlockType } from './types';
+import type { EngineState, FrameResult, MessageRequest, TopicType } from './types';
 
 // Re-export types that session store and other consumers need
 export type { ChatLogEntry } from './types';
@@ -44,7 +44,7 @@ export class CommentaryEngine {
   private tts: TtsPlayer;
   private contextLoop: ContextLoop;
   private debugLogger: DebugLogger;
-  private scheduler: BlockScheduler;
+  private scheduler: TopicScheduler;
 
   constructor() {
     this.history = new ConversationHistory();
@@ -53,7 +53,7 @@ export class CommentaryEngine {
     this.contextLoop = new ContextLoop(this.events);
     this.debugLogger = new DebugLogger(this.events);
     this.debugLogger.attach();
-    this.scheduler = new BlockScheduler();
+    this.scheduler = new TopicScheduler();
   }
 
   get isRunning() { return this.state !== 'stopped' && this.state !== 'idle'; }
@@ -217,20 +217,20 @@ export class CommentaryEngine {
     const signal = this.cycleAbort.signal;
 
     try {
-      // Use block scheduler to pick what kind of commentary to generate
-      const block = this.scheduler.pickBlock(this.party, this.history.getAll());
-      const blockType = block.type;
-      incrementBlockStat(blockType);
+      // Use topic scheduler to pick what kind of commentary to generate
+      const topic = this.scheduler.pickTopic(this.party, this.history.getAll());
+      const topicType = topic.type;
+      incrementBlockStat(topicType);
 
       this.events.emit('pipeline:block-selected', {
         requestId: '',
-        blockType,
-        character: block.primaryCharacter.name,
-        participants: block.participants?.map((c) => c.name),
+        blockType: topicType,
+        character: topic.primaryCharacter.name,
+        participants: topic.participants?.map((c) => c.name),
       });
 
-      // Handle silence block
-      if (blockType === 'silence') {
+      // Handle silence topic
+      if (topicType === 'silence') {
         this.events.emit('pipeline:silence', { requestId: '' });
         this.transition('idle');
         this.cycleAbort = null;
@@ -268,17 +268,17 @@ export class CommentaryEngine {
         throw err;
       }
 
-      const blockPrompt = this.scheduler.getPrompt(blockType);
+      const topicPrompt = this.scheduler.getPrompt(topicType, topic.primaryCharacter);
 
       // Load memories for primary character
-      const memories = await this.loadMemoriesForCharacter(block.primaryCharacter.id);
+      const memories = await this.loadMemoriesForCharacter(topic.primaryCharacter.id);
 
-      // Multi-character blocks (quip_banter, hype_chain)
+      // Multi-character topics (quip_banter, hype_chain)
       // Cap at 2 participants — a back-and-forth is 2 people, not the whole party
-      if ((blockType === 'quip_banter' || blockType === 'hype_chain') && block.participants && block.participants.length >= 2) {
-        const cappedParticipants = block.participants.slice(0, 2);
+      if ((topicType === 'quip_banter' || topicType === 'hype_chain') && topic.participants && topic.participants.length >= 2) {
+        const cappedParticipants = topic.participants.slice(0, 2);
         const request = this.buildRequest({
-          character: block.primaryCharacter,
+          character: topic.primaryCharacter,
           trigger: 'timed',
           frameB64,
           frameDims,
@@ -286,8 +286,10 @@ export class CommentaryEngine {
           enableVisuals: true,
           signal,
           debugFrameId,
-          blockType,
-          blockPrompt,
+          topicType,
+          topicPrompt,
+          blockType: topicType,
+          blockPrompt: topicPrompt,
           participants: cappedParticipants,
           memories,
         });
@@ -307,9 +309,9 @@ export class CommentaryEngine {
           }
         }
       } else {
-        // Single-character blocks
+        // Single-character topics
         const request = this.buildRequest({
-          character: block.primaryCharacter,
+          character: topic.primaryCharacter,
           trigger: 'timed',
           frameB64,
           frameDims,
@@ -317,8 +319,10 @@ export class CommentaryEngine {
           enableVisuals: true,
           signal,
           debugFrameId,
-          blockType,
-          blockPrompt,
+          topicType,
+          topicPrompt,
+          blockType: topicType,
+          blockPrompt: topicPrompt,
           memories,
         });
 
@@ -331,7 +335,7 @@ export class CommentaryEngine {
 
         if (!signal.aborted && result.text) {
           this.lastSpokeTime = Date.now();
-          this.charactersThatSpoke.add(block.primaryCharacter.id);
+          this.charactersThatSpoke.add(topic.primaryCharacter.id);
         }
       }
     } catch (err) {

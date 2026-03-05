@@ -203,6 +203,15 @@ export async function generateTestCharacter(
   return callEdgeFunction<GachaCharacter>("generate-character", { rarity });
 }
 
+/** Generate a character as part of a batch (admin) */
+export async function generateBatchCharacter(opts: {
+  rarity: string;
+  batch_id: string;
+  exclude_voice_ids?: string[];
+}): Promise<GachaCharacter> {
+  return callEdgeFunction<GachaCharacter>("generate-character", opts);
+}
+
 // ─── Admin Pipeline Operations ─────────────────────────────────────
 
 /** Step 1: Generate character text only (admin pipeline) */

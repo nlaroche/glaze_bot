@@ -94,6 +94,7 @@ export interface GachaCharacter extends Character {
   topic_assignments?: TopicAssignment;
   custom_topics?: CustomTopic[];
   is_active: boolean;
+  batch_id?: string | null;
   is_default: boolean;
   deleted_at?: string | null;
   generation_metadata?: GenerationMetadata | null;
