@@ -229,9 +229,15 @@
           </svg>
         </div>
 
-        <!-- Shimmer sweep -->
+        <!-- Shimmer sweep (randomized per card) -->
         {#if character.rarity !== 'common'}
-          <div class="back-shimmer-sweep"></div>
+          {@const sweepDur = 4 + Math.random() * 4}
+          {@const sweepDelay = -(Math.random() * sweepDur)}
+          {@const sweepAngle = 95 + Math.random() * 20}
+          <div
+            class="back-shimmer-sweep"
+            style="--sweep-dur: {sweepDur.toFixed(2)}s; --sweep-delay: {sweepDelay.toFixed(2)}s; --sweep-angle: {sweepAngle.toFixed(1)}deg;"
+          ></div>
         {/if}
 
         <!-- Floating particles (legendary) -->
@@ -963,53 +969,58 @@
   .card.rarity-legendary .shield-text-g,
   .card.rarity-legendary .shield-text-b { fill: rgba(255, 240, 120, 0.55); }
 
-  /* ── Shimmer sweep (rare + epic + legendary) ── */
+  /* ── Shimmer sweep (rare + epic + legendary) ──
+     Per-card CSS vars: --sweep-dur, --sweep-delay, --sweep-angle
+     for randomized timing & angle. Uses translate instead of
+     background-position for seamless looping. */
   .back-shimmer-sweep {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 3;
+    overflow: hidden;
   }
-  .card.rarity-rare .back-shimmer-sweep {
+  .back-shimmer-sweep::after {
+    content: '';
+    position: absolute;
+    inset: -50% -100%;
+    animation: sweep-slide var(--sweep-dur, 5s) linear infinite;
+    animation-delay: var(--sweep-delay, 0s);
+  }
+  .card.rarity-rare .back-shimmer-sweep::after {
     background: linear-gradient(
-      105deg,
+      var(--sweep-angle, 105deg),
+      transparent 40%,
+      rgba(80, 210, 210, 0.04) 46%,
+      rgba(120, 230, 230, 0.09) 50%,
+      rgba(80, 210, 210, 0.04) 54%,
+      transparent 60%
+    );
+  }
+  .card.rarity-epic .back-shimmer-sweep::after {
+    background: linear-gradient(
+      var(--sweep-angle, 105deg),
+      transparent 38%,
+      rgba(190, 130, 255, 0.05) 44%,
+      rgba(220, 180, 255, 0.12) 50%,
+      rgba(190, 130, 255, 0.05) 56%,
+      transparent 62%
+    );
+  }
+  .card.rarity-legendary .back-shimmer-sweep::after {
+    background: linear-gradient(
+      var(--sweep-angle, 105deg),
       transparent 35%,
-      rgba(80, 210, 210, 0.04) 43%,
-      rgba(120, 230, 230, 0.08) 50%,
-      rgba(80, 210, 210, 0.04) 57%,
+      rgba(255, 230, 80, 0.06) 42%,
+      rgba(255, 245, 160, 0.16) 50%,
+      rgba(255, 230, 80, 0.06) 58%,
       transparent 65%
     );
-    background-size: 250% 100%;
-    animation: back-sweep 6s ease-in-out infinite;
-  }
-  .card.rarity-epic .back-shimmer-sweep {
-    background: linear-gradient(
-      105deg,
-      transparent 30%,
-      rgba(190, 130, 255, 0.05) 40%,
-      rgba(220, 180, 255, 0.1) 50%,
-      rgba(190, 130, 255, 0.05) 60%,
-      transparent 70%
-    );
-    background-size: 250% 100%;
-    animation: back-sweep 5s ease-in-out infinite;
-  }
-  .card.rarity-legendary .back-shimmer-sweep {
-    background: linear-gradient(
-      105deg,
-      transparent 25%,
-      rgba(255, 230, 80, 0.06) 36%,
-      rgba(255, 245, 160, 0.14) 50%,
-      rgba(255, 230, 80, 0.06) 64%,
-      transparent 75%
-    );
-    background-size: 250% 100%;
-    animation: back-sweep 4s ease-in-out infinite;
   }
 
-  @keyframes back-sweep {
-    0% { background-position: 200% 0; }
-    100% { background-position: -50% 0; }
+  @keyframes sweep-slide {
+    0% { transform: translateX(-33%); }
+    100% { transform: translateX(33%); }
   }
 
   /* ── Floating particles (legendary only) ── */
