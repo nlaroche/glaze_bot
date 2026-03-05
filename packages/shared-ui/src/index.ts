@@ -10,6 +10,7 @@ export { default as PartyManager } from './gacha/PartyManager.svelte';
 export { default as CharacterDetail } from './gacha/CharacterDetail.svelte';
 export { default as TopicChip } from './gacha/TopicChip.svelte';
 export { default as TopicBreakdown } from './gacha/TopicBreakdown.svelte';
+export { default as TopicRadar } from './gacha/TopicRadar.svelte';
 export { default as Spotlight } from './overlay/Spotlight.svelte';
 export { default as ContextMenu } from './overlay/ContextMenu.svelte';
 export { default as CardViewer } from './overlay/CardViewer.svelte';

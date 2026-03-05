@@ -3,6 +3,7 @@
   import Spotlight from './Spotlight.svelte';
   import CharacterCard from '../gacha/CharacterCard.svelte';
   import RarityBadge from '../gacha/RarityBadge.svelte';
+  import TopicRadar from '../gacha/TopicRadar.svelte';
   import { onMount } from 'svelte';
   import { motion } from '../motion/index.js';
 
@@ -180,6 +181,19 @@
                   </div>
                 {/each}
               </div>
+            </div>
+          {/if}
+
+          <!-- Commentary Topics -->
+          {#if character.topic_assignments && Object.keys(character.topic_assignments).length > 0}
+            <div class="info-section">
+              <h3 class="section-label">Commentary Style</h3>
+              <TopicRadar
+                topicAssignments={character.topic_assignments}
+                customTopics={character.custom_topics}
+                rarity={character.rarity}
+                size={220}
+              />
             </div>
           {/if}
         </div>

@@ -4,3 +4,4 @@ export * from "./api.js";
 export * from "./database.js";
 export * from "./primitives.js";
 export * from "./config.js";
+export * from "./topics.js";

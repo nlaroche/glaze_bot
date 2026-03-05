@@ -32,6 +32,17 @@ export interface PartyConfig {
 /** Character rarity tiers */
 export type CharacterRarity = "common" | "rare" | "epic" | "legendary";
 
+/** Per-character topic weight assignments: { "solo_observation": 25, "question": 15, ... } */
+export interface TopicAssignment { [topicKey: string]: number; }
+
+/** Legendary-only custom topic definition */
+export interface CustomTopic {
+  key: string;
+  label: string;
+  prompt: string;
+  weight: number;
+}
+
 /** A single generation pipeline step's API call data */
 export interface GenerationStep {
   request: Record<string, unknown>;
@@ -61,6 +72,8 @@ export interface CharacterTemplate {
   avatar_url?: string;
   tagline?: string;
   tagline_url?: string;
+  topic_assignments?: TopicAssignment;
+  custom_topics?: CustomTopic[];
   is_active: boolean;
   created_at: string;
 }
@@ -78,6 +91,8 @@ export interface GachaCharacter extends Character {
   avatar_url?: string;
   tagline?: string;
   tagline_url?: string;
+  topic_assignments?: TopicAssignment;
+  custom_topics?: CustomTopic[];
   is_active: boolean;
   is_default: boolean;
   deleted_at?: string | null;

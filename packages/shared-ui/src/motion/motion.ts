@@ -42,6 +42,10 @@ export function motion(node: HTMLElement, params: MotionParams) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let anim: Animation | undefined;
 
+  // Hide immediately to prevent single-frame flash at natural CSS position
+  // before WAAPI fill: 'both' kicks in.
+  node.style.opacity = '0';
+
   function play() {
     const feel = fast
       ? { ...globalFeel, anticipation: 0, speed: Math.min(globalFeel.speed, 300) }
@@ -51,7 +55,10 @@ export function motion(node: HTMLElement, params: MotionParams) {
       anim = applyMotion(node, type, feel);
       // After entrance finishes, cancel the WAAPI fill so CSS transitions
       // (e.g. exit opacity) can take effect again.
-      anim.onfinish = () => { anim!.cancel(); };
+      anim.onfinish = () => {
+        anim!.cancel();
+        node.style.removeProperty('opacity');
+      };
     }
 
     if (delay > 0) {
@@ -71,6 +78,7 @@ export function motion(node: HTMLElement, params: MotionParams) {
       fast = resolved.fast;
       if (timer) clearTimeout(timer);
       if (anim) anim.cancel();
+      node.style.opacity = '0';
       play();
     },
     destroy() {

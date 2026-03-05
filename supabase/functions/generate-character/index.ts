@@ -322,6 +322,156 @@ async function generateCharacter(
   throw lastError ?? new Error("Failed to generate character");
 }
 
+/** Assign per-character topics based on rarity and global weights, then refine via LLM. */
+async function assignTopics(
+  character: Record<string, unknown>,
+  config: Record<string, unknown>,
+): Promise<{ topic_assignments: Record<string, number>; custom_topics: { key: string; label: string; prompt: string; weight: number }[] }> {
+  const rarity = (character.rarity as string) ?? "common";
+  const personality = (character.personality as Record<string, number>) ?? {};
+  const commentary = (config.commentary as Record<string, unknown>) ?? {};
+
+  // Read config
+  const globalWeights = ((commentary.topicWeights ?? commentary.blockWeights) as Record<string, number>) ?? {};
+  const topicCountByRarity = (config.topicCountByRarity as Record<string, { min: number; max: number }>) ?? {
+    common: { min: 3, max: 4 },
+    rare: { min: 5, max: 6 },
+    epic: { min: 7, max: 8 },
+    legendary: { min: 9, max: 10 },
+  };
+  const legendaryCustomTopicCount = (config.legendaryCustomTopicCount as number) ?? 2;
+  const range = topicCountByRarity[rarity] ?? { min: 3, max: 4 };
+  const targetCount = range.min + Math.floor(Math.random() * (range.max - range.min + 1));
+
+  // Always include baseline topics if they exist
+  const baselines = ["solo_observation", "silence"];
+  const selectedKeys = new Set<string>();
+  for (const key of baselines) {
+    if (key in globalWeights) selectedKeys.add(key);
+  }
+
+  // Weighted random selection for remaining slots
+  const candidates = Object.entries(globalWeights).filter(([k]) => !selectedKeys.has(k));
+  const totalWeight = candidates.reduce((sum, [, w]) => sum + w, 0);
+  while (selectedKeys.size < targetCount && candidates.length > 0) {
+    let roll = Math.random() * totalWeight;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= candidates[i][1];
+      if (roll <= 0) {
+        selectedKeys.add(candidates[i][0]);
+        candidates.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  // Assign weights using global weight as the starting point
+  const topic_assignments: Record<string, number> = {};
+  for (const key of selectedKeys) {
+    topic_assignments[key] = globalWeights[key] ?? 5;
+  }
+
+  // LLM weight refinement — brief call to tune weights to character personality
+  const model = (config.model as string) ?? "qwen-plus";
+  try {
+    const topicList = Object.entries(topic_assignments)
+      .map(([k, w]) => `- ${k} (current weight: ${w})`)
+      .join("\n");
+    const traitSummary = Object.entries(personality)
+      .map(([t, v]) => `${t}: ${v}`)
+      .join(", ");
+
+    const refineRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You assign topic weights for a gaming commentary character. Return ONLY valid JSON: { \"topic_key\": weight_number, ... }. Weights should be 1-100.",
+          },
+          {
+            role: "user",
+            content: `Given this character's personality, adjust the weights for these commentary topics:\n\nCharacter: ${character.name}, ${character.description}\nPersonality: ${traitSummary}\n\nTopics:\n${topicList}\n\nReturn JSON with adjusted weights (1-100) for each topic. Keep the same keys.`,
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.7,
+      }),
+    });
+
+    const refineData = await refineRes.json();
+    const refineContent = refineData.choices?.[0]?.message?.content;
+    if (refineContent) {
+      const refined = parseJsonResponse(refineContent) as Record<string, number>;
+      for (const [key, weight] of Object.entries(refined)) {
+        if (key in topic_assignments && typeof weight === "number") {
+          topic_assignments[key] = Math.max(1, Math.min(100, Math.round(weight)));
+        }
+      }
+    }
+  } catch {
+    // LLM refinement failed — use algorithmic weights, which is fine
+  }
+
+  // Legendary custom topics
+  const custom_topics: { key: string; label: string; prompt: string; weight: number }[] = [];
+  if (rarity === "legendary" && legendaryCustomTopicCount > 0) {
+    try {
+      const customRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: "system",
+              content: `You create unique commentary topics for legendary gaming commentator characters. Return ONLY a valid JSON array of objects with fields: key (snake_case identifier), label (display name), prompt (instruction for the AI when this topic is selected, 1-2 sentences), weight (1-100).`,
+            },
+            {
+              role: "user",
+              content: `Generate ${legendaryCustomTopicCount} unique commentary topics for this legendary character:\n\nName: ${character.name}\nBackstory: ${character.backstory}\nDescription: ${character.description}\nPersonality: ${Object.entries(personality).map(([t, v]) => `${t}: ${v}`).join(", ")}\n\nThese topics should be unique to this character and reflect their personality, background, or interests. Return a JSON array.`,
+            },
+          ],
+          max_tokens: 500,
+          temperature: 0.9,
+        }),
+      });
+
+      const customData = await customRes.json();
+      const customContent = customData.choices?.[0]?.message?.content;
+      if (customContent) {
+        const parsed = JSON.parse(
+          customContent.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, ""),
+        );
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item.key && item.label && item.prompt) {
+              custom_topics.push({
+                key: String(item.key),
+                label: String(item.label),
+                prompt: String(item.prompt),
+                weight: Math.max(1, Math.min(100, Math.round(Number(item.weight) || 20))),
+              });
+            }
+          }
+        }
+      }
+    } catch {
+      // Custom topic generation failed — legendary still works, just no custom topics
+    }
+  }
+
+  return { topic_assignments, custom_topics };
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -376,6 +526,21 @@ Deno.serve(async (req: Request) => {
       throw err;
     }
 
+    // Assign per-character topics
+    let topicResult: { topic_assignments: Record<string, number>; custom_topics: { key: string; label: string; prompt: string; weight: number }[] } = { topic_assignments: {}, custom_topics: [] };
+    try {
+      topicResult = await assignTopics(character, config);
+      logger.log("topics.assign.success", {
+        rarity,
+        topicCount: Object.keys(topicResult.topic_assignments).length,
+        customCount: topicResult.custom_topics.length,
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.warn("topics.assign.fail", { rarity, error: errMsg });
+      // Non-fatal — character works without topic assignments
+    }
+
     // Assign random voice from Fish Audio
     const voices = await fetchVoices();
     let voiceId: string | null = null;
@@ -405,6 +570,8 @@ Deno.serve(async (req: Request) => {
         rarity,
         voice_id: voiceId,
         voice_name: voiceName,
+        topic_assignments: topicResult.topic_assignments,
+        custom_topics: topicResult.custom_topics,
       })
       .select()
       .single();

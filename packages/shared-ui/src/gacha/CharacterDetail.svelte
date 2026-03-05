@@ -2,6 +2,7 @@
   import type { GachaCharacter, Personality } from '@glazebot/shared-types';
   import ProceduralAvatar from './ProceduralAvatar.svelte';
   import RarityBadge from './RarityBadge.svelte';
+  import TopicRadar from './TopicRadar.svelte';
 
   interface Props {
     character: GachaCharacter;
@@ -72,6 +73,17 @@
         {/each}
       </div>
     </div>
+
+    {#if character.topic_assignments && Object.keys(character.topic_assignments).length > 0}
+      <div class="section">
+        <h3>Commentary Style</h3>
+        <TopicRadar
+          topicAssignments={character.topic_assignments}
+          customTopics={character.custom_topics}
+          rarity={character.rarity}
+        />
+      </div>
+    {/if}
 
     {#if onaddtoparty}
       <button class="party-btn" onclick={() => onaddtoparty?.(character)} data-testid="add-to-party-btn">

@@ -136,6 +136,8 @@ Deno.serve(async (req: Request) => {
       avatar_url: t.avatar_url,
       tagline: t.tagline,
       tagline_url: t.tagline_url,
+      topic_assignments: t.topic_assignments ?? {},
+      custom_topics: t.custom_topics ?? [],
     }));
 
     const { data: characters, error: insertError } = await serviceClient

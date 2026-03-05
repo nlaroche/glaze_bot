@@ -1,21 +1,8 @@
 import type { GachaCharacter } from '@glazebot/shared-types';
-import type { BlockType, BlockWeights, BlockPrompts, ScheduledBlock, HistoryEntry } from './types';
+import { DEFAULT_TOPIC_WEIGHTS } from '@glazebot/shared-types';
+import type { TopicType, TopicWeights, TopicPrompts, ScheduledTopic, HistoryEntry } from './types';
 
-export const DEFAULT_BLOCK_WEIGHTS: BlockWeights = {
-  solo_observation: 25,
-  emotional_reaction: 20,
-  question: 12,
-  backstory_reference: 8,
-  quip_banter: 4,
-  callback: 5,
-  hype_chain: 2,
-  encouragement: 6,
-  hot_take: 5,
-  tangent: 4,
-  silence: 10,
-};
-
-export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
+export const DEFAULT_TOPIC_PROMPTS: TopicPrompts = {
   solo_observation: 'React to what you see on screen. Be specific about ONE thing.',
   emotional_reaction: 'Express a pure emotional reaction. Don\'t describe the screen. Just FEEL it. Use emote_burst or screen_flash if it fits the moment.',
   question: 'Ask the player a question or wonder something aloud about what\'s happening.',
@@ -28,7 +15,11 @@ export const DEFAULT_BLOCK_PROMPTS: BlockPrompts = {
   tangent: 'Something on screen reminds you of something completely unrelated. Go off on a brief tangent that reveals your personality. Don\'t force a game connection.',
 };
 
-const BLOCK_TYPES: BlockType[] = [
+// Backward-compat aliases
+export const DEFAULT_BLOCK_WEIGHTS = DEFAULT_TOPIC_WEIGHTS;
+export const DEFAULT_BLOCK_PROMPTS = DEFAULT_TOPIC_PROMPTS;
+
+const BUILTIN_TOPIC_TYPES: TopicType[] = [
   'solo_observation',
   'emotional_reaction',
   'question',
@@ -42,23 +33,36 @@ const BLOCK_TYPES: BlockType[] = [
   'silence',
 ];
 
-export class BlockScheduler {
-  private weights: BlockWeights;
-  private prompts: BlockPrompts;
+export class TopicScheduler {
+  private weights: TopicWeights;
+  private prompts: TopicPrompts;
 
-  constructor(weights?: Partial<BlockWeights>, prompts?: Partial<BlockPrompts>) {
-    this.weights = { ...DEFAULT_BLOCK_WEIGHTS, ...weights };
-    this.prompts = { ...DEFAULT_BLOCK_PROMPTS, ...prompts };
+  constructor(weights?: Partial<TopicWeights>, prompts?: Partial<TopicPrompts>) {
+    this.weights = { ...DEFAULT_TOPIC_WEIGHTS, ...weights };
+    this.prompts = { ...DEFAULT_TOPIC_PROMPTS, ...prompts };
   }
 
-  pickBlock(
+  pickTopic(
     party: GachaCharacter[],
     history: Map<string, HistoryEntry[]>,
-  ): ScheduledBlock {
-    const eligible = this.getEligibleBlocks(party, history);
-    const type = this.weightedRandom(eligible);
-
+  ): ScheduledTopic {
+    // Pick primary character first, then use their topic_assignments if available
     const primary = party[Math.floor(Math.random() * party.length)];
+
+    // Get effective weights: per-character assignments if present, else global
+    let effectiveWeights = this.weights;
+    if (primary.topic_assignments && Object.keys(primary.topic_assignments).length > 0) {
+      effectiveWeights = { ...primary.topic_assignments };
+      // Merge in custom_topics weights for legendary characters
+      if (primary.custom_topics) {
+        for (const ct of primary.custom_topics) {
+          effectiveWeights[ct.key] = ct.weight;
+        }
+      }
+    }
+
+    const eligible = this.getEligibleTopics(party, history, effectiveWeights, primary);
+    const type = this.weightedRandom(eligible, effectiveWeights);
 
     if (type === 'silence') {
       return { type, primaryCharacter: primary };
@@ -76,27 +80,33 @@ export class BlockScheduler {
     return { type, primaryCharacter: primary };
   }
 
-  getPrompt(type: BlockType): string | undefined {
+  getPrompt(type: TopicType, character?: GachaCharacter): string | undefined {
     if (type === 'silence') return undefined;
+    // Check character's custom_topics first (for custom keys)
+    if (character?.custom_topics) {
+      const custom = character.custom_topics.find((ct) => ct.key === type);
+      if (custom) return custom.prompt;
+    }
     return this.prompts[type];
   }
 
-  getDistribution(): Record<BlockType, number> {
-    const total = BLOCK_TYPES.reduce((sum, t) => sum + this.weights[t], 0);
+  getDistribution(): Record<string, number> {
+    const types = this.getTopicKeys();
+    const total = types.reduce((sum, t) => sum + (this.weights[t] ?? 0), 0);
     if (total === 0) {
-      const even = 1 / BLOCK_TYPES.length;
-      return Object.fromEntries(BLOCK_TYPES.map((t) => [t, even])) as Record<BlockType, number>;
+      const even = 1 / types.length;
+      return Object.fromEntries(types.map((t) => [t, even]));
     }
     return Object.fromEntries(
-      BLOCK_TYPES.map((t) => [t, this.weights[t] / total]),
-    ) as Record<BlockType, number>;
+      types.map((t) => [t, (this.weights[t] ?? 0) / total]),
+    );
   }
 
-  updateWeights(weights: Partial<BlockWeights>): void {
+  updateWeights(weights: Partial<TopicWeights>): void {
     this.weights = { ...this.weights, ...weights };
   }
 
-  updatePrompts(prompts: Partial<BlockPrompts>): void {
+  updatePrompts(prompts: Partial<TopicPrompts>): void {
     this.prompts = { ...this.prompts, ...prompts };
   }
 
@@ -105,25 +115,37 @@ export class BlockScheduler {
     n: number,
     party: GachaCharacter[],
     history: Map<string, HistoryEntry[]>,
-  ): Record<BlockType, number> {
-    const counts = Object.fromEntries(BLOCK_TYPES.map((t) => [t, 0])) as Record<BlockType, number>;
+  ): Record<string, number> {
+    const types = this.getTopicKeys();
+    const counts = Object.fromEntries(types.map((t) => [t, 0]));
     for (let i = 0; i < n; i++) {
-      const block = this.pickBlock(party, history);
-      counts[block.type]++;
+      const topic = this.pickTopic(party, history);
+      counts[topic.type] = (counts[topic.type] ?? 0) + 1;
     }
     return counts;
   }
 
   // ── Private ────────────────────────────────────────────────────
 
-  private getEligibleBlocks(
+  private getTopicKeys(): TopicType[] {
+    // Start with built-in types, then add any additional keys from weights
+    const keys = new Set<TopicType>(BUILTIN_TOPIC_TYPES);
+    for (const key of Object.keys(this.weights)) {
+      keys.add(key);
+    }
+    return Array.from(keys);
+  }
+
+  private getEligibleTopics(
     party: GachaCharacter[],
     history: Map<string, HistoryEntry[]>,
-  ): BlockType[] {
-    const eligible: BlockType[] = [];
+    weights: TopicWeights,
+    _primary: GachaCharacter,
+  ): TopicType[] {
+    const eligible: TopicType[] = [];
 
-    for (const type of BLOCK_TYPES) {
-      if (this.weights[type] <= 0) continue;
+    for (const type of Object.keys(weights)) {
+      if ((weights[type] ?? 0) <= 0) continue;
 
       // quip_banter and hype_chain need 2+ party members
       if ((type === 'quip_banter' || type === 'hype_chain') && party.length < 2) continue;
@@ -152,9 +174,9 @@ export class BlockScheduler {
     return eligible;
   }
 
-  private weightedRandom(eligible: BlockType[]): BlockType {
-    const weights = eligible.map((t) => this.weights[t]);
-    const total = weights.reduce((a, b) => a + b, 0);
+  private weightedRandom(eligible: TopicType[], weights: TopicWeights): TopicType {
+    const w = eligible.map((t) => weights[t] ?? 0);
+    const total = w.reduce((a, b) => a + b, 0);
 
     if (total === 0) {
       return eligible[Math.floor(Math.random() * eligible.length)];
@@ -162,10 +184,13 @@ export class BlockScheduler {
 
     let roll = Math.random() * total;
     for (let i = 0; i < eligible.length; i++) {
-      roll -= weights[i];
+      roll -= w[i];
       if (roll <= 0) return eligible[i];
     }
 
     return eligible[eligible.length - 1];
   }
 }
+
+// Backward-compat alias
+export const BlockScheduler = TopicScheduler;
