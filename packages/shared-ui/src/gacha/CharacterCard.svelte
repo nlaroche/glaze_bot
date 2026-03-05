@@ -122,45 +122,128 @@
     <!-- Back face -->
     <div class="card-back">
       <div class="card-back-inner">
-        <div class="back-texture"></div>
-        <div class="back-vignette"></div>
-        <div class="back-frame">
-          <div class="frame-corner tl"></div>
-          <div class="frame-corner tr"></div>
-          <div class="frame-corner bl"></div>
-          <div class="frame-corner br"></div>
-        </div>
+        <!-- Full-card SVG pattern layer -->
+        <svg class="back-svg-pattern" viewBox="0 0 280 400" preserveAspectRatio="none">
+          <defs>
+            <!-- Diamond grid pattern -->
+            <pattern id="diamond-{character.id}" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="20" height="20" fill="none" />
+              <rect x="9" y="9" width="2" height="2" rx="0.5" class="pat-dot" />
+            </pattern>
+            <!-- Fine horizontal lines -->
+            <pattern id="hlines-{character.id}" x="0" y="0" width="4" height="4" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="2" x2="4" y2="2" class="pat-line" />
+            </pattern>
+            <!-- Concentric circles radiating from center -->
+            <radialGradient id="center-glow-{character.id}" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" class="glow-inner" />
+              <stop offset="50%" class="glow-mid" />
+              <stop offset="100%" stop-color="transparent" />
+            </radialGradient>
+          </defs>
+          <!-- Base diamond fill -->
+          <rect width="280" height="400" fill="url(#diamond-{character.id})" />
+          <!-- Horizontal line overlay -->
+          <rect width="280" height="400" fill="url(#hlines-{character.id})" opacity="0.5" />
+          <!-- Concentric rings -->
+          {#each [120, 100, 80, 60, 40, 25] as r}
+            <circle cx="140" cy="200" {r} fill="none" class="ring-line" />
+          {/each}
+          <!-- Diagonal accent lines from corners -->
+          <line x1="0" y1="0" x2="140" y2="200" class="accent-line" />
+          <line x1="280" y1="0" x2="140" y2="200" class="accent-line" />
+          <line x1="0" y1="400" x2="140" y2="200" class="accent-line" />
+          <line x1="280" y1="400" x2="140" y2="200" class="accent-line" />
+          <!-- Ornamental border scrollwork -->
+          <rect x="16" y="16" width="248" height="368" rx="6" fill="none" class="inner-border" />
+          <rect x="22" y="22" width="236" height="356" rx="4" fill="none" class="inner-border-2" />
+          <!-- Top/bottom ornamental bars -->
+          <rect x="50" y="14" width="180" height="3" rx="1.5" class="bar-accent" />
+          <rect x="50" y="383" width="180" height="3" rx="1.5" class="bar-accent" />
+          <rect x="70" y="20" width="140" height="1.5" rx="0.75" class="bar-accent-thin" />
+          <rect x="70" y="378.5" width="140" height="1.5" rx="0.75" class="bar-accent-thin" />
+          <!-- Side ornamental bars -->
+          <rect x="14" y="70" width="3" height="260" rx="1.5" class="bar-accent" />
+          <rect x="263" y="70" width="3" height="260" rx="1.5" class="bar-accent" />
+          <!-- Corner diamonds -->
+          {#each [{x:30,y:30},{x:250,y:30},{x:30,y:370},{x:250,y:370}] as c}
+            <rect x={c.x - 5} y={c.y - 5} width="10" height="10" rx="1" transform="rotate(45 {c.x} {c.y})" class="corner-diamond" />
+            <rect x={c.x - 3} y={c.y - 3} width="6" height="6" rx="0.5" transform="rotate(45 {c.x} {c.y})" class="corner-diamond-inner" />
+          {/each}
+          <!-- Center glow -->
+          <circle cx="140" cy="200" r="100" fill="url(#center-glow-{character.id})" />
+          {#if character.rarity === 'epic' || character.rarity === 'legendary'}
+            <!-- Extra starburst rays for epic/legendary -->
+            {#each Array(24) as _, i}
+              {@const angle = (i * 15) * Math.PI / 180}
+              {@const inner = character.rarity === 'legendary' ? 35 : 40}
+              {@const outer = character.rarity === 'legendary' ? 130 : 110}
+              <line
+                x1={140 + inner * Math.cos(angle)} y1={200 + inner * Math.sin(angle)}
+                x2={140 + outer * Math.cos(angle)} y2={200 + outer * Math.sin(angle)}
+                class="starburst-ray"
+              />
+            {/each}
+          {/if}
+          {#if character.rarity === 'legendary'}
+            <!-- Extra ornamental ring of small diamonds -->
+            {#each Array(16) as _, i}
+              {@const angle = (i * 22.5) * Math.PI / 180}
+              {@const dx = 140 + 95 * Math.cos(angle)}
+              {@const dy = 200 + 95 * Math.sin(angle)}
+              <rect x={dx - 3} y={dy - 3} width="6" height="6" rx="1"
+                transform="rotate(45 {dx} {dy})" class="orbit-diamond" />
+            {/each}
+          {/if}
+        </svg>
+
+        <!-- GB Shield Emblem -->
         <div class="back-emblem">
-          <svg class="emblem-ring" viewBox="0 0 100 100" width="80" height="80">
-            <circle cx="50" cy="50" r="42" fill="none" stroke-width="1.5" opacity="0.4" />
-            <circle cx="50" cy="50" r="36" fill="none" stroke-width="0.5" opacity="0.2" />
-            {#if character.rarity === 'epic' || character.rarity === 'legendary'}
-              <circle cx="50" cy="50" r="46" fill="none" stroke-width="0.5" stroke-dasharray="3 5" opacity="0.3" />
-            {/if}
-            {#if character.rarity === 'legendary'}
-              <!-- Radial rays -->
-              {#each Array(12) as _, i}
-                {@const angle = (i * 30 - 90) * Math.PI / 180}
-                <line
-                  x1={50 + 30 * Math.cos(angle)} y1={50 + 30 * Math.sin(angle)}
-                  x2={50 + 46 * Math.cos(angle)} y2={50 + 46 * Math.sin(angle)}
-                  stroke-width="0.5" opacity="0.25"
-                />
-              {/each}
-            {/if}
+          <svg class="shield-svg" viewBox="0 0 120 140" width="90" height="105">
+            <defs>
+              <linearGradient id="shield-fill-{character.id}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" class="shield-top" />
+                <stop offset="100%" class="shield-bottom" />
+              </linearGradient>
+              <linearGradient id="shield-stroke-{character.id}" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" class="shield-stroke-a" />
+                <stop offset="100%" class="shield-stroke-b" />
+              </linearGradient>
+            </defs>
+            <!-- Shield shape -->
+            <path d="M60 8 L108 30 L108 75 Q108 115 60 134 Q12 115 12 75 L12 30 Z"
+              fill="url(#shield-fill-{character.id})"
+              stroke="url(#shield-stroke-{character.id})"
+              stroke-width="2.5" />
+            <!-- Inner shield border -->
+            <path d="M60 16 L100 34 L100 74 Q100 108 60 126 Q20 108 20 74 L20 34 Z"
+              fill="none" class="shield-inner-stroke" stroke-width="1" />
+            <!-- Horizontal divider -->
+            <line x1="28" y1="72" x2="92" y2="72" class="shield-divider" stroke-width="0.8" />
+            <!-- GB text -->
+            <text x="60" y="62" text-anchor="middle" class="shield-text-g">G</text>
+            <text x="60" y="108" text-anchor="middle" class="shield-text-b">B</text>
+            <!-- Top accent dots -->
+            <circle cx="36" cy="38" r="2" class="shield-accent-dot" />
+            <circle cx="84" cy="38" r="2" class="shield-accent-dot" />
           </svg>
-          <span class="emblem-glyph">?</span>
         </div>
-        {#if character.rarity === 'epic' || character.rarity === 'legendary'}
+
+        <!-- Shimmer sweep -->
+        {#if character.rarity !== 'common'}
           <div class="back-shimmer-sweep"></div>
         {/if}
+
+        <!-- Floating particles (legendary) -->
         {#if character.rarity === 'legendary'}
           <div class="back-particles">
-            {#each Array(8) as _, i}
-              <div class="particle" style="--pi: {i}; --px: {20 + Math.random() * 60}; --py: {15 + Math.random() * 70}; --pd: {3 + Math.random() * 4}s;"></div>
+            {#each Array(12) as _, i}
+              <div class="particle" style="--pi: {i}; --px: {10 + Math.random() * 80}; --py: {8 + Math.random() * 84}; --pd: {2.5 + Math.random() * 3.5}s; --ps: {1.5 + Math.random() * 2.5}px;"></div>
             {/each}
           </div>
         {/if}
+
+        <!-- Specular -->
         <div class="back-specular"></div>
       </div>
     </div>
@@ -674,43 +757,39 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     CARD BACK — richly textured, rarity-escalating design
+     CARD BACK — dense TCG-style design, rarity-escalating
      ══════════════════════════════════════════════════════════════ */
 
   .card-back {
     border: 4px solid;
-    border-color:
-      var(--white-a12)
-      var(--white-a6)
-      var(--black-a30)
-      var(--white-a6);
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  /* ── Rarity-specific border colors ── */
+  /* ── Rarity border + outer glow ── */
   .card.rarity-common .card-back {
-    border-color: rgba(140, 155, 175, 0.25) rgba(120, 135, 150, 0.15)
-                  rgba(40, 50, 60, 0.4)  rgba(120, 135, 150, 0.15);
+    border-color: rgba(160, 175, 200, 0.3) rgba(130, 145, 165, 0.2)
+                  rgba(70, 80, 95, 0.45) rgba(130, 145, 165, 0.2);
+    box-shadow: 0 0 4px rgba(160, 174, 192, 0.1);
   }
   .card.rarity-rare .card-back {
-    border-color: rgba(60, 170, 170, 0.35) rgba(40, 130, 130, 0.2)
-                  rgba(10, 50, 50, 0.5)   rgba(40, 130, 130, 0.2);
-    box-shadow: 0 0 8px rgba(59, 151, 151, 0.15);
+    border-color: rgba(80, 195, 195, 0.4) rgba(55, 155, 155, 0.25)
+                  rgba(20, 70, 70, 0.5) rgba(55, 155, 155, 0.25);
+    box-shadow: 0 0 10px rgba(59, 151, 151, 0.2), 0 0 3px rgba(59, 151, 151, 0.15);
   }
   .card.rarity-epic .card-back {
-    border-color: rgba(180, 130, 255, 0.4) rgba(140, 80, 220, 0.25)
-                  rgba(50, 15, 100, 0.5)   rgba(140, 80, 220, 0.25);
-    box-shadow: 0 0 12px rgba(176, 106, 255, 0.2), 0 0 4px rgba(176, 106, 255, 0.1);
+    border-color: rgba(195, 145, 255, 0.45) rgba(155, 95, 235, 0.3)
+                  rgba(65, 25, 115, 0.55) rgba(155, 95, 235, 0.3);
+    box-shadow: 0 0 14px rgba(176, 106, 255, 0.25), 0 0 5px rgba(176, 106, 255, 0.15);
   }
   .card.rarity-legendary .card-back {
-    border-color: rgba(255, 230, 100, 0.45) rgba(210, 180, 40, 0.3)
-                  rgba(100, 75, 0, 0.5)     rgba(210, 180, 40, 0.3);
-    box-shadow: 0 0 16px rgba(255, 215, 0, 0.25), 0 0 6px rgba(255, 215, 0, 0.15);
+    border-color: rgba(255, 235, 110, 0.5) rgba(225, 195, 50, 0.35)
+                  rgba(120, 90, 10, 0.55) rgba(225, 195, 50, 0.35);
+    box-shadow: 0 0 18px rgba(255, 215, 0, 0.3), 0 0 6px rgba(255, 215, 0, 0.2);
   }
 
-  /* ── Base background ── */
+  /* ── Base background — brighter, richer ── */
   .card-back-inner {
     position: absolute;
     inset: 0;
@@ -719,177 +798,97 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(160deg, #0c1225 0%, #162040 40%, #0e1830 70%, #0a0e1c 100%);
+    background:
+      radial-gradient(ellipse 80% 70% at 50% 50%, rgba(40, 60, 100, 0.5) 0%, transparent 70%),
+      linear-gradient(160deg, #121e38 0%, #1c2e52 30%, #162848 60%, #0e1a30 100%);
   }
   .card.rarity-rare .card-back-inner {
-    background: linear-gradient(160deg, #081a1a 0%, #0d2e2e 35%, #0a2424 65%, #061616 100%);
+    background:
+      radial-gradient(ellipse 80% 70% at 50% 50%, rgba(30, 90, 90, 0.4) 0%, transparent 70%),
+      linear-gradient(160deg, #0e2828 0%, #14403e 30%, #103535 60%, #0a2020 100%);
   }
   .card.rarity-epic .card-back-inner {
-    background: linear-gradient(160deg, #0e0820 0%, #1a0d38 35%, #14082e 65%, #0a0618 100%);
+    background:
+      radial-gradient(ellipse 75% 65% at 50% 50%, rgba(80, 40, 140, 0.4) 0%, transparent 65%),
+      linear-gradient(160deg, #160e30 0%, #261550 30%, #1e1040 60%, #120a25 100%);
   }
   .card.rarity-legendary .card-back-inner {
-    background: linear-gradient(160deg, #141008 0%, #2a1f08 30%, #1e1605 60%, #100c04 100%);
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 50%, rgba(120, 90, 20, 0.4) 0%, transparent 60%),
+      linear-gradient(160deg, #201a08 0%, #38300e 25%, #2e2508 55%, #181204 100%);
   }
 
-  /* ── Texture layer: repeating diamond crosshatch ── */
-  .back-texture {
+  /* ── SVG pattern layer (covers full card) ── */
+  .back-svg-pattern {
     position: absolute;
     inset: 0;
-    opacity: 0.06;
-    background:
-      repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 8px,
-        rgba(255, 255, 255, 0.5) 8px,
-        rgba(255, 255, 255, 0.5) 9px
-      ),
-      repeating-linear-gradient(
-        -45deg,
-        transparent,
-        transparent 8px,
-        rgba(255, 255, 255, 0.5) 8px,
-        rgba(255, 255, 255, 0.5) 9px
-      );
+    width: 100%;
+    height: 100%;
     pointer-events: none;
-  }
-  .card.rarity-rare .back-texture { opacity: 0.08; }
-  .card.rarity-epic .back-texture {
-    opacity: 0.07;
-    background:
-      repeating-linear-gradient(
-        60deg,
-        transparent,
-        transparent 12px,
-        rgba(176, 106, 255, 0.4) 12px,
-        rgba(176, 106, 255, 0.4) 13px
-      ),
-      repeating-linear-gradient(
-        -60deg,
-        transparent,
-        transparent 12px,
-        rgba(176, 106, 255, 0.4) 12px,
-        rgba(176, 106, 255, 0.4) 13px
-      ),
-      repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 24px,
-        rgba(176, 106, 255, 0.15) 24px,
-        rgba(176, 106, 255, 0.15) 25px
-      );
-  }
-  .card.rarity-legendary .back-texture {
-    opacity: 0.1;
-    background:
-      repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 6px,
-        rgba(255, 215, 0, 0.35) 6px,
-        rgba(255, 215, 0, 0.35) 7px
-      ),
-      repeating-linear-gradient(
-        -45deg,
-        transparent,
-        transparent 6px,
-        rgba(255, 215, 0, 0.35) 6px,
-        rgba(255, 215, 0, 0.35) 7px
-      ),
-      repeating-linear-gradient(
-        90deg,
-        transparent,
-        transparent 12px,
-        rgba(255, 215, 0, 0.15) 12px,
-        rgba(255, 215, 0, 0.15) 13px
-      );
+    z-index: 1;
   }
 
-  /* ── Vignette ── */
-  .back-vignette {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.5) 100%);
-  }
-  .card.rarity-rare .back-vignette {
-    background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(59, 151, 151, 0.06) 0%, transparent 40%, rgba(0, 0, 0, 0.5) 100%);
-  }
-  .card.rarity-epic .back-vignette {
-    background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(176, 106, 255, 0.08) 0%, transparent 40%, rgba(0, 0, 0, 0.45) 100%);
-  }
-  .card.rarity-legendary .back-vignette {
-    background: radial-gradient(ellipse 55% 45% at 50% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 35%, rgba(0, 0, 0, 0.4) 100%);
-  }
+  /* -- Pattern element styles by rarity -- */
+  /* Common: silver/steel tones */
+  .card.rarity-common .pat-dot { fill: rgba(160, 180, 210, 0.2); }
+  .card.rarity-common .pat-line { stroke: rgba(160, 180, 210, 0.06); stroke-width: 0.5; }
+  .card.rarity-common .ring-line { stroke: rgba(160, 180, 210, 0.06); stroke-width: 0.5; }
+  .card.rarity-common .accent-line { stroke: rgba(160, 180, 210, 0.04); stroke-width: 0.5; }
+  .card.rarity-common .inner-border { stroke: rgba(160, 180, 210, 0.12); stroke-width: 1; }
+  .card.rarity-common .inner-border-2 { stroke: rgba(160, 180, 210, 0.06); stroke-width: 0.5; }
+  .card.rarity-common .bar-accent { fill: rgba(160, 180, 210, 0.15); }
+  .card.rarity-common .bar-accent-thin { fill: rgba(160, 180, 210, 0.08); }
+  .card.rarity-common .corner-diamond { fill: rgba(160, 180, 210, 0.12); stroke: rgba(160, 180, 210, 0.2); stroke-width: 0.5; }
+  .card.rarity-common .corner-diamond-inner { fill: rgba(160, 180, 210, 0.06); stroke: none; }
+  .card.rarity-common .glow-inner { stop-color: rgba(160, 180, 210, 0.08); }
+  .card.rarity-common .glow-mid { stop-color: rgba(160, 180, 210, 0.02); }
 
-  /* ── Inner frame ── */
-  .back-frame {
-    position: absolute;
-    inset: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-md, 6px);
-    pointer-events: none;
-  }
-  .card.rarity-rare .back-frame {
-    border-color: rgba(59, 151, 151, 0.15);
-    box-shadow: inset 0 0 20px rgba(59, 151, 151, 0.04);
-  }
-  .card.rarity-epic .back-frame {
-    border-color: rgba(176, 106, 255, 0.18);
-    box-shadow: inset 0 0 30px rgba(176, 106, 255, 0.05);
-  }
-  .card.rarity-epic .back-frame::after {
-    content: '';
-    position: absolute;
-    inset: 4px;
-    border: 1px solid rgba(176, 106, 255, 0.08);
-    border-radius: var(--radius-sm, 4px);
-  }
-  .card.rarity-legendary .back-frame {
-    border-color: rgba(255, 215, 0, 0.22);
-    box-shadow: inset 0 0 40px rgba(255, 215, 0, 0.06);
-  }
-  .card.rarity-legendary .back-frame::after {
-    content: '';
-    position: absolute;
-    inset: 4px;
-    border: 1px solid rgba(255, 215, 0, 0.1);
-    border-radius: var(--radius-sm, 4px);
-  }
+  /* Rare: teal tones */
+  .card.rarity-rare .pat-dot { fill: rgba(59, 185, 185, 0.25); }
+  .card.rarity-rare .pat-line { stroke: rgba(59, 185, 185, 0.08); stroke-width: 0.5; }
+  .card.rarity-rare .ring-line { stroke: rgba(59, 185, 185, 0.08); stroke-width: 0.6; }
+  .card.rarity-rare .accent-line { stroke: rgba(59, 185, 185, 0.05); stroke-width: 0.5; }
+  .card.rarity-rare .inner-border { stroke: rgba(59, 185, 185, 0.18); stroke-width: 1.2; }
+  .card.rarity-rare .inner-border-2 { stroke: rgba(59, 185, 185, 0.08); stroke-width: 0.5; }
+  .card.rarity-rare .bar-accent { fill: rgba(59, 185, 185, 0.2); }
+  .card.rarity-rare .bar-accent-thin { fill: rgba(59, 185, 185, 0.1); }
+  .card.rarity-rare .corner-diamond { fill: rgba(59, 185, 185, 0.15); stroke: rgba(59, 185, 185, 0.3); stroke-width: 0.5; }
+  .card.rarity-rare .corner-diamond-inner { fill: rgba(59, 185, 185, 0.08); stroke: none; }
+  .card.rarity-rare .glow-inner { stop-color: rgba(59, 185, 185, 0.12); }
+  .card.rarity-rare .glow-mid { stop-color: rgba(59, 185, 185, 0.03); }
 
-  /* ── Corner ornaments ── */
-  .frame-corner {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    pointer-events: none;
-    display: none;
-  }
-  .frame-corner.tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-radius: 3px 0 0 0; }
-  .frame-corner.tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; border-radius: 0 3px 0 0; }
-  .frame-corner.bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; border-radius: 0 0 0 3px; }
-  .frame-corner.br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-radius: 0 0 3px 0; }
+  /* Epic: purple tones, brighter */
+  .card.rarity-epic .pat-dot { fill: rgba(190, 130, 255, 0.3); }
+  .card.rarity-epic .pat-line { stroke: rgba(190, 130, 255, 0.1); stroke-width: 0.5; }
+  .card.rarity-epic .ring-line { stroke: rgba(190, 130, 255, 0.1); stroke-width: 0.7; }
+  .card.rarity-epic .accent-line { stroke: rgba(190, 130, 255, 0.06); stroke-width: 0.5; }
+  .card.rarity-epic .inner-border { stroke: rgba(190, 130, 255, 0.22); stroke-width: 1.4; }
+  .card.rarity-epic .inner-border-2 { stroke: rgba(190, 130, 255, 0.1); stroke-width: 0.7; }
+  .card.rarity-epic .bar-accent { fill: rgba(190, 130, 255, 0.25); }
+  .card.rarity-epic .bar-accent-thin { fill: rgba(190, 130, 255, 0.12); }
+  .card.rarity-epic .corner-diamond { fill: rgba(190, 130, 255, 0.2); stroke: rgba(190, 130, 255, 0.4); stroke-width: 0.7; }
+  .card.rarity-epic .corner-diamond-inner { fill: rgba(190, 130, 255, 0.1); stroke: none; }
+  .card.rarity-epic .starburst-ray { stroke: rgba(190, 130, 255, 0.06); stroke-width: 0.5; }
+  .card.rarity-epic .glow-inner { stop-color: rgba(190, 130, 255, 0.15); }
+  .card.rarity-epic .glow-mid { stop-color: rgba(190, 130, 255, 0.04); }
 
-  .card.rarity-rare .frame-corner {
-    display: block;
-    border-color: rgba(59, 151, 151, 0.3);
-  }
-  .card.rarity-epic .frame-corner {
-    display: block;
-    width: 22px;
-    height: 22px;
-    border-color: rgba(176, 106, 255, 0.4);
-    filter: drop-shadow(0 0 3px rgba(176, 106, 255, 0.3));
-  }
-  .card.rarity-legendary .frame-corner {
-    display: block;
-    width: 28px;
-    height: 28px;
-    border-color: rgba(255, 215, 0, 0.5);
-    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.3));
-  }
+  /* Legendary: gold tones, brightest */
+  .card.rarity-legendary .pat-dot { fill: rgba(255, 225, 80, 0.35); }
+  .card.rarity-legendary .pat-line { stroke: rgba(255, 225, 80, 0.12); stroke-width: 0.5; }
+  .card.rarity-legendary .ring-line { stroke: rgba(255, 225, 80, 0.12); stroke-width: 0.8; }
+  .card.rarity-legendary .accent-line { stroke: rgba(255, 225, 80, 0.08); stroke-width: 0.7; }
+  .card.rarity-legendary .inner-border { stroke: rgba(255, 225, 80, 0.28); stroke-width: 1.6; }
+  .card.rarity-legendary .inner-border-2 { stroke: rgba(255, 225, 80, 0.12); stroke-width: 0.8; }
+  .card.rarity-legendary .bar-accent { fill: rgba(255, 225, 80, 0.3); }
+  .card.rarity-legendary .bar-accent-thin { fill: rgba(255, 225, 80, 0.15); }
+  .card.rarity-legendary .corner-diamond { fill: rgba(255, 225, 80, 0.25); stroke: rgba(255, 225, 80, 0.5); stroke-width: 0.8; }
+  .card.rarity-legendary .corner-diamond-inner { fill: rgba(255, 225, 80, 0.12); stroke: none; }
+  .card.rarity-legendary .starburst-ray { stroke: rgba(255, 225, 80, 0.07); stroke-width: 0.6; }
+  .card.rarity-legendary .orbit-diamond { fill: rgba(255, 225, 80, 0.2); stroke: rgba(255, 225, 80, 0.35); stroke-width: 0.5; }
+  .card.rarity-legendary .glow-inner { stop-color: rgba(255, 225, 80, 0.2); }
+  .card.rarity-legendary .glow-mid { stop-color: rgba(255, 225, 80, 0.05); }
 
-  /* ── Center emblem ── */
+  /* ── GB Shield Emblem ── */
   .back-emblem {
     position: relative;
     z-index: 2;
@@ -898,100 +897,110 @@
     justify-content: center;
   }
 
-  .emblem-ring {
-    position: absolute;
-  }
-  .emblem-ring circle, .emblem-ring line {
-    stroke: rgba(255, 255, 255, 0.2);
-  }
-  .card.rarity-rare .emblem-ring circle,
-  .card.rarity-rare .emblem-ring line {
-    stroke: rgba(59, 151, 151, 0.4);
-  }
-  .card.rarity-epic .emblem-ring circle,
-  .card.rarity-epic .emblem-ring line {
-    stroke: rgba(176, 106, 255, 0.45);
-  }
-  .card.rarity-epic .emblem-ring {
-    animation: emblem-spin 30s linear infinite;
-  }
-  .card.rarity-legendary .emblem-ring circle,
-  .card.rarity-legendary .emblem-ring line {
-    stroke: rgba(255, 215, 0, 0.5);
-  }
-  .card.rarity-legendary .emblem-ring {
-    animation: emblem-spin 20s linear infinite;
-    filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.2));
+  .shield-svg {
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
   }
 
-  @keyframes emblem-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+  /* Shield gradient fills by rarity */
+  .card.rarity-common .shield-top { stop-color: rgba(140, 160, 190, 0.15); }
+  .card.rarity-common .shield-bottom { stop-color: rgba(100, 120, 150, 0.08); }
+  .card.rarity-common .shield-stroke-a { stop-color: rgba(160, 180, 210, 0.4); }
+  .card.rarity-common .shield-stroke-b { stop-color: rgba(120, 140, 170, 0.25); }
+  .card.rarity-common .shield-inner-stroke { stroke: rgba(160, 180, 210, 0.15); }
+  .card.rarity-common .shield-divider { stroke: rgba(160, 180, 210, 0.15); }
+  .card.rarity-common .shield-accent-dot { fill: rgba(160, 180, 210, 0.2); }
+
+  .card.rarity-rare .shield-top { stop-color: rgba(59, 185, 185, 0.2); }
+  .card.rarity-rare .shield-bottom { stop-color: rgba(40, 130, 130, 0.1); }
+  .card.rarity-rare .shield-stroke-a { stop-color: rgba(80, 210, 210, 0.5); }
+  .card.rarity-rare .shield-stroke-b { stop-color: rgba(50, 160, 160, 0.3); }
+  .card.rarity-rare .shield-inner-stroke { stroke: rgba(80, 210, 210, 0.18); }
+  .card.rarity-rare .shield-divider { stroke: rgba(80, 210, 210, 0.18); }
+  .card.rarity-rare .shield-accent-dot { fill: rgba(80, 210, 210, 0.25); }
+  .card.rarity-rare .shield-svg { filter: drop-shadow(0 2px 10px rgba(59, 151, 151, 0.15)); }
+
+  .card.rarity-epic .shield-top { stop-color: rgba(190, 130, 255, 0.25); }
+  .card.rarity-epic .shield-bottom { stop-color: rgba(140, 80, 210, 0.12); }
+  .card.rarity-epic .shield-stroke-a { stop-color: rgba(210, 160, 255, 0.6); }
+  .card.rarity-epic .shield-stroke-b { stop-color: rgba(160, 100, 230, 0.35); }
+  .card.rarity-epic .shield-inner-stroke { stroke: rgba(210, 160, 255, 0.2); }
+  .card.rarity-epic .shield-divider { stroke: rgba(210, 160, 255, 0.2); }
+  .card.rarity-epic .shield-accent-dot { fill: rgba(210, 160, 255, 0.3); }
+  .card.rarity-epic .shield-svg {
+    filter: drop-shadow(0 0 12px rgba(176, 106, 255, 0.25)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
   }
 
-  .emblem-glyph {
-    font-size: 2.4rem;
-    font-weight: 800;
+  .card.rarity-legendary .shield-top { stop-color: rgba(255, 230, 80, 0.3); }
+  .card.rarity-legendary .shield-bottom { stop-color: rgba(200, 170, 40, 0.15); }
+  .card.rarity-legendary .shield-stroke-a { stop-color: rgba(255, 240, 120, 0.7); }
+  .card.rarity-legendary .shield-stroke-b { stop-color: rgba(220, 190, 50, 0.4); }
+  .card.rarity-legendary .shield-inner-stroke { stroke: rgba(255, 240, 120, 0.22); }
+  .card.rarity-legendary .shield-divider { stroke: rgba(255, 240, 120, 0.22); }
+  .card.rarity-legendary .shield-accent-dot { fill: rgba(255, 240, 120, 0.35); }
+  .card.rarity-legendary .shield-svg {
+    filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.3)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+    animation: shield-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes shield-pulse {
+    0%, 100% { filter: drop-shadow(0 0 16px rgba(255, 215, 0, 0.3)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4)); }
+    50% { filter: drop-shadow(0 0 24px rgba(255, 215, 0, 0.5)) drop-shadow(0 0 40px rgba(255, 215, 0, 0.15)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4)); }
+  }
+
+  /* Shield text */
+  .shield-text-g, .shield-text-b {
     font-family: var(--font-brand, 'Plus Jakarta Sans', sans-serif);
-    color: rgba(255, 255, 255, 0.15);
-    z-index: 1;
-    text-shadow: none;
-    user-select: none;
+    font-weight: 900;
+    font-size: 32px;
+    letter-spacing: 2px;
   }
-  .card.rarity-rare .emblem-glyph {
-    color: rgba(59, 151, 151, 0.35);
-    text-shadow: 0 0 12px rgba(59, 151, 151, 0.15);
-  }
-  .card.rarity-epic .emblem-glyph {
-    color: rgba(176, 106, 255, 0.4);
-    text-shadow: 0 0 16px rgba(176, 106, 255, 0.2), 0 0 32px rgba(176, 106, 255, 0.08);
-  }
-  .card.rarity-legendary .emblem-glyph {
-    color: rgba(255, 215, 0, 0.5);
-    text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1);
-    animation: glyph-pulse 3s ease-in-out infinite;
-  }
+  .card.rarity-common .shield-text-g,
+  .card.rarity-common .shield-text-b { fill: rgba(160, 180, 210, 0.3); }
+  .card.rarity-rare .shield-text-g,
+  .card.rarity-rare .shield-text-b { fill: rgba(80, 210, 210, 0.4); }
+  .card.rarity-epic .shield-text-g,
+  .card.rarity-epic .shield-text-b { fill: rgba(210, 160, 255, 0.45); }
+  .card.rarity-legendary .shield-text-g,
+  .card.rarity-legendary .shield-text-b { fill: rgba(255, 240, 120, 0.55); }
 
-  @keyframes glyph-pulse {
-    0%, 100% { opacity: 0.8; text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1); }
-    50% { opacity: 1; text-shadow: 0 0 28px rgba(255, 215, 0, 0.45), 0 0 56px rgba(255, 215, 0, 0.15); }
-  }
-
-  /* ── Shimmer sweep (epic + legendary) ── */
+  /* ── Shimmer sweep (rare + epic + legendary) ── */
   .back-shimmer-sweep {
     position: absolute;
     inset: 0;
     pointer-events: none;
     z-index: 3;
+  }
+  .card.rarity-rare .back-shimmer-sweep {
     background: linear-gradient(
       105deg,
       transparent 35%,
-      rgba(255, 255, 255, 0.04) 42%,
-      rgba(255, 255, 255, 0.08) 50%,
-      rgba(255, 255, 255, 0.04) 58%,
+      rgba(80, 210, 210, 0.04) 43%,
+      rgba(120, 230, 230, 0.08) 50%,
+      rgba(80, 210, 210, 0.04) 57%,
       transparent 65%
     );
     background-size: 250% 100%;
-    animation: back-sweep 5s ease-in-out infinite;
+    animation: back-sweep 6s ease-in-out infinite;
   }
   .card.rarity-epic .back-shimmer-sweep {
     background: linear-gradient(
       105deg,
       transparent 30%,
-      rgba(176, 106, 255, 0.03) 38%,
-      rgba(200, 160, 255, 0.08) 50%,
-      rgba(176, 106, 255, 0.03) 62%,
+      rgba(190, 130, 255, 0.05) 40%,
+      rgba(220, 180, 255, 0.1) 50%,
+      rgba(190, 130, 255, 0.05) 60%,
       transparent 70%
     );
     background-size: 250% 100%;
+    animation: back-sweep 5s ease-in-out infinite;
   }
   .card.rarity-legendary .back-shimmer-sweep {
     background: linear-gradient(
       105deg,
       transparent 25%,
-      rgba(255, 215, 0, 0.04) 35%,
-      rgba(255, 240, 140, 0.12) 50%,
-      rgba(255, 215, 0, 0.04) 65%,
+      rgba(255, 230, 80, 0.06) 36%,
+      rgba(255, 245, 160, 0.14) 50%,
+      rgba(255, 230, 80, 0.06) 64%,
       transparent 75%
     );
     background-size: 250% 100%;
@@ -1012,20 +1021,20 @@
   }
   .particle {
     position: absolute;
-    width: 3px;
-    height: 3px;
+    width: var(--ps, 2px);
+    height: var(--ps, 2px);
     border-radius: var(--radius-full, 50%);
-    background: rgba(255, 215, 0, 0.6);
+    background: rgba(255, 225, 80, 0.7);
     left: calc(var(--px) * 1%);
     top: calc(var(--py) * 1%);
-    box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.5), 0 0 3px rgba(255, 215, 0, 0.8);
     animation: particle-float var(--pd) ease-in-out infinite;
-    animation-delay: calc(var(--pi) * -0.6s);
+    animation-delay: calc(var(--pi) * -0.5s);
   }
 
   @keyframes particle-float {
-    0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; }
-    50% { transform: translateY(-10px) scale(1.3); opacity: 0.9; }
+    0%, 100% { transform: translateY(0) scale(1); opacity: 0.3; }
+    50% { transform: translateY(-12px) scale(1.4); opacity: 1; }
   }
 
   /* ── Mouse-follow specular on back ── */
@@ -1036,22 +1045,29 @@
     z-index: 5;
     background: radial-gradient(
       circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
-      rgba(255, 255, 255, 0.06),
-      transparent 45%
+      rgba(255, 255, 255, 0.08),
+      transparent 50%
+    );
+  }
+  .card.rarity-rare .back-specular {
+    background: radial-gradient(
+      circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
+      rgba(80, 210, 210, 0.1),
+      transparent 50%
     );
   }
   .card.rarity-epic .back-specular {
     background: radial-gradient(
       circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
-      rgba(176, 106, 255, 0.08),
-      transparent 45%
+      rgba(190, 130, 255, 0.12),
+      transparent 50%
     );
   }
   .card.rarity-legendary .back-specular {
     background: radial-gradient(
       circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
-      rgba(255, 215, 0, 0.1),
-      transparent 45%
+      rgba(255, 230, 80, 0.14),
+      transparent 50%
     );
   }
 </style>
