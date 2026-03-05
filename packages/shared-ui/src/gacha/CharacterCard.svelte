@@ -91,6 +91,13 @@
 
   const isHolo = $derived(character.rarity === 'epic' || character.rarity === 'legendary');
   const isLegendary = $derived(character.rarity === 'legendary');
+
+  const topicCount = $derived(
+    character.topic_assignments ? Object.keys(character.topic_assignments).length : 0
+  );
+  const hasCustomTopics = $derived(
+    character.custom_topics && character.custom_topics.length > 0
+  );
 </script>
 
 <div
@@ -115,9 +122,46 @@
     <!-- Back face -->
     <div class="card-back">
       <div class="card-back-inner">
-        <div class="card-back-pattern">
-          <div class="logo">?</div>
+        <div class="back-texture"></div>
+        <div class="back-vignette"></div>
+        <div class="back-frame">
+          <div class="frame-corner tl"></div>
+          <div class="frame-corner tr"></div>
+          <div class="frame-corner bl"></div>
+          <div class="frame-corner br"></div>
         </div>
+        <div class="back-emblem">
+          <svg class="emblem-ring" viewBox="0 0 100 100" width="80" height="80">
+            <circle cx="50" cy="50" r="42" fill="none" stroke-width="1.5" opacity="0.4" />
+            <circle cx="50" cy="50" r="36" fill="none" stroke-width="0.5" opacity="0.2" />
+            {#if character.rarity === 'epic' || character.rarity === 'legendary'}
+              <circle cx="50" cy="50" r="46" fill="none" stroke-width="0.5" stroke-dasharray="3 5" opacity="0.3" />
+            {/if}
+            {#if character.rarity === 'legendary'}
+              <!-- Radial rays -->
+              {#each Array(12) as _, i}
+                {@const angle = (i * 30 - 90) * Math.PI / 180}
+                <line
+                  x1={50 + 30 * Math.cos(angle)} y1={50 + 30 * Math.sin(angle)}
+                  x2={50 + 46 * Math.cos(angle)} y2={50 + 46 * Math.sin(angle)}
+                  stroke-width="0.5" opacity="0.25"
+                />
+              {/each}
+            {/if}
+          </svg>
+          <span class="emblem-glyph">?</span>
+        </div>
+        {#if character.rarity === 'epic' || character.rarity === 'legendary'}
+          <div class="back-shimmer-sweep"></div>
+        {/if}
+        {#if character.rarity === 'legendary'}
+          <div class="back-particles">
+            {#each Array(8) as _, i}
+              <div class="particle" style="--pi: {i}; --px: {20 + Math.random() * 60}; --py: {15 + Math.random() * 70}; --pd: {3 + Math.random() * 4}s;"></div>
+            {/each}
+          </div>
+        {/if}
+        <div class="back-specular"></div>
       </div>
     </div>
     <!-- Front face -->
@@ -144,6 +188,12 @@
         <div class="info-overlay">
           <h3 class="name" data-testid="character-name">{character.name}</h3>
           <p class="description">{character.tagline || character.description}</p>
+          {#if topicCount > 0}
+            <div class="topic-badge" data-testid="topic-badge">
+              {#if hasCustomTopics}<span class="sparkle">&#10024;</span>{/if}
+              {topicCount} topics
+            </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -557,6 +607,21 @@
     font-style: italic;
   }
 
+  /* ── Topic badge ── */
+  .topic-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--color-text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: var(--space-0-5, 0.125rem);
+  }
+
+  .sparkle {
+    font-size: 0.7rem;
+    margin-right: 2px;
+  }
+
   /* ── Stats: single compact row of dot groups ── */
   .trait-row {
     display: flex;
@@ -608,7 +673,10 @@
     box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
   }
 
-  /* ── Back face ── */
+  /* ══════════════════════════════════════════════════════════════
+     CARD BACK — richly textured, rarity-escalating design
+     ══════════════════════════════════════════════════════════════ */
+
   .card-back {
     border: 4px solid;
     border-color:
@@ -621,40 +689,369 @@
     justify-content: center;
   }
 
+  /* ── Rarity-specific border colors ── */
+  .card.rarity-common .card-back {
+    border-color: rgba(140, 155, 175, 0.25) rgba(120, 135, 150, 0.15)
+                  rgba(40, 50, 60, 0.4)  rgba(120, 135, 150, 0.15);
+  }
+  .card.rarity-rare .card-back {
+    border-color: rgba(60, 170, 170, 0.35) rgba(40, 130, 130, 0.2)
+                  rgba(10, 50, 50, 0.5)   rgba(40, 130, 130, 0.2);
+    box-shadow: 0 0 8px rgba(59, 151, 151, 0.15);
+  }
+  .card.rarity-epic .card-back {
+    border-color: rgba(180, 130, 255, 0.4) rgba(140, 80, 220, 0.25)
+                  rgba(50, 15, 100, 0.5)   rgba(140, 80, 220, 0.25);
+    box-shadow: 0 0 12px rgba(176, 106, 255, 0.2), 0 0 4px rgba(176, 106, 255, 0.1);
+  }
+  .card.rarity-legendary .card-back {
+    border-color: rgba(255, 230, 100, 0.45) rgba(210, 180, 40, 0.3)
+                  rgba(100, 75, 0, 0.5)     rgba(210, 180, 40, 0.3);
+    box-shadow: 0 0 16px rgba(255, 215, 0, 0.25), 0 0 6px rgba(255, 215, 0, 0.15);
+  }
+
+  /* ── Base background ── */
   .card-back-inner {
     position: absolute;
     inset: 0;
     border-radius: var(--radius-xl);
     overflow: hidden;
-    background: linear-gradient(135deg, var(--color-navy, #0a0e18), #1a3a5c);
     display: flex;
     align-items: center;
     justify-content: center;
+    background: linear-gradient(160deg, #0c1225 0%, #162040 40%, #0e1830 70%, #0a0e1c 100%);
   }
-
   .card.rarity-rare .card-back-inner {
-    background: linear-gradient(135deg, var(--color-navy, #0a0e18), #0d2e2e);
+    background: linear-gradient(160deg, #081a1a 0%, #0d2e2e 35%, #0a2424 65%, #061616 100%);
   }
   .card.rarity-epic .card-back-inner {
-    background: linear-gradient(135deg, var(--color-navy, #0a0e18), #1a0d30);
+    background: linear-gradient(160deg, #0e0820 0%, #1a0d38 35%, #14082e 65%, #0a0618 100%);
   }
   .card.rarity-legendary .card-back-inner {
-    background: linear-gradient(135deg, var(--color-navy, #0a0e18), #2a1f00);
+    background: linear-gradient(160deg, #141008 0%, #2a1f08 30%, #1e1605 60%, #100c04 100%);
   }
 
-  .card-back-pattern {
-    width: 80%;
-    height: 80%;
-    border: 2px solid var(--white-a10);
-    border-radius: var(--radius-lg);
+  /* ── Texture layer: repeating diamond crosshatch ── */
+  .back-texture {
+    position: absolute;
+    inset: 0;
+    opacity: 0.06;
+    background:
+      repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 8px,
+        rgba(255, 255, 255, 0.5) 8px,
+        rgba(255, 255, 255, 0.5) 9px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 8px,
+        rgba(255, 255, 255, 0.5) 8px,
+        rgba(255, 255, 255, 0.5) 9px
+      );
+    pointer-events: none;
+  }
+  .card.rarity-rare .back-texture { opacity: 0.08; }
+  .card.rarity-epic .back-texture {
+    opacity: 0.07;
+    background:
+      repeating-linear-gradient(
+        60deg,
+        transparent,
+        transparent 12px,
+        rgba(176, 106, 255, 0.4) 12px,
+        rgba(176, 106, 255, 0.4) 13px
+      ),
+      repeating-linear-gradient(
+        -60deg,
+        transparent,
+        transparent 12px,
+        rgba(176, 106, 255, 0.4) 12px,
+        rgba(176, 106, 255, 0.4) 13px
+      ),
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 24px,
+        rgba(176, 106, 255, 0.15) 24px,
+        rgba(176, 106, 255, 0.15) 25px
+      );
+  }
+  .card.rarity-legendary .back-texture {
+    opacity: 0.1;
+    background:
+      repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 6px,
+        rgba(255, 215, 0, 0.35) 6px,
+        rgba(255, 215, 0, 0.35) 7px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 6px,
+        rgba(255, 215, 0, 0.35) 6px,
+        rgba(255, 215, 0, 0.35) 7px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 12px,
+        rgba(255, 215, 0, 0.15) 12px,
+        rgba(255, 215, 0, 0.15) 13px
+      );
+  }
+
+  /* ── Vignette ── */
+  .back-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.5) 100%);
+  }
+  .card.rarity-rare .back-vignette {
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(59, 151, 151, 0.06) 0%, transparent 40%, rgba(0, 0, 0, 0.5) 100%);
+  }
+  .card.rarity-epic .back-vignette {
+    background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(176, 106, 255, 0.08) 0%, transparent 40%, rgba(0, 0, 0, 0.45) 100%);
+  }
+  .card.rarity-legendary .back-vignette {
+    background: radial-gradient(ellipse 55% 45% at 50% 50%, rgba(255, 215, 0, 0.1) 0%, transparent 35%, rgba(0, 0, 0, 0.4) 100%);
+  }
+
+  /* ── Inner frame ── */
+  .back-frame {
+    position: absolute;
+    inset: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md, 6px);
+    pointer-events: none;
+  }
+  .card.rarity-rare .back-frame {
+    border-color: rgba(59, 151, 151, 0.15);
+    box-shadow: inset 0 0 20px rgba(59, 151, 151, 0.04);
+  }
+  .card.rarity-epic .back-frame {
+    border-color: rgba(176, 106, 255, 0.18);
+    box-shadow: inset 0 0 30px rgba(176, 106, 255, 0.05);
+  }
+  .card.rarity-epic .back-frame::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(176, 106, 255, 0.08);
+    border-radius: var(--radius-sm, 4px);
+  }
+  .card.rarity-legendary .back-frame {
+    border-color: rgba(255, 215, 0, 0.22);
+    box-shadow: inset 0 0 40px rgba(255, 215, 0, 0.06);
+  }
+  .card.rarity-legendary .back-frame::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border: 1px solid rgba(255, 215, 0, 0.1);
+    border-radius: var(--radius-sm, 4px);
+  }
+
+  /* ── Corner ornaments ── */
+  .frame-corner {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+    display: none;
+  }
+  .frame-corner.tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-radius: 3px 0 0 0; }
+  .frame-corner.tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; border-radius: 0 3px 0 0; }
+  .frame-corner.bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; border-radius: 0 0 0 3px; }
+  .frame-corner.br { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-radius: 0 0 3px 0; }
+
+  .card.rarity-rare .frame-corner {
+    display: block;
+    border-color: rgba(59, 151, 151, 0.3);
+  }
+  .card.rarity-epic .frame-corner {
+    display: block;
+    width: 22px;
+    height: 22px;
+    border-color: rgba(176, 106, 255, 0.4);
+    filter: drop-shadow(0 0 3px rgba(176, 106, 255, 0.3));
+  }
+  .card.rarity-legendary .frame-corner {
+    display: block;
+    width: 28px;
+    height: 28px;
+    border-color: rgba(255, 215, 0, 0.5);
+    filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.3));
+  }
+
+  /* ── Center emblem ── */
+  .back-emblem {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .logo {
-    font-size: 3rem;
-    color: var(--color-text-muted);
-    font-weight: 700;
+  .emblem-ring {
+    position: absolute;
+  }
+  .emblem-ring circle, .emblem-ring line {
+    stroke: rgba(255, 255, 255, 0.2);
+  }
+  .card.rarity-rare .emblem-ring circle,
+  .card.rarity-rare .emblem-ring line {
+    stroke: rgba(59, 151, 151, 0.4);
+  }
+  .card.rarity-epic .emblem-ring circle,
+  .card.rarity-epic .emblem-ring line {
+    stroke: rgba(176, 106, 255, 0.45);
+  }
+  .card.rarity-epic .emblem-ring {
+    animation: emblem-spin 30s linear infinite;
+  }
+  .card.rarity-legendary .emblem-ring circle,
+  .card.rarity-legendary .emblem-ring line {
+    stroke: rgba(255, 215, 0, 0.5);
+  }
+  .card.rarity-legendary .emblem-ring {
+    animation: emblem-spin 20s linear infinite;
+    filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.2));
+  }
+
+  @keyframes emblem-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .emblem-glyph {
+    font-size: 2.4rem;
+    font-weight: 800;
+    font-family: var(--font-brand, 'Plus Jakarta Sans', sans-serif);
+    color: rgba(255, 255, 255, 0.15);
+    z-index: 1;
+    text-shadow: none;
+    user-select: none;
+  }
+  .card.rarity-rare .emblem-glyph {
+    color: rgba(59, 151, 151, 0.35);
+    text-shadow: 0 0 12px rgba(59, 151, 151, 0.15);
+  }
+  .card.rarity-epic .emblem-glyph {
+    color: rgba(176, 106, 255, 0.4);
+    text-shadow: 0 0 16px rgba(176, 106, 255, 0.2), 0 0 32px rgba(176, 106, 255, 0.08);
+  }
+  .card.rarity-legendary .emblem-glyph {
+    color: rgba(255, 215, 0, 0.5);
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1);
+    animation: glyph-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes glyph-pulse {
+    0%, 100% { opacity: 0.8; text-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 215, 0, 0.1); }
+    50% { opacity: 1; text-shadow: 0 0 28px rgba(255, 215, 0, 0.45), 0 0 56px rgba(255, 215, 0, 0.15); }
+  }
+
+  /* ── Shimmer sweep (epic + legendary) ── */
+  .back-shimmer-sweep {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.04) 42%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 58%,
+      transparent 65%
+    );
+    background-size: 250% 100%;
+    animation: back-sweep 5s ease-in-out infinite;
+  }
+  .card.rarity-epic .back-shimmer-sweep {
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(176, 106, 255, 0.03) 38%,
+      rgba(200, 160, 255, 0.08) 50%,
+      rgba(176, 106, 255, 0.03) 62%,
+      transparent 70%
+    );
+    background-size: 250% 100%;
+  }
+  .card.rarity-legendary .back-shimmer-sweep {
+    background: linear-gradient(
+      105deg,
+      transparent 25%,
+      rgba(255, 215, 0, 0.04) 35%,
+      rgba(255, 240, 140, 0.12) 50%,
+      rgba(255, 215, 0, 0.04) 65%,
+      transparent 75%
+    );
+    background-size: 250% 100%;
+    animation: back-sweep 4s ease-in-out infinite;
+  }
+
+  @keyframes back-sweep {
+    0% { background-position: 200% 0; }
+    100% { background-position: -50% 0; }
+  }
+
+  /* ── Floating particles (legendary only) ── */
+  .back-particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+  }
+  .particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: var(--radius-full, 50%);
+    background: rgba(255, 215, 0, 0.6);
+    left: calc(var(--px) * 1%);
+    top: calc(var(--py) * 1%);
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+    animation: particle-float var(--pd) ease-in-out infinite;
+    animation-delay: calc(var(--pi) * -0.6s);
+  }
+
+  @keyframes particle-float {
+    0%, 100% { transform: translateY(0) scale(1); opacity: 0.4; }
+    50% { transform: translateY(-10px) scale(1.3); opacity: 0.9; }
+  }
+
+  /* ── Mouse-follow specular on back ── */
+  .back-specular {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: radial-gradient(
+      circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
+      rgba(255, 255, 255, 0.06),
+      transparent 45%
+    );
+  }
+  .card.rarity-epic .back-specular {
+    background: radial-gradient(
+      circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
+      rgba(176, 106, 255, 0.08),
+      transparent 45%
+    );
+  }
+  .card.rarity-legendary .back-specular {
+    background: radial-gradient(
+      circle at calc((var(--mx) + 1) / 2 * 100%) calc((var(--my) + 1) / 2 * 100%),
+      rgba(255, 215, 0, 0.1),
+      transparent 45%
+    );
   }
 </style>
