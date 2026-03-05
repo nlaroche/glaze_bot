@@ -70,8 +70,10 @@ interface CommentaryRequest {
   game_hint?: string;
   scene_context?: { game_name?: string; descriptions: string[] };
   enable_visuals?: boolean;
-  block_type?: string;
-  block_prompt?: string;
+  topic_type?: string;
+  topic_prompt?: string;
+  block_type?: string;   // backward compat
+  block_prompt?: string; // backward compat
   memories?: string[];
   participants?: Array<{ name: string; system_prompt: string; personality?: Personality; voice_id?: string; avatar_url?: string; rarity?: string; id?: string }>;
 }
@@ -127,11 +129,17 @@ Deno.serve(async (req: Request) => {
       game_hint,
       scene_context,
       enable_visuals,
-      block_type,
-      block_prompt,
+      topic_type: raw_topic_type,
+      topic_prompt: raw_topic_prompt,
+      block_type: raw_block_type,
+      block_prompt: raw_block_prompt,
       memories,
       participants,
     } = body;
+
+    // Accept both new (topic_*) and old (block_*) field names
+    const block_type = raw_topic_type ?? raw_block_type;
+    const block_prompt = raw_topic_prompt ?? raw_block_prompt;
 
     if (!frame_b64 && !player_text && !react_to) {
       return errorResponse("At least one of frame_b64, player_text, or react_to is required", 400);
@@ -332,22 +340,12 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ text: fallbackText, usage: multiResult.usage });
     }
 
-    // Build full system prompt: character persona + commentary instructions
+    // Build full system prompt: character persona + commentary role + output format.
+    // The topic-specific instruction (what to actually say) comes from the scheduler
+    // via block_prompt in the user message — not here. This just sets the role and tone.
     const commentaryDirective = `\n${directive}${buildPersonalityModifier(personality)}`;
 
-    // Block-type-specific system instruction — makes each block feel distinct
-    const blockInstruction = block_type ? ({
-      solo_observation: "\n[MODE: OBSERVATION] Describe one specific thing happening on screen right now. Be concrete.",
-      emotional_reaction: "\n[MODE: EMOTIONAL] Express a raw emotional reaction — excitement, frustration, shock, awe. Don't describe the screen. Just FEEL it.",
-      question: "\n[MODE: QUESTION] Ask the player or yourself a question about what's happening. Be curious or skeptical.",
-      backstory_reference: "\n[MODE: BACKSTORY] Subtly connect what you see to your own backstory or past experiences. Don't force it.",
-      callback: "\n[MODE: CALLBACK] Reference something from earlier in this session. Connect past to present.",
-      encouragement: "\n[MODE: ENCOURAGEMENT] Be supportive and genuine. React to how the player is DOING, not just what's on screen. Cheer, empathize, or motivate. Consider using a stamp (trophy, crown) or floating_text to reinforce your message.",
-      hot_take: "\n[MODE: HOT TAKE] State a bold opinion. Be confident and slightly provocative. This isn't analysis — it's personality. Consider using floating_text with 'slam' animation for emphasis.",
-      tangent: "\n[MODE: TANGENT] Something on screen triggered a thought. Go off on a brief tangent that shows your personality. Don't stay on-topic.",
-    } as Record<string, string>)[block_type] ?? "" : "";
-
-    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective + blockInstruction
+    let fullSystemPrompt = system_prompt + "\n\n" + commentaryDirective
       + `\n\n[OUTPUT FORMAT]\nKeep responses to 1-2 short sentences. This is spoken aloud via TTS so be concise.\nOnly respond with [SILENCE] if the screen is completely static with zero activity — menus, loading screens, or idle lobbies. If ANYTHING is happening on screen, comment on it.`;
 
     // Inject memories from past sessions
@@ -355,12 +353,25 @@ Deno.serve(async (req: Request) => {
       fullSystemPrompt += "\n\n[MEMORIES FROM PAST SESSIONS]\n" + memories.map((m) => `- ${m}`).join("\n");
     }
 
+    // Anti-repetition: extract recent assistant responses and instruct model to avoid them
+    if (history && history.length > 0) {
+      const recentResponses = history
+        .filter((h) => h.role === "assistant")
+        .slice(-3)
+        .map((h) => h.content);
+      if (recentResponses.length > 0) {
+        fullSystemPrompt += "\n\n[DO NOT REPEAT]\nYou already said these things recently. Say something DIFFERENT:\n" +
+          recentResponses.map((r) => `- "${r}"`).join("\n");
+      }
+    }
+
     if (enable_visuals) {
       fullSystemPrompt += buildVisualSystemAddendum(frame_dims);
     }
 
-    // Bump max tokens when visuals enabled (tool call args consume tokens)
-    const effectiveMaxTokens = enable_visuals ? Math.max(maxTokens, 200) : maxTokens;
+    // Add token headroom for tool call JSON when visuals are enabled,
+    // but don't inflate the text budget (keeps responses concise)
+    const effectiveMaxTokens = enable_visuals ? maxTokens + 120 : maxTokens;
 
     // Get provider-specific tool definitions
     // Include request_search tool when Gemini key is available (used for web search grounding)
@@ -405,10 +416,10 @@ Deno.serve(async (req: Request) => {
         textParts.push('[IMPORTANT: The player is talking to you. If they are asking about ANYTHING on screen, you MUST use arrow or circle to point at it. Do not just describe it — call the tool.]');
       }
     }
-    // Block prompt and style nudge are mutually exclusive — sending both
-    // creates competing instructions that the model ignores.
+    // The topic prompt from the scheduler is THE instruction for what to say.
+    // Style nudges are only used when no topic was assigned (fallback).
     if (block_prompt) {
-      textParts.push(`[TASK: ${block_prompt}]`);
+      textParts.push(`[YOUR TASK: ${block_prompt}]`);
     } else {
       textParts.push(`[Style hint: ${nudge}]`);
     }

@@ -4,6 +4,7 @@
   import { getDebugStore } from '$lib/stores/debug.svelte';
   import { getCollectionStore } from '$lib/stores/collection.svelte';
   import { motion } from '@glazebot/shared-ui';
+  import { TOPIC_LABELS } from '@glazebot/shared-types';
 
   const auth = getAuthState();
   const session = getSessionStore();
@@ -173,6 +174,9 @@
         <div class="msg-body">
           <div class="msg-header">
             <span class="msg-name" style="color: {msg.isUserMessage ? 'var(--color-teal)' : rarityNameColor[msg.rarity]}">{msg.name}</span>
+            {#if msg.topicType && !msg.isUserMessage}
+              <span class="msg-topic">{TOPIC_LABELS[msg.topicType] ?? msg.topicType}</span>
+            {/if}
             <span class="msg-time">{msg.time}</span>
           </div>
           <p class="msg-text">{@html renderMentions(msg.text)}</p>
@@ -336,6 +340,16 @@
   .msg-name {
     font-size: var(--font-md);
     font-weight: 600;
+  }
+
+  .msg-topic {
+    font-size: var(--font-xs);
+    color: var(--color-teal, #3ecfcf);
+    background: var(--teal-a8);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    letter-spacing: 0.3px;
   }
 
   .msg-time {

@@ -2,9 +2,9 @@ import type { GachaCharacter } from '@glazebot/shared-types';
 
 export type EngineState = 'idle' | 'processing' | 'stopped';
 
-// ── Block Scheduler Types ────────────────────────────────────────
+// ── Topic Scheduler Types ────────────────────────────────────────
 
-export type BlockType =
+export type TopicType =
   | 'solo_observation'
   | 'emotional_reaction'
   | 'question'
@@ -15,40 +15,28 @@ export type BlockType =
   | 'encouragement'
   | 'hot_take'
   | 'tangent'
-  | 'silence';
+  | 'silence'
+  | string; // allow custom topic keys
 
-export interface BlockWeights {
-  solo_observation: number;
-  emotional_reaction: number;
-  question: number;
-  backstory_reference: number;
-  quip_banter: number;
-  callback: number;
-  hype_chain: number;
-  encouragement: number;
-  hot_take: number;
-  tangent: number;
-  silence: number;
+export interface TopicWeights {
+  [key: string]: number;
 }
 
-export interface BlockPrompts {
-  solo_observation: string;
-  emotional_reaction: string;
-  question: string;
-  backstory_reference: string;
-  quip_banter: string;
-  callback: string;
-  hype_chain: string;
-  encouragement: string;
-  hot_take: string;
-  tangent: string;
+export interface TopicPrompts {
+  [key: string]: string;
 }
 
-export interface ScheduledBlock {
-  type: BlockType;
+export interface ScheduledTopic {
+  type: TopicType;
   primaryCharacter: GachaCharacter;
   participants?: GachaCharacter[];
 }
+
+// Backward-compat aliases
+export type BlockType = TopicType;
+export type BlockWeights = TopicWeights;
+export type BlockPrompts = TopicPrompts;
+export type ScheduledBlock = ScheduledTopic;
 
 export interface MultiLineResult {
   lines: Array<{
@@ -78,6 +66,7 @@ export interface ChatLogEntry {
   voiceId?: string;
   image?: string;
   isUserMessage?: boolean;
+  topicType?: string;
 }
 
 export interface MessageRequest {
@@ -92,7 +81,10 @@ export interface MessageRequest {
   enableVisuals?: boolean;
   signal?: AbortSignal;
   debugFrameId?: number;
-  blockType?: BlockType;
+  topicType?: TopicType;
+  topicPrompt?: string;
+  // Backward-compat aliases (deprecated — use topicType/topicPrompt)
+  blockType?: TopicType;
   blockPrompt?: string;
   participants?: GachaCharacter[];
   memories?: string[];

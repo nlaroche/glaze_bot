@@ -31,6 +31,8 @@ export class MessagePipeline {
       // Fallback to single-character
       const result = await this.process({
         ...request,
+        topicType: 'solo_observation',
+        topicPrompt: undefined,
         blockType: 'solo_observation',
         blockPrompt: undefined,
         participants: undefined,
@@ -67,8 +69,10 @@ export class MessagePipeline {
       const body: Record<string, unknown> = {
         system_prompt: character.system_prompt,
         personality: character.personality,
-        block_type: request.blockType,
-        block_prompt: request.blockPrompt,
+        topic_type: request.topicType ?? request.blockType,
+        topic_prompt: request.topicPrompt ?? request.blockPrompt,
+        block_type: request.topicType ?? request.blockType,
+        block_prompt: request.topicPrompt ?? request.blockPrompt,
         participants: participants.map((p) => ({
           name: p.name,
           system_prompt: p.system_prompt,
@@ -174,6 +178,7 @@ export class MessagePipeline {
           timestamp: new Date().toISOString(),
           voiceId: line.voiceId,
           image: line.avatarUrl,
+          topicType: request.topicType ?? request.blockType,
         });
 
         // Overlay + TTS
@@ -276,8 +281,17 @@ export class MessagePipeline {
         body.game_hint = gameHint;
       }
       if (request.enableVisuals) body.enable_visuals = true;
-      if (request.blockType) body.block_type = request.blockType;
-      if (request.blockPrompt) body.block_prompt = request.blockPrompt;
+      // Send both topic_type and block_type for backward compat with edge function
+      const effectiveTopicType = request.topicType ?? request.blockType;
+      const effectiveTopicPrompt = request.topicPrompt ?? request.blockPrompt;
+      if (effectiveTopicType) {
+        body.topic_type = effectiveTopicType;
+        body.block_type = effectiveTopicType; // backward compat
+      }
+      if (effectiveTopicPrompt) {
+        body.topic_prompt = effectiveTopicPrompt;
+        body.block_prompt = effectiveTopicPrompt; // backward compat
+      }
       if (request.memories && request.memories.length > 0) body.memories = request.memories;
 
       // 4. LLM call
@@ -367,6 +381,7 @@ export class MessagePipeline {
           timestamp: new Date().toISOString(),
           voiceId: character.voice_id,
           image: character.avatar_url,
+          topicType: request.topicType ?? request.blockType,
         });
       }
 
