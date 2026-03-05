@@ -6,7 +6,7 @@
     saveConfigSnapshot,
   } from '@glazebot/supabase-client';
   import type { ConfigSnapshot } from '@glazebot/supabase-client';
-  import { validateConfig } from '@glazebot/shared-types';
+  import { validateConfig, DEFAULT_CONFIG } from '@glazebot/shared-types';
   import yaml from 'js-yaml';
   import { Spotlight } from '@glazebot/shared-ui';
   import Button from '$lib/components/ui/Button.svelte';
@@ -46,6 +46,30 @@
   let previewOpen = $state(false);
   let previewSchemaError = $state('');
   let importFileInput: HTMLInputElement | null = $state(null);
+
+  // ─── Import Preview ────────────────────────────────────────────
+  interface ImportSection {
+    key: string;
+    label: string;
+    desc: string;
+    configKeys: string[];
+    present: boolean;
+    selected: boolean;
+  }
+
+  const SECTION_DEFS: Omit<ImportSection, 'present' | 'selected'>[] = [
+    { key: 'generation', label: 'Generation', desc: 'Drop rates, temperature, model, packs per day, cards per pack, generation prompt', configKeys: ['dropRates', 'baseTemperature', 'model', 'cardGenProvider', 'cardGenModel', 'packsPerDay', 'cardsPerPack', 'generationPrompt'] },
+    { key: 'images', label: 'Images', desc: 'Image provider, model, size, and system info', configKeys: ['imageSystemInfo', 'imageProvider', 'imageModel', 'imageConfig'] },
+    { key: 'tokenPools', label: 'Token Pools', desc: 'All token pool definitions and their entries', configKeys: ['tokenPools'] },
+    { key: 'commentary', label: 'Commentary', desc: 'Vision model, directive, style nudges, response/interaction instructions, context, memory, visuals', configKeys: ['commentary'] },
+    { key: 'topics', label: 'Topics', desc: 'Topic count ranges per rarity and legendary custom topic count', configKeys: ['topicCountByRarity', 'legendaryCustomTopicCount'] },
+    { key: 'animations', label: 'Animations', desc: 'Animation feel: anticipation, overshoot, bounce, squish, speed', configKeys: ['animations'] },
+    { key: 'rarityTuning', label: 'Rarity Tuning', desc: 'Trait ranges, prompt quality, and rarity guidance', configKeys: ['traitRanges', 'promptQuality', 'rarityGuidance'] },
+  ];
+
+  let importPreviewOpen = $state(false);
+  let importSections: ImportSection[] = $state([]);
+  let importParsedConfig: Record<string, unknown> | null = $state(null);
 
   // ─── Derived ──────────────────────────────────────────────────
   const snapshotsFiltered = $derived(
@@ -238,24 +262,80 @@
       try {
         const parsed = yaml.load(reader.result as string) as Record<string, unknown>;
         const cfgData = (parsed?.config ?? parsed) as Record<string, unknown>;
-        const err = validateConfigSchema(cfgData);
-        if (err) {
-          toast.error(`Schema validation failed: ${err}`);
-          return;
-        }
-        toast.success('Config imported — review and Save when ready.');
-        // Fire-and-forget: save an import snapshot
-        const importName = file.name.replace(/\.(yaml|yml)$/i, '');
-        saveConfigSnapshot(JSON.parse(JSON.stringify(cfgData)), importName, 'Imported from YAML').then(snap => {
-          if (snapshotsLoaded) snapshots = [snap, ...snapshots];
-        }).catch(() => {});
-        onapply(cfgData);
+
+        // Build section list: mark which sections exist in the imported file
+        importSections = SECTION_DEFS.map(def => {
+          const present = def.configKeys.some(k => k in cfgData);
+          return { ...def, present, selected: present };
+        });
+        importParsedConfig = cfgData;
+        importPreviewOpen = true;
       } catch (ex) {
         toast.error(ex instanceof Error ? ex.message : 'Failed to parse YAML');
       }
     };
     reader.readAsText(file);
     if (importFileInput) importFileInput.value = '';
+  }
+
+  function applyImportSelection() {
+    if (!importParsedConfig) return;
+
+    // Start with current config, merge only selected sections
+    const merged = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
+
+    for (const section of importSections) {
+      if (!section.selected) continue;
+      for (const key of section.configKeys) {
+        if (key in importParsedConfig) {
+          merged[key] = JSON.parse(JSON.stringify(importParsedConfig[key]));
+        }
+      }
+    }
+
+    // Backfill any keys required by the schema that are missing from both
+    // the current config and the imported file (e.g. newly added features).
+    // This only adds keys that don't exist yet — never overwrites.
+    const defaults = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as Record<string, unknown>;
+    for (const key of Object.keys(defaults)) {
+      if (!(key in merged)) {
+        merged[key] = defaults[key];
+      } else if (
+        typeof defaults[key] === 'object' && defaults[key] !== null && !Array.isArray(defaults[key]) &&
+        typeof merged[key] === 'object' && merged[key] !== null && !Array.isArray(merged[key])
+      ) {
+        const sub = merged[key] as Record<string, unknown>;
+        const defSub = defaults[key] as Record<string, unknown>;
+        for (const sk of Object.keys(defSub)) {
+          if (!(sk in sub)) sub[sk] = defSub[sk];
+        }
+      }
+    }
+
+    // Validate the merged result
+    const err = validateConfigSchema(merged);
+    if (err) {
+      toast.error(`Merged config failed validation: ${err}`);
+      return;
+    }
+
+    // Save snapshot and apply
+    saveConfigSnapshot(JSON.parse(JSON.stringify(merged)), 'import', 'Imported from YAML (partial)').then(snap => {
+      if (snapshotsLoaded) snapshots = [snap, ...snapshots];
+    }).catch(() => {});
+
+    const selectedLabels = importSections.filter(s => s.selected).map(s => s.label).join(', ');
+    toast.success(`Imported: ${selectedLabels}`);
+    onapply(merged);
+
+    importPreviewOpen = false;
+    importParsedConfig = null;
+  }
+
+  function toggleImportSection(key: string) {
+    importSections = importSections.map(s =>
+      s.key === key ? { ...s, selected: !s.selected } : s
+    );
   }
 
   // Expose a way for parent to add snapshots (e.g., after saving config)
@@ -446,6 +526,54 @@
       </div>
     </div>
   {/if}
+</Spotlight>
+
+<!-- ═══ IMPORT PREVIEW ═══ -->
+<Spotlight open={importPreviewOpen} onclose={() => { importPreviewOpen = false; importParsedConfig = null; }}>
+  <div class="snapshot-preview" data-testid="import-preview">
+    <div class="modal-header">
+      <div class="modal-header-title">
+        <h2>Import Config</h2>
+      </div>
+      <button class="close-btn" onclick={() => { importPreviewOpen = false; importParsedConfig = null; }} data-testid="close-import-preview">&times;</button>
+    </div>
+
+    <p class="import-desc">Choose which sections to import. Unselected sections keep their current values.</p>
+
+    <div class="snapshot-preview-body">
+      {#each importSections as section (section.key)}
+        <button
+          class="import-section-row"
+          class:selected={section.selected}
+          class:absent={!section.present}
+          disabled={!section.present}
+          onclick={() => toggleImportSection(section.key)}
+          data-testid="import-section-{section.key}"
+        >
+          <span class="import-check">{section.selected ? '\u2611' : '\u2610'}</span>
+          <span class="import-section-info">
+            <span class="import-section-label">
+              {section.label}
+              {#if !section.present}
+                <Badge variant="default" text="not in file" />
+              {/if}
+            </span>
+            <span class="import-section-desc">{section.desc}</span>
+          </span>
+        </button>
+      {/each}
+    </div>
+
+    <div class="snapshot-preview-actions">
+      <Button variant="ghost" onclick={() => { importPreviewOpen = false; importParsedConfig = null; }} testid="import-cancel">Cancel</Button>
+      <Button
+        variant="primary"
+        disabled={!importSections.some(s => s.selected)}
+        onclick={applyImportSelection}
+        testid="import-apply"
+      >Import Selected</Button>
+    </div>
+  </div>
 </Spotlight>
 
 <style>
@@ -695,5 +823,72 @@
     color: var(--color-error);
     font-size: var(--font-base);
     margin-top: var(--space-1);
+  }
+
+  /* ─── Import Preview ─── */
+  .import-desc {
+    font-size: var(--font-base);
+    color: var(--color-text-primary);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .import-section-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: border-color var(--transition-fast), background var(--transition-fast);
+    width: 100%;
+  }
+
+  .import-section-row:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    background: var(--navy-a20);
+  }
+
+  .import-section-row.selected {
+    border-color: var(--color-teal);
+    background: var(--teal-a5);
+  }
+
+  .import-section-row.absent {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .import-check {
+    font-size: var(--font-lg);
+    color: var(--color-text-primary);
+    line-height: 1.2;
+    flex-shrink: 0;
+  }
+
+  .import-section-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .import-section-label {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .import-section-desc {
+    font-size: var(--font-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.4;
   }
 </style>

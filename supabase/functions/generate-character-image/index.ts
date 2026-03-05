@@ -178,9 +178,11 @@ Deno.serve(async (req: Request) => {
 
     const serviceClient = getServiceClient();
 
-    // Upload to R2
+    // Upload to R2 (same key — overwrites previous image)
     const r2Key = characterPortraitKey(character_id);
-    const avatarUrl = await uploadToPublicBucket(r2Key, result.imageBytes, "image/png");
+    const baseUrl = await uploadToPublicBucket(r2Key, result.imageBytes, "image/png");
+    // Cache-bust: append timestamp so browsers/CDNs don't serve the old image
+    const avatarUrl = `${baseUrl}?v=${Date.now()}`;
 
     // Build step 2 metadata
     const step2Metadata = {

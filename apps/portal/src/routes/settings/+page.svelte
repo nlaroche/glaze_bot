@@ -546,6 +546,11 @@ Think of yourself as a Twitch co-caster, not a D&D character.`;
   async function saveConfig() {
     saving = true;
     try {
+      // Sync page-level state FROM config first — child panels (ConfigPanel,
+      // EconomyPanel, etc.) may have already updated `config` via bind:config
+      // or onsave. Without this, syncToConfig() would overwrite their changes
+      // with stale page-level state.
+      syncFromConfig();
       syncToConfig();
       await updateGachaConfig(config);
       toast.success('Config saved');
