@@ -19,9 +19,83 @@ const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
 const DASHSCOPE_BASE_URL =
   Deno.env.get("DASHSCOPE_BASE_URL") ??
   "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const FISH_AUDIO_API_KEY = Deno.env.get("FISH_AUDIO_API_KEY") ?? "";
 const PIXELLAB_API_KEY = Deno.env.get("PIXELLAB_API_KEY") ?? "";
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+
+/** Provider-agnostic chat completion. Returns the text content from the response. */
+async function chatCompletion(
+  provider: string,
+  model: string,
+  messages: { role: string; content: string }[],
+  opts: { maxTokens?: number; temperature?: number } = {},
+): Promise<string> {
+  const maxTokens = opts.maxTokens ?? 800;
+  const temperature = opts.temperature ?? 0.9;
+
+  if (provider === "anthropic") {
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not set");
+    const systemMsg = messages.find((m) => m.role === "system");
+    const nonSystem = messages.filter((m) => m.role !== "system");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        system: systemMsg?.content ?? "",
+        messages: nonSystem.map((m) => ({ role: m.role, content: m.content })),
+        max_tokens: maxTokens,
+        temperature,
+      }),
+    });
+    if (!res.ok) throw new Error(`Anthropic ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const textBlocks = (data.content ?? []).filter((b: { type: string }) => b.type === "text");
+    const text = textBlocks.map((b: { text: string }) => b.text?.trim()).join(" ").trim();
+    if (!text) throw new Error("No content in Anthropic response");
+    return text;
+  }
+
+  if (provider === "gemini") {
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not set");
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
+        },
+        body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
+      },
+    );
+    if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("No content in Gemini response");
+    return content;
+  }
+
+  // Default: Dashscope (OpenAI-compatible)
+  if (!DASHSCOPE_API_KEY) throw new Error("DASHSCOPE_API_KEY not set");
+  const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
+    },
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
+  });
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("No content in Dashscope response");
+  return content;
+}
 
 interface GenerateRequest {
   rarity: string;
@@ -255,7 +329,8 @@ async function generateCharacter(
   >;
   const rarityGuidance = config.rarityGuidance as Record<string, string>;
   const baseTemp = (config.baseTemperature as number) ?? 0.9;
-  const model = (config.model as string) ?? "qwen-plus";
+  const provider = (config.cardGenProvider as string) ?? "dashscope";
+  const model = (config.cardGenModel as string) ?? (config.model as string) ?? "qwen-plus";
   const generationPrompt = (config.generationPrompt as string) ?? "";
 
   const quality = promptQuality[rarity] ?? { maxTokens: 800, tempBoost: 0 };
@@ -273,34 +348,12 @@ async function generateCharacter(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: `Generate a ${rarity} rarity character.${directive} Return ONLY valid JSON.`,
-          },
-        ],
-        max_tokens: quality.maxTokens,
-        temperature,
-      }),
-    });
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      lastError = new Error("No content in Dashscope response");
-      continue;
-    }
-
     try {
+      const content = await chatCompletion(provider, model, [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate a ${rarity} rarity character.${directive} Return ONLY valid JSON.` },
+      ], { maxTokens: quality.maxTokens, temperature });
+
       const parsed = parseJsonResponse(content);
       const personality = clampTraits(
         (parsed.personality as Record<string, number>) ?? {},
@@ -375,7 +428,8 @@ async function assignTopics(
   }
 
   // LLM weight refinement — brief call to tune weights to character personality
-  const model = (config.model as string) ?? "qwen-plus";
+  const provider = (config.cardGenProvider as string) ?? "dashscope";
+  const model = (config.cardGenModel as string) ?? (config.model as string) ?? "qwen-plus";
   try {
     const topicList = Object.entries(topic_assignments)
       .map(([k, w]) => `- ${k} (current weight: ${w})`)
@@ -384,37 +438,21 @@ async function assignTopics(
       .map(([t, v]) => `${t}: ${v}`)
       .join(", ");
 
-    const refineRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
+    const refineContent = await chatCompletion(provider, model, [
+      {
+        role: "system",
+        content: "You assign topic weights for a gaming commentary character. Return ONLY valid JSON: { \"topic_key\": weight_number, ... }. Weights should be 1-100.",
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: "You assign topic weights for a gaming commentary character. Return ONLY valid JSON: { \"topic_key\": weight_number, ... }. Weights should be 1-100.",
-          },
-          {
-            role: "user",
-            content: `Given this character's personality, adjust the weights for these commentary topics:\n\nCharacter: ${character.name}, ${character.description}\nPersonality: ${traitSummary}\n\nTopics:\n${topicList}\n\nReturn JSON with adjusted weights (1-100) for each topic. Keep the same keys.`,
-          },
-        ],
-        max_tokens: 300,
-        temperature: 0.7,
-      }),
-    });
+      {
+        role: "user",
+        content: `Given this character's personality, adjust the weights for these commentary topics:\n\nCharacter: ${character.name}, ${character.description}\nPersonality: ${traitSummary}\n\nTopics:\n${topicList}\n\nReturn JSON with adjusted weights (1-100) for each topic. Keep the same keys.`,
+      },
+    ], { maxTokens: 300, temperature: 0.7 });
 
-    const refineData = await refineRes.json();
-    const refineContent = refineData.choices?.[0]?.message?.content;
-    if (refineContent) {
-      const refined = parseJsonResponse(refineContent) as Record<string, number>;
-      for (const [key, weight] of Object.entries(refined)) {
-        if (key in topic_assignments && typeof weight === "number") {
-          topic_assignments[key] = Math.max(1, Math.min(100, Math.round(weight)));
-        }
+    const refined = parseJsonResponse(refineContent) as Record<string, number>;
+    for (const [key, weight] of Object.entries(refined)) {
+      if (key in topic_assignments && typeof weight === "number") {
+        topic_assignments[key] = Math.max(1, Math.min(100, Math.round(weight)));
       }
     }
   } catch {
@@ -425,46 +463,27 @@ async function assignTopics(
   const custom_topics: { key: string; label: string; prompt: string; weight: number }[] = [];
   if (rarity === "legendary" && legendaryCustomTopicCount > 0) {
     try {
-      const customRes = await fetch(`${DASHSCOPE_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DASHSCOPE_API_KEY}`,
+      const customContent = await chatCompletion(provider, model, [
+        {
+          role: "system",
+          content: `You create unique commentary topics for legendary gaming commentator characters. Return ONLY a valid JSON array of objects with fields: key (snake_case identifier), label (display name), prompt (instruction for the AI when this topic is selected, 1-2 sentences), weight (1-100).`,
         },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: "system",
-              content: `You create unique commentary topics for legendary gaming commentator characters. Return ONLY a valid JSON array of objects with fields: key (snake_case identifier), label (display name), prompt (instruction for the AI when this topic is selected, 1-2 sentences), weight (1-100).`,
-            },
-            {
-              role: "user",
-              content: `Generate ${legendaryCustomTopicCount} unique commentary topics for this legendary character:\n\nName: ${character.name}\nBackstory: ${character.backstory}\nDescription: ${character.description}\nPersonality: ${Object.entries(personality).map(([t, v]) => `${t}: ${v}`).join(", ")}\n\nThese topics should be unique to this character and reflect their personality, background, or interests. Return a JSON array.`,
-            },
-          ],
-          max_tokens: 500,
-          temperature: 0.9,
-        }),
-      });
+        {
+          role: "user",
+          content: `Generate ${legendaryCustomTopicCount} unique commentary topics for this legendary character:\n\nName: ${character.name}\nBackstory: ${character.backstory}\nDescription: ${character.description}\nPersonality: ${Object.entries(personality).map(([t, v]) => `${t}: ${v}`).join(", ")}\n\nThese topics should be unique to this character and reflect their personality, background, or interests. Return a JSON array.`,
+        },
+      ], { maxTokens: 500, temperature: 0.9 });
 
-      const customData = await customRes.json();
-      const customContent = customData.choices?.[0]?.message?.content;
-      if (customContent) {
-        const parsed = JSON.parse(
-          customContent.trim().replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, ""),
-        );
-        if (Array.isArray(parsed)) {
-          for (const item of parsed) {
-            if (item.key && item.label && item.prompt) {
-              custom_topics.push({
-                key: String(item.key),
-                label: String(item.label),
-                prompt: String(item.prompt),
-                weight: Math.max(1, Math.min(100, Math.round(Number(item.weight) || 20))),
-              });
-            }
-          }
+      const parsed = parseJsonResponse(customContent);
+      const items = Array.isArray(parsed) ? parsed : [];
+      for (const item of items) {
+        if (item.key && item.label && item.prompt) {
+          custom_topics.push({
+            key: String(item.key),
+            label: String(item.label),
+            prompt: String(item.prompt),
+            weight: Math.max(1, Math.min(100, Math.round(Number(item.weight) || 20))),
+          });
         }
       }
     } catch {
