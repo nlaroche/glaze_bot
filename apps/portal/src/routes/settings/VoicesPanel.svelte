@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FishVoice } from '@glazebot/supabase-client';
-  import { generativeTts } from '@glazebot/supabase-client';
+  import { generativeTts, toggleVoiceFavorite } from '@glazebot/supabase-client';
   import Button from '$lib/components/ui/Button.svelte';
   import Badge from '$lib/components/ui/Badge.svelte';
   import DataTable from '$lib/components/ui/DataTable.svelte';
@@ -41,7 +41,7 @@
   let voiceSortDirection: 'asc' | 'desc' = $state('desc');
   let activeVoiceTags: string[] = $state([]);
   let hideCelebrities = $state(true);
-  let voiceUsageFilter: 'all' | 'in_use' | 'unused' = $state('all');
+  let voiceUsageFilter: 'all' | 'favorites' | 'in_use' | 'unused' = $state('all');
   let pinnedVoiceIds: Set<string> = $state(new Set());
 
   // ─── State: Sub-tabs ───────────────────────────────────────────────
@@ -116,7 +116,7 @@
   const celebrityCount = $derived(fishVoices.filter(v => isCelebrityVoice(v)).length);
 
   const voiceColumns: Column[] = [
-    { key: 'pin', label: '', width: '40px' },
+    { key: 'favorite', label: '\u2605', width: '40px', sortable: true },
     { key: 'play', label: '', width: '48px' },
     { key: 'title', label: 'Name', sortable: true },
     { key: 'tags', label: 'Tags', width: '200px' },
@@ -165,7 +165,9 @@
       );
     }
 
-    if (voiceUsageFilter === 'in_use') {
+    if (voiceUsageFilter === 'favorites') {
+      result = result.filter(v => v.is_favorite);
+    } else if (voiceUsageFilter === 'in_use') {
       result = result.filter(v => voiceUsageMap.has(v.id));
     } else if (voiceUsageFilter === 'unused') {
       result = result.filter(v => !voiceUsageMap.has(v.id));
@@ -177,10 +179,18 @@
   const voiceSorted = $derived.by(() => {
     const arr = [...voiceFiltered];
     arr.sort((a, b) => {
-      const aVal = (a as Record<string, unknown>)[voiceSortKey];
-      const bVal = (b as Record<string, unknown>)[voiceSortKey];
+      // Favorites always float to top (unless explicitly sorting by favorite column)
+      if (voiceSortKey !== 'favorite') {
+        if (a.is_favorite && !b.is_favorite) return -1;
+        if (!a.is_favorite && b.is_favorite) return 1;
+      }
+      const key = voiceSortKey === 'favorite' ? 'is_favorite' : voiceSortKey;
+      const aVal = (a as Record<string, unknown>)[key];
+      const bVal = (b as Record<string, unknown>)[key];
       let cmp = 0;
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
+      if (typeof aVal === 'boolean' && typeof bVal === 'boolean') {
+        cmp = aVal === bVal ? 0 : aVal ? -1 : 1;
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
         cmp = aVal - bVal;
       } else if (typeof aVal === 'string' && typeof bVal === 'string') {
         cmp = aVal.localeCompare(bVal);
@@ -197,6 +207,7 @@
   );
 
   const pinnedVoices = $derived(fishVoices.filter(v => pinnedVoiceIds.has(v.id)));
+  const favoriteCount = $derived(fishVoices.filter(v => v.is_favorite).length);
 
   // ─── Effects ───────────────────────────────────────────────────────
   // Reset to page 1 when filters change
@@ -211,6 +222,21 @@
     const next = new Set(pinnedVoiceIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     pinnedVoiceIds = next;
+  }
+
+  async function handleToggleFavorite(voice: FishVoice) {
+    const newVal = !voice.is_favorite;
+    // Optimistic update
+    voice.is_favorite = newVal;
+    fishVoices = [...fishVoices];
+    try {
+      await toggleVoiceFavorite(voice.id, newVal);
+    } catch (e) {
+      // Revert
+      voice.is_favorite = !newVal;
+      fishVoices = [...fishVoices];
+      toast.error('Failed to update favorite');
+    }
   }
 
   function playVoiceSample(voice: FishVoice) {
@@ -332,11 +358,11 @@
           </span>
         {/if}
         <div class="usage-filter" data-testid="usage-filter">
-          {#each [['all', 'All'], ['in_use', 'In Use'], ['unused', 'Unused']] as [val, label]}
+          {#each [['all', 'All'], ['favorites', '\u2605 Favorites'], ['in_use', 'In Use'], ['unused', 'Unused']] as [val, label]}
             <button
               class="usage-filter-btn"
               class:active={voiceUsageFilter === val}
-              onclick={() => { voiceUsageFilter = val as 'all' | 'in_use' | 'unused'; voicePage = 1; }}
+              onclick={() => { voiceUsageFilter = val as 'all' | 'favorites' | 'in_use' | 'unused'; voicePage = 1; }}
               data-testid="usage-filter-{val}"
             >
               {label}
@@ -401,15 +427,16 @@
         onsort={(key, dir) => { voiceSortKey = key; voiceSortDirection = dir; }}
       >
         {#snippet cell({ row, column })}
-          {#if column.key === 'pin'}
-            <input
-              type="checkbox"
-              class="voice-pin-checkbox"
-              checked={pinnedVoiceIds.has(row.id)}
-              onchange={() => togglePinnedVoice(row.id)}
-              title={pinnedVoiceIds.has(row.id) ? 'Remove from generative testing' : 'Add to generative testing'}
-              data-testid="pin-voice-{row.id}"
-            />
+          {#if column.key === 'favorite'}
+            <button
+              class="fav-btn"
+              class:active={row.is_favorite}
+              onclick={() => handleToggleFavorite(row)}
+              title={row.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+              data-testid="fav-voice-{row.id}"
+            >
+              {row.is_favorite ? '\u2605' : '\u2606'}
+            </button>
           {:else if column.key === 'play'}
             {#if row.sample_url}
               <button
@@ -841,11 +868,28 @@
     color: var(--color-teal);
   }
 
-  .voice-pin-checkbox {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--color-teal);
+  .fav-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text-muted);
+    font-size: 1.1rem;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+  }
+
+  .fav-btn:hover {
+    color: var(--rarity-legendary);
+    background: rgba(255, 215, 0, 0.1);
+  }
+
+  .fav-btn.active {
+    color: var(--rarity-legendary);
   }
 
   /* ─── Sub-tabs ─── */

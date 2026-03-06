@@ -190,6 +190,7 @@
 
   // ─── Step 3 Voice DataTable Derived ────────────────────────────────
   const step3Columns: Column[] = [
+    { key: 'favorite', label: '\u2605', width: '36px' },
     { key: 'play', label: '', width: '48px' },
     { key: 'title', label: 'Name', sortable: true },
     { key: 'tags', label: 'Tags', width: '180px' },
@@ -231,6 +232,9 @@
   const step3Sorted = $derived.by(() => {
     const arr = [...step3Filtered];
     arr.sort((a, b) => {
+      // Favorites always first
+      if (a.is_favorite && !b.is_favorite) return -1;
+      if (!a.is_favorite && b.is_favorite) return 1;
       const aVal = (a as Record<string, unknown>)[step3SortKey];
       const bVal = (b as Record<string, unknown>)[step3SortKey];
       let cmp = 0;
@@ -870,7 +874,11 @@
                     onrowclick={(row) => runStep3(row.id)}
                   >
                     {#snippet cell({ row, column })}
-                      {#if column.key === 'play'}
+                      {#if column.key === 'favorite'}
+                        <span class="fav-indicator" class:active={row.is_favorite}>
+                          {row.is_favorite ? '\u2605' : ''}
+                        </span>
+                      {:else if column.key === 'play'}
                         {#if row.sample_url}
                           <button
                             class="play-btn"
@@ -1521,6 +1529,15 @@
 
   .step3-toolbar .search-input {
     flex: 1;
+  }
+
+  .fav-indicator {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+
+  .fav-indicator.active {
+    color: var(--rarity-legendary);
   }
 
   .search-input {

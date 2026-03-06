@@ -399,6 +399,7 @@ export interface FishVoice {
   author_name: string | null;
   cover_image: string | null;
   languages: string[];
+  is_favorite: boolean;
   fetched_at: string;
   created_at: string;
 }
@@ -432,14 +433,27 @@ export async function syncFishVoices(opts?: {
   );
 }
 
-/** Get all Fish Audio voices from DB, ordered by popularity */
+/** Get all Fish Audio voices from DB, ordered by favorites first then popularity */
 export async function getFishVoices(): Promise<FishVoice[]> {
   const { data, error } = await db()
     .from("fish_voices")
     .select("*")
+    .order("is_favorite", { ascending: false })
     .order("task_count", { ascending: false });
   if (error) throw error;
   return data as FishVoice[];
+}
+
+/** Toggle the is_favorite flag on a voice */
+export async function toggleVoiceFavorite(
+  voiceId: string,
+  favorite: boolean,
+): Promise<void> {
+  const { error } = await db()
+    .from("fish_voices")
+    .update({ is_favorite: favorite } as Record<string, unknown>)
+    .eq("id", voiceId);
+  if (error) throw error;
 }
 
 // ─── Token Pool Utilities (client-side) ─────────────────────────────

@@ -39,6 +39,7 @@ export {
   setDefaultCharacter,
   syncFishVoices,
   getFishVoices,
+  toggleVoiceFavorite,
   getVoiceUsageMap,
   generativeTts,
   getCharacterTemplates,
